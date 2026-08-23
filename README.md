@@ -17,6 +17,9 @@ docker compose up -d --build
 
 容器将源码挂载进开发环境并启用热更新，SQLite 数据保存在命名卷中。查看
 日志可运行 `docker compose logs -f`，停止环境可运行 `docker compose down`。
+开发 Compose 会在空项目库中注入虚构演示数据。正式运行默认只创建软件、
+固件和硬件三套基础节奏；仅当显式设置 `FLOWTRACE_SEED_DEMO=true` 时才会在
+空项目库中注入一次演示项目，之后重启不会补回已删除的演示内容。
 
 也可以在主机安装依赖并运行：
 

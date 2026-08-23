@@ -1203,9 +1203,13 @@ export class WorkService {
     row: RequirementEntity,
   ): Promise<RequirementSummary> {
     const requirement = await this.hydrateRequirement(row);
-    const current = requirement.stages.find(
-      (stage) => !['done', 'canceled'].includes(stage.status),
-    );
+    const current =
+      requirement.stages.find((stage) => stage.status === 'blocked') ??
+      requirement.stages.find((stage) => stage.status === 'waiting') ??
+      requirement.stages.find((stage) => stage.status === 'in_progress') ??
+      requirement.stages.find(
+        (stage) => !['done', 'canceled'].includes(stage.status),
+      );
     return {
       id: requirement.id,
       key: requirement.key,

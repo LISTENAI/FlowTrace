@@ -134,7 +134,7 @@ export class CreateProjectDto extends ChangeContextDto {
   @Matches(/^[A-Z][A-Z0-9]{1,9}$/)
   key!: string;
 
-  @ApiProperty({ example: '示例设备固件' })
+  @ApiProperty({ example: '晴岚设备固件' })
   @IsString()
   @MinLength(2)
   @MaxLength(100)

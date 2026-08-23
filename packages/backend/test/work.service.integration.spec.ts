@@ -137,6 +137,28 @@ describe.sequential('WorkService business rules', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('shows the stage needing the most attention as the current stage', async () => {
+    await work.updateTemplate(appProjectId, {
+      stages: [{ name: '准备' }, { name: '开发' }, { name: '验证' }],
+    });
+    const requirement = await work.createRequirement({
+      projectId: appProjectId,
+      title: '并行推进需求',
+    });
+    await work.updateStageStatus(requirement.stages[1]!.id, {
+      status: 'in_progress',
+    });
+    await work.updateStageStatus(requirement.stages[2]!.id, {
+      status: 'blocked',
+      statusReason: '等待样件',
+    });
+
+    const summary = (
+      await work.listRequirements({ projectId: appProjectId })
+    ).find((item) => item.id === requirement.id);
+    expect(summary?.currentStage).toBe('验证');
+  });
+
   it('retains the initial schedule and every later adjustment', async () => {
     const requirement = (
       await work.listRequirements({ projectId: appProjectId })

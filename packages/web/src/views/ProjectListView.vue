@@ -290,7 +290,7 @@ async function createProject() {
             <input
               v-model="form.name"
               required
-              placeholder="例如：示例设备固件"
+              placeholder="例如：晴岚设备固件"
               class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-indigo-300 focus:bg-white"
             />
           </label>

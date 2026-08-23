@@ -17,7 +17,7 @@ RUN npm run build
 
 FROM node:24-bookworm-slim AS backend-runtime
 WORKDIR /app
-ENV NODE_ENV=production FLOWTRACE_HOST=0.0.0.0 FLOWTRACE_PORT=3100
+ENV NODE_ENV=production FLOWTRACE_HOST=0.0.0.0 FLOWTRACE_PORT=3100 FLOWTRACE_SEED_DEMO=false
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/backend/package.json ./packages/backend/
