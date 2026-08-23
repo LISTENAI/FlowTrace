@@ -1,0 +1,43 @@
+import 'reflect-metadata';
+import { afterEach, describe, expect, it } from 'vitest';
+import { DataSource } from 'typeorm';
+import { entities } from '@/database/entities';
+import { InitialSchema1724428800000 } from '@/database/migrations/1724428800000-initial-schema';
+
+let dataSource: DataSource | undefined;
+
+afterEach(async () => {
+  if (dataSource?.isInitialized) await dataSource.destroy();
+});
+
+describe('initial database migration', () => {
+  it('creates every domain and history table', async () => {
+    dataSource = new DataSource({
+      type: 'better-sqlite3',
+      database: ':memory:',
+      entities,
+      migrations: [InitialSchema1724428800000],
+    });
+    await dataSource.initialize();
+    await dataSource.runMigrations();
+
+    const rows = (await dataSource.query(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    )) as Array<{ name: string }>;
+    const tables = rows.map((row) => row.name);
+
+    expect(tables).toEqual(
+      expect.arrayContaining([
+        'projects',
+        'requirements',
+        'stages',
+        'bugs',
+        'status_history',
+        'schedule_history',
+        'version_history',
+        'dependencies',
+        'change_events',
+      ]),
+    );
+  });
+});

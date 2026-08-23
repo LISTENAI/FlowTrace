@@ -1,0 +1,37 @@
+export { BugEntity } from '@/database/entities/bug.entity';
+export { ChangeEventEntity } from '@/database/entities/change-event.entity';
+export { DependencyEntity } from '@/database/entities/dependency.entity';
+export { PersonEntity } from '@/database/entities/person.entity';
+export { ProjectEntity } from '@/database/entities/project.entity';
+export { RequirementEntity } from '@/database/entities/requirement.entity';
+export { ScheduleHistoryEntity } from '@/database/entities/schedule-history.entity';
+export { StageEntity } from '@/database/entities/stage.entity';
+export { StatusHistoryEntity } from '@/database/entities/status-history.entity';
+export { VersionEntity } from '@/database/entities/version.entity';
+export { VersionHistoryEntity } from '@/database/entities/version-history.entity';
+
+import { BugEntity } from '@/database/entities/bug.entity';
+import { ChangeEventEntity } from '@/database/entities/change-event.entity';
+import { DependencyEntity } from '@/database/entities/dependency.entity';
+import { PersonEntity } from '@/database/entities/person.entity';
+import { ProjectEntity } from '@/database/entities/project.entity';
+import { RequirementEntity } from '@/database/entities/requirement.entity';
+import { ScheduleHistoryEntity } from '@/database/entities/schedule-history.entity';
+import { StageEntity } from '@/database/entities/stage.entity';
+import { StatusHistoryEntity } from '@/database/entities/status-history.entity';
+import { VersionEntity } from '@/database/entities/version.entity';
+import { VersionHistoryEntity } from '@/database/entities/version-history.entity';
+
+export const entities = [
+  ProjectEntity,
+  PersonEntity,
+  VersionEntity,
+  RequirementEntity,
+  StageEntity,
+  BugEntity,
+  StatusHistoryEntity,
+  ScheduleHistoryEntity,
+  VersionHistoryEntity,
+  DependencyEntity,
+  ChangeEventEntity,
+];
