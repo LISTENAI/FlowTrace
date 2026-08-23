@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   font-family:
@@ -31,6 +32,14 @@ body {
       transparent 36rem
     ),
     #f5f6fa;
+}
+
+html,
+body,
+#app {
+  transition:
+    color 180ms ease,
+    background-color 180ms ease;
 }
 
 button,
@@ -69,6 +78,262 @@ button {
     0 1px 2px rgba(20, 25, 40, 0.03),
     0 12px 34px rgba(35, 37, 55, 0.035);
   backdrop-filter: blur(14px);
+}
+
+.dark body {
+  color: #dbe4f0;
+  background:
+    radial-gradient(
+      circle at 72% -20%,
+      rgba(79, 70, 229, 0.16),
+      transparent 36rem
+    ),
+    #090f1c;
+}
+
+.dark ::selection {
+  background: #4338ca;
+  color: #eef2ff;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background-color: #3b4960;
+}
+
+.dark .surface {
+  border-color: rgba(51, 65, 85, 0.86);
+  background: rgba(15, 23, 42, 0.82);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.2),
+    0 16px 38px rgba(0, 0, 0, 0.16);
+}
+
+.dark [class~="text-slate-900"],
+.dark [class~="text-slate-800"] {
+  color: #f1f5f9;
+}
+
+.dark [class~="text-slate-700"],
+.dark [class~="text-slate-600"] {
+  color: #cbd5e1;
+}
+
+.dark [class~="text-slate-500"] {
+  color: #94a3b8;
+}
+
+.dark [class~="text-slate-400"] {
+  color: #718096;
+}
+
+.dark [class~="text-slate-300"] {
+  color: #64748b;
+}
+
+.dark [class~="bg-white"],
+.dark [class~="bg-white/95"],
+.dark [class~="bg-white/80"],
+.dark [class~="bg-white/70"],
+.dark [class~="bg-white/50"],
+.dark [class~="bg-white/40"] {
+  background-color: rgba(15, 23, 42, 0.92);
+}
+
+.dark [class~="bg-slate-50"],
+.dark [class~="bg-slate-50/70"],
+.dark [class~="bg-slate-50/60"],
+.dark [class~="bg-slate-50/50"] {
+  background-color: rgba(17, 27, 45, 0.9);
+}
+
+.dark [class~="bg-slate-100"] {
+  background-color: #1e293b;
+}
+
+.dark [class~="bg-slate-200"],
+.dark [class~="bg-slate-200/70"],
+.dark [class~="bg-slate-200/60"] {
+  background-color: #334155;
+}
+
+.dark [class~="border-white"],
+.dark [class~="border-white/70"],
+.dark [class~="border-slate-100"],
+.dark [class~="border-slate-100/80"],
+.dark [class~="divide-slate-100"] {
+  border-color: #263348;
+}
+
+.dark [class~="border-slate-200"],
+.dark [class~="border-slate-200/70"],
+.dark [class~="border-slate-200/60"],
+.dark [class~="ring-slate-200"],
+.dark [class~="ring-slate-200/80"],
+.dark [class~="ring-slate-100"] {
+  border-color: #334155;
+  --tw-ring-color: #334155;
+}
+
+.dark [class~="border-slate-300"] {
+  border-color: #475569;
+}
+
+.dark [class~="bg-indigo-50"],
+.dark [class~="bg-indigo-50/80"],
+.dark [class~="bg-indigo-50/70"],
+.dark [class~="bg-indigo-50/60"],
+.dark [class~="bg-indigo-50/50"],
+.dark [class~="bg-indigo-50/45"],
+.dark [class~="bg-indigo-50/40"],
+.dark [class~="bg-indigo-50/30"] {
+  background-color: rgba(49, 46, 129, 0.28);
+}
+
+.dark [class~="bg-indigo-100"] {
+  background-color: rgba(67, 56, 202, 0.34);
+}
+
+.dark [class~="text-indigo-800"],
+.dark [class~="text-indigo-700"],
+.dark [class~="text-indigo-600"],
+.dark [class~="text-indigo-600/80"],
+.dark [class~="text-indigo-600/70"] {
+  color: #a5b4fc;
+}
+
+.dark [class~="text-violet-600"] {
+  color: #c4b5fd;
+}
+
+.dark [class~="border-indigo-100"],
+.dark [class~="border-indigo-200"],
+.dark [class~="border-indigo-200/80"],
+.dark [class~="border-indigo-300"],
+.dark [class~="ring-indigo-100"],
+.dark [class~="ring-indigo-200"] {
+  border-color: rgba(99, 102, 241, 0.44);
+  --tw-ring-color: rgba(99, 102, 241, 0.3);
+}
+
+.dark [class~="bg-amber-50"],
+.dark [class~="bg-amber-50/70"],
+.dark [class~="bg-amber-50/50"],
+.dark [class~="bg-amber-100"] {
+  background-color: rgba(120, 53, 15, 0.25);
+}
+
+.dark [class~="text-amber-700"],
+.dark [class~="text-amber-600"],
+.dark [class~="text-amber-600/70"] {
+  color: #fbbf24;
+}
+
+.dark [class~="border-amber-100"],
+.dark [class~="ring-amber-100"],
+.dark [class~="ring-amber-200"] {
+  border-color: rgba(217, 119, 6, 0.4);
+  --tw-ring-color: rgba(217, 119, 6, 0.3);
+}
+
+.dark [class~="bg-rose-50"],
+.dark [class~="bg-rose-50/70"],
+.dark [class~="bg-rose-50/50"],
+.dark [class~="bg-rose-50/35"],
+.dark [class~="bg-rose-100"] {
+  background-color: rgba(136, 19, 55, 0.24);
+}
+
+.dark [class~="text-rose-800"],
+.dark [class~="text-rose-700"],
+.dark [class~="text-rose-600"],
+.dark [class~="text-rose-600/70"] {
+  color: #fda4af;
+}
+
+.dark [class~="border-rose-100"],
+.dark [class~="border-rose-100/70"],
+.dark [class~="ring-rose-100"],
+.dark [class~="ring-rose-200"] {
+  border-color: rgba(225, 29, 72, 0.38);
+  --tw-ring-color: rgba(225, 29, 72, 0.28);
+}
+
+.dark [class~="bg-emerald-50"],
+.dark [class~="bg-emerald-50/40"] {
+  background-color: rgba(6, 78, 59, 0.28);
+}
+
+.dark [class~="text-emerald-700"],
+.dark [class~="text-emerald-600"] {
+  color: #6ee7b7;
+}
+
+.dark [class~="border-emerald-100"] {
+  border-color: rgba(16, 185, 129, 0.34);
+}
+
+.dark [class~="bg-cyan-50"] {
+  background-color: rgba(21, 94, 117, 0.26);
+}
+
+.dark [class~="bg-cyan-100"] {
+  background-color: rgba(14, 116, 144, 0.3);
+}
+
+.dark [class~="text-cyan-700"] {
+  color: #67e8f9;
+}
+
+.dark [class~="from-slate-50/50"] {
+  --tw-gradient-from: rgba(17, 27, 45, 0.65);
+}
+
+.dark [class~="to-white"] {
+  --tw-gradient-to: rgba(15, 23, 42, 0.82);
+}
+
+.dark [class~="hover:bg-white/70"]:hover,
+.dark [class~="hover:bg-white/80"]:hover,
+.dark [class~="hover:bg-white"]:hover {
+  background-color: rgba(30, 41, 59, 0.92);
+}
+
+.dark [class~="hover:bg-slate-100"]:hover {
+  background-color: #273449;
+}
+
+.dark [class~="hover:bg-slate-50"]:hover,
+.dark [class~="hover:bg-slate-50/60"]:hover {
+  background-color: rgba(30, 41, 59, 0.82);
+}
+
+.dark [class~="focus:bg-white"]:focus {
+  background-color: #111b2d;
+}
+
+.dark [class~="hover:text-slate-900"]:hover,
+.dark [class~="hover:text-slate-800"]:hover,
+.dark [class~="hover:text-slate-700"]:hover {
+  color: #f1f5f9;
+}
+
+.dark [class~="hover:border-slate-300"]:hover {
+  border-color: #64748b;
+}
+
+.dark [class~="hover:border-indigo-200"]:hover,
+.dark [class~="hover:border-indigo-300"]:hover {
+  border-color: #818cf8;
+}
+
+.dark [class*="repeating-linear-gradient"] {
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent calc((100% / var(--days)) - 1px),
+    #243047 calc((100% / var(--days)) - 1px),
+    #243047 calc(100% / var(--days))
+  );
 }
 
 .focus-ring:focus-visible {

@@ -13,6 +13,7 @@ import {
 import { computed, onMounted, ref } from 'vue';
 import { RouterLink, RouterView, useRoute } from 'vue-router';
 import ToastStack from '@/components/ToastStack.vue';
+import ThemeMenu from '@/components/ThemeMenu.vue';
 import { loadWorkspace, workspace } from '@/state/workspace';
 
 const route = useRoute();
@@ -43,7 +44,7 @@ function requestNewRequirement() {
     />
 
     <aside
-      class="fixed inset-y-0 left-0 z-40 flex w-[17rem] flex-col border-r border-slate-200/70 bg-[#f9f9fc]/95 px-3.5 py-4 shadow-xl shadow-slate-900/5 backdrop-blur-xl transition-transform lg:sticky lg:top-0 lg:h-screen lg:w-auto lg:translate-x-0 lg:shadow-none"
+      class="fixed inset-y-0 left-0 z-40 flex w-[17rem] flex-col border-r border-slate-200/70 bg-[#f9f9fc]/95 px-3.5 py-4 shadow-xl shadow-slate-900/5 backdrop-blur-xl transition-transform dark:border-slate-800 dark:bg-slate-950/95 lg:sticky lg:top-0 lg:h-screen lg:w-auto lg:translate-x-0 lg:shadow-none"
       :class="mobileOpen ? 'translate-x-0' : '-translate-x-full'"
     >
       <div class="flex items-center justify-between px-2.5">
@@ -175,7 +176,7 @@ function requestNewRequirement() {
 
     <main class="min-w-0">
       <header
-        class="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200/60 bg-[#f7f8fb]/85 px-4 backdrop-blur-xl sm:px-7 lg:px-9"
+        class="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200/60 bg-[#f7f8fb]/85 px-4 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/85 sm:px-7 lg:px-9"
       >
         <div class="flex items-center gap-3">
           <button
@@ -192,14 +193,17 @@ function requestNewRequirement() {
             <span>自动保存历史</span>
           </div>
         </div>
-        <button
-          v-if="activeProjectId"
-          class="focus-ring inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3.5 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 transition hover:-translate-y-0.5 hover:bg-slate-800"
-          @click="requestNewRequirement"
-        >
-          <PlusIcon class="h-4 w-4" />
-          新建需求
-        </button>
+        <div class="flex items-center gap-2">
+          <ThemeMenu />
+          <button
+            v-if="activeProjectId"
+            class="focus-ring inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3.5 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 transition hover:-translate-y-0.5 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500"
+            @click="requestNewRequirement"
+          >
+            <PlusIcon class="h-4 w-4" />
+            新建需求
+          </button>
+        </div>
       </header>
 
       <RouterView v-slot="{ Component }">

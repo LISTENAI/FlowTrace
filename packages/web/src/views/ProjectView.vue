@@ -286,11 +286,11 @@ watch(projectId, () => {
         class="mt-4 grid gap-3 lg:grid-cols-[1.35fr_1fr]"
       >
         <div
-          class="overflow-hidden rounded-2xl border border-rose-100 bg-gradient-to-r from-rose-50/90 to-amber-50/60 p-4"
+          class="overflow-hidden rounded-2xl border border-rose-100 bg-gradient-to-r from-rose-50/90 to-amber-50/60 p-4 dark:from-rose-950/35 dark:to-amber-950/25"
         >
           <div class="flex items-start gap-3">
             <span
-              class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-rose-500 shadow-sm"
+              class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-rose-500 shadow-sm dark:bg-rose-950/60"
               ><ExclamationTriangleIcon class="h-5 w-5"
             /></span>
             <div class="min-w-0 flex-1">

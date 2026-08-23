@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f6f7fb" />
+    <script>
+      try {
+        const preference = localStorage.getItem("flowtrace-theme");
+        const dark =
+          preference === "dark" ||
+          (preference !== "light" &&
+            matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", dark);
+        document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        document
+          .querySelector('meta[name="theme-color"]')
+          .setAttribute("content", dark ? "#090f1c" : "#f6f7fb");
+      } catch {}
+    </script>
     <meta
       name="description"
       content="FlowTrace — 真实记录研发需求的阶段、等待、阻塞、Bug 与排期变化。"
