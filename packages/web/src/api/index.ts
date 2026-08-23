@@ -5,6 +5,7 @@ import type {
   ExecutionStatus,
   Person,
   Project,
+  ProjectRhythm,
   ProjectSnapshot,
   Requirement,
   RequirementSummary,
@@ -15,6 +16,26 @@ import type {
 import { request } from '@/api/client';
 
 export const api = {
+  projectRhythms: () => request<ProjectRhythm[]>('/project-rhythms'),
+  createProjectRhythm: (input: {
+    name: string;
+    description?: string;
+    stages: Array<{ name: string }>;
+  }) =>
+    request<ProjectRhythm>('/project-rhythms', {
+      method: 'POST',
+      body: input,
+    }),
+  updateProjectRhythm: (
+    id: string,
+    input: { name?: string; description?: string; stages?: TemplateStage[] },
+  ) =>
+    request<ProjectRhythm>(`/project-rhythms/${id}`, {
+      method: 'PATCH',
+      body: input,
+    }),
+  deleteProjectRhythm: (id: string) =>
+    request<void>(`/project-rhythms/${id}`, { method: 'DELETE' }),
   projects: () => request<Project[]>('/projects'),
   project: (id: string) => request<Project>(`/projects/${id}`),
   createProject: (input: {

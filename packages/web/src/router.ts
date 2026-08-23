@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import PeopleView from '@/views/PeopleView.vue';
 import ProjectListView from '@/views/ProjectListView.vue';
 import ProjectSettingsView from '@/views/ProjectSettingsView.vue';
+import ProjectRhythmsView from '@/views/ProjectRhythmsView.vue';
 import ProjectView from '@/views/ProjectView.vue';
 import RequirementView from '@/views/RequirementView.vue';
 
@@ -21,6 +22,11 @@ export const router = createRouter({
       component: RequirementView,
     },
     { path: '/people', name: 'people', component: PeopleView },
+    {
+      path: '/settings/project-rhythms',
+      name: 'project-rhythms',
+      component: ProjectRhythmsView,
+    },
   ],
   scrollBehavior: () => ({ top: 0 }),
 });

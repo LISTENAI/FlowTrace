@@ -5,6 +5,7 @@ import {
   ChevronRightIcon,
   FolderIcon,
   PlusIcon,
+  QueueListIcon,
   Squares2X2Icon,
   UsersIcon,
   XMarkIcon,
@@ -105,6 +106,19 @@ function requestNewRequirement() {
         >
           <UsersIcon class="h-[18px] w-[18px]" />
           人员目录
+        </RouterLink>
+        <RouterLink
+          to="/settings/project-rhythms"
+          class="focus-ring flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition"
+          :class="
+            route.name === 'project-rhythms'
+              ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80'
+              : 'text-slate-500 hover:bg-white/70 hover:text-slate-800'
+          "
+          @click="mobileOpen = false"
+        >
+          <QueueListIcon class="h-[18px] w-[18px]" />
+          项目节奏
         </RouterLink>
       </nav>
 

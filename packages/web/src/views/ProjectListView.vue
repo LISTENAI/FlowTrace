@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { ProjectRhythm } from '@flowtrace/shared';
 import {
   ArrowUpRightIcon,
   ClockIcon,
@@ -17,30 +18,16 @@ import { loadWorkspace, workspace } from '@/state/workspace';
 const router = useRouter();
 const createOpen = ref(false);
 const saving = ref(false);
+const rhythms = ref<ProjectRhythm[]>([]);
 const form = reactive({
   key: '',
   name: '',
   description: '',
-  preset: 'software',
+  rhythmId: '',
 });
-
-const presets = [
-  {
-    id: 'software',
-    label: '软件研发',
-    stages: ['需求设计', '开发', '联调', '测试', '上线'],
-  },
-  {
-    id: 'firmware',
-    label: '固件研发',
-    stages: ['需求确认', '方案设计', '开发', '板上验证', '测试', '发布'],
-  },
-  {
-    id: 'hardware',
-    label: '硬件研发',
-    stages: ['设计', '首次打样', '验证', '定版'],
-  },
-];
+const selectedRhythm = computed(() =>
+  rhythms.value.find((item) => item.id === form.rhythmId),
+);
 
 const totals = computed(() => ({
   incomplete: workspace.projects.reduce(
@@ -57,23 +44,40 @@ const totals = computed(() => ({
   ),
 }));
 
-onMounted(() => loadWorkspace());
+onMounted(async () => {
+  await Promise.all([loadWorkspace(), loadRhythms()]);
+});
+
+async function loadRhythms() {
+  rhythms.value = await api.projectRhythms();
+  if (!rhythms.value.some((item) => item.id === form.rhythmId)) {
+    form.rhythmId = rhythms.value[0]?.id ?? '';
+  }
+}
 
 async function createProject() {
-  const preset = presets.find((item) => item.id === form.preset)!;
+  const rhythm = selectedRhythm.value;
+  if (!rhythm) {
+    toasts.show(
+      '还没有可用的项目节奏',
+      '请先在项目节奏中添加一个模板',
+      'error',
+    );
+    return;
+  }
   saving.value = true;
   try {
     const project = await api.createProject({
       key: form.key.toUpperCase(),
       name: form.name,
       description: form.description,
-      templateStages: preset.stages.map((name) => ({ name })),
+      templateStages: rhythm.stages.map(({ name }) => ({ name })),
     });
     await loadWorkspace(true);
     createOpen.value = false;
     toasts.show(
       '项目已创建',
-      `已为「${project.name}」准备 ${preset.stages.length} 个默认阶段`,
+      `已按「${rhythm.name}」准备 ${rhythm.stages.length} 个默认阶段`,
     );
     await router.push(`/projects/${project.id}`);
   } catch (error) {
@@ -312,25 +316,41 @@ async function createProject() {
           </legend>
           <div class="grid gap-2 sm:grid-cols-3">
             <button
-              v-for="preset in presets"
-              :key="preset.id"
+              v-for="rhythm in rhythms"
+              :key="rhythm.id"
               type="button"
               class="rounded-xl border p-3 text-left transition"
               :class="
-                form.preset === preset.id
+                form.rhythmId === rhythm.id
                   ? 'border-indigo-300 bg-indigo-50 ring-2 ring-indigo-100'
                   : 'border-slate-200 hover:border-slate-300'
               "
-              @click="form.preset = preset.id"
+              @click="form.rhythmId = rhythm.id"
             >
               <span class="text-sm font-semibold text-slate-800">{{
-                preset.label
+                rhythm.name
               }}</span>
-              <span class="mt-1 block text-[10px] leading-4 text-slate-400"
-                >{{ preset.stages.slice(0, 3).join(' · ') }}…</span
-              >
+              <span class="mt-1 block text-[10px] leading-4 text-slate-400">{{
+                rhythm.stages.map((stage) => stage.name).join(' · ')
+              }}</span>
             </button>
           </div>
+          <div
+            v-if="!rhythms.length"
+            class="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500"
+          >
+            暂无可用节奏，
+            <button
+              type="button"
+              class="font-semibold text-indigo-600"
+              @click="router.push('/settings/project-rhythms')"
+            >
+              先去添加
+            </button>
+          </div>
+          <p class="mt-2 text-[11px] leading-5 text-slate-400">
+            节奏只用于生成这个项目的默认环节，之后可以独立调整。
+          </p>
         </fieldset>
         <div class="flex justify-end gap-2 pt-1">
           <button
@@ -341,7 +361,7 @@ async function createProject() {
             取消
           </button>
           <button
-            :disabled="saving"
+            :disabled="saving || !selectedRhythm"
             class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 disabled:opacity-50"
           >
             {{ saving ? '正在创建…' : '创建并进入' }}
