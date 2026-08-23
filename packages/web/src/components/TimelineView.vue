@@ -10,7 +10,7 @@ const props = defineProps<{
   mode: 'baseline' | 'current' | 'actual';
 }>();
 
-const collapsed = reactive(new Set<string>());
+const expanded = reactive(new Set<string>());
 const allItems = computed(() =>
   props.requirements.flatMap((item) => [...item.stages, ...item.bugs]),
 );
@@ -132,8 +132,8 @@ function segments(item: Stage | Bug) {
 }
 
 function toggle(id: string) {
-  if (collapsed.has(id)) collapsed.delete(id);
-  else collapsed.add(id);
+  if (expanded.has(id)) expanded.delete(id);
+  else expanded.add(id);
 }
 </script>
 
@@ -178,7 +178,7 @@ function toggle(id: string) {
             <div class="flex h-12 items-center gap-2 px-4">
               <ChevronDownIcon
                 class="h-3.5 w-3.5 text-slate-400 transition"
-                :class="collapsed.has(requirement.id) ? '-rotate-90' : ''"
+                :class="expanded.has(requirement.id) ? '' : '-rotate-90'"
               />
               <span
                 class="font-mono text-[10px] font-semibold text-indigo-500"
@@ -201,7 +201,7 @@ function toggle(id: string) {
             </div>
           </button>
 
-          <template v-if="!collapsed.has(requirement.id)">
+          <template v-if="expanded.has(requirement.id)">
             <div
               v-for="item in [...requirement.stages, ...requirement.bugs]"
               :key="item.id"

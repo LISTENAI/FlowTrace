@@ -13,7 +13,7 @@ import {
   ExclamationTriangleIcon,
   LinkIcon,
 } from '@heroicons/vue/24/outline';
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@/api';
 import AvatarStack from '@/components/AvatarStack.vue';
@@ -29,11 +29,10 @@ import {
 
 const props = defineProps<{
   summary: RequirementSummary;
-  initialOpen?: boolean;
 }>();
 const emit = defineEmits<{ refresh: [] }>();
 const router = useRouter();
-const open = ref(Boolean(props.initialOpen));
+const open = ref(false);
 const loading = ref(false);
 const detail = ref<Requirement>();
 const statusTarget = ref<Stage | Bug>();
@@ -64,10 +63,6 @@ async function refreshed() {
   await loadDetail(true);
   emit('refresh');
 }
-
-onMounted(() => {
-  if (open.value) void loadDetail();
-});
 </script>
 
 <template>
@@ -111,6 +106,13 @@ onMounted(() => {
             >
               <ExclamationTriangleIcon class="h-3.5 w-3.5" />已偏离当前计划
             </span>
+            <span
+              v-if="summary.bugCount"
+              class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 md:hidden"
+            >
+              <BugAntIcon class="h-3.5 w-3.5" />Bug
+              {{ summary.completedBugCount }}/{{ summary.bugCount }}
+            </span>
           </div>
           <h3
             class="mt-1 truncate text-sm font-semibold text-slate-900 sm:text-[15px]"
@@ -118,34 +120,40 @@ onMounted(() => {
             {{ summary.title }}
           </h3>
         </div>
-        <div class="hidden items-center gap-5 md:flex">
-          <div class="min-w-24">
+        <div
+          class="hidden w-[25rem] shrink-0 grid-cols-[6rem_2.5rem_7.5rem_5rem] items-center gap-4 md:grid"
+        >
+          <div>
             <p class="text-[10px] text-slate-400">当前阶段</p>
             <p class="mt-0.5 text-xs font-medium text-slate-700">
               {{ summary.currentStage || lifecycleLabels[summary.lifecycle] }}
             </p>
           </div>
-          <AvatarStack :owner-ids="summary.ownerIds" compact />
-          <div class="min-w-28 text-right">
+          <div class="flex w-10 justify-start">
+            <AvatarStack :owner-ids="summary.ownerIds" compact />
+          </div>
+          <div class="text-right">
             <p class="text-[10px] text-slate-400">当前计划</p>
             <p class="mt-0.5 text-xs font-medium text-slate-700">
               {{ formatDate(summary.plannedStartAt) }} →
               {{ formatDate(summary.plannedEndAt, '待定') }}
             </p>
           </div>
-        </div>
-        <div v-if="summary.bugCount" class="hidden min-w-20 sm:block">
-          <div class="mb-1 flex justify-between text-[10px]">
-            <span class="text-slate-400">Bug</span
-            ><span class="font-semibold text-slate-600"
-              >{{ summary.completedBugCount }}/{{ summary.bugCount }}</span
-            >
-          </div>
-          <div class="h-1.5 overflow-hidden rounded-full bg-slate-100">
-            <div
-              class="h-full rounded-full bg-emerald-400 transition-all"
-              :style="{ width: `${bugProgress}%` }"
-            />
+          <div>
+            <template v-if="summary.bugCount">
+              <div class="mb-1 flex justify-between text-[10px]">
+                <span class="text-slate-400">Bug</span
+                ><span class="font-semibold text-slate-600"
+                  >{{ summary.completedBugCount }}/{{ summary.bugCount }}</span
+                >
+              </div>
+              <div class="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  class="h-full rounded-full bg-emerald-400 transition-all"
+                  :style="{ width: `${bugProgress}%` }"
+                />
+              </div>
+            </template>
           </div>
         </div>
       </div>

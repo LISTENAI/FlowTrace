@@ -76,12 +76,6 @@ const activeFilters = computed(
   () => Object.values(filters).filter((value) => value !== 'all').length,
 );
 
-const firstRiskId = computed(
-  () =>
-    requirements.value.find((item) => item.health === 'blocked')?.id ??
-    requirements.value.find((item) => item.health === 'waiting')?.id,
-);
-
 async function load() {
   loading.value = true;
   error.value = '';
@@ -479,7 +473,6 @@ watch(projectId, () => {
             v-for="item in requirements"
             :key="item.id"
             :summary="item"
-            :initial-open="item.id === firstRiskId"
             @refresh="load"
           />
           <div v-if="!requirements.length" class="surface py-16 text-center">
