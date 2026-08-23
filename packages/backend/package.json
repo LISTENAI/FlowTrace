@@ -1,0 +1,36 @@
+{
+  "name": "@flowtrace/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json --resolve-full-paths --resolve-full-extension .js",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@flowtrace/shared": "^0.1.0",
+    "@nestjs/common": "^11.2.1",
+    "@nestjs/core": "^11.2.1",
+    "@nestjs/platform-express": "^11.2.1",
+    "@nestjs/swagger": "^11.4.7",
+    "@nestjs/typeorm": "^11.0.3",
+    "better-sqlite3": "^12.11.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.4",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "typeorm": "^0.3.31"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.24",
+    "@nestjs/testing": "^11.2.1",
+    "@types/better-sqlite3": "^7.6.13",
+    "tsc-alias": "^1.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.23.12",
+    "vitest": "^3.2.7"
+  }
+}

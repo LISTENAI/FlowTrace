@@ -1,0 +1,6 @@
+node_modules
+dist
+coverage
+package-lock.json
+docs/product/requirements-v0.2.md
+

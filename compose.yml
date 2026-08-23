@@ -1,0 +1,37 @@
+services:
+  backend:
+    build:
+      context: .
+      target: dev
+    working_dir: /app
+    command: sh -c "npm run build -w @flowtrace/shared && npm run dev -w @flowtrace/backend"
+    environment:
+      FLOWTRACE_DATABASE_PATH: /data/flowtrace.db
+      FLOWTRACE_HOST: 0.0.0.0
+      FLOWTRACE_PORT: 3100
+    ports:
+      - "3100:3100"
+    volumes:
+      - .:/app
+      - flowtrace_node_modules:/app/node_modules
+      - flowtrace_data:/data
+
+  web:
+    build:
+      context: .
+      target: dev
+    working_dir: /app
+    command: sh -c "npm run build -w @flowtrace/shared && npm run dev -w @flowtrace/web"
+    environment:
+      FLOWTRACE_API_PROXY: http://backend:3100
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - flowtrace_node_modules:/app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  flowtrace_data:
+  flowtrace_node_modules:

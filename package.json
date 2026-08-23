@@ -1,0 +1,26 @@
+{
+  "name": "flowtrace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI 友好的研发项目进度管理工具",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @flowtrace/shared && npm run build -w @flowtrace/backend && npm run build -w @flowtrace/mcp && npm run build -w @flowtrace/web",
+    "dev": "concurrently -n backend,web -c blue,green \"npm run dev -w @flowtrace/backend\" \"npm run dev -w @flowtrace/web\"",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run build -w @flowtrace/shared && npm run test -w @flowtrace/backend && npm run test -w @flowtrace/mcp",
+    "typecheck": "npm run build -w @flowtrace/shared && npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.4",
+    "prettier": "^3.9.6",
+    "typescript": "~5.9.2"
+  }
+}

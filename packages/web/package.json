@@ -1,0 +1,27 @@
+{
+  "name": "@flowtrace/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vue-tsc -b && vite build",
+    "dev": "vite --host 0.0.0.0",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc -b"
+  },
+  "dependencies": {
+    "@flowtrace/shared": "^0.1.0",
+    "@headlessui/vue": "^1.7.23",
+    "@heroicons/vue": "^2.2.0",
+    "dayjs": "^1.11.23",
+    "vue": "^3.5.41",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "tailwindcss": "^4.3.3",
+    "vite": "^7.3.6",
+    "vue-tsc": "^3.3.11"
+  }
+}
