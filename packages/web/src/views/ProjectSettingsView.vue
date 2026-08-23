@@ -1,0 +1,318 @@
+<script setup lang="ts">
+import type { Project, TemplateStage, Version } from '@flowtrace/shared';
+import {
+  ArrowLeftIcon,
+  Bars3Icon,
+  CheckIcon,
+  PlusIcon,
+  TrashIcon,
+} from '@heroicons/vue/24/outline';
+import { computed, onMounted, reactive, ref } from 'vue';
+import { RouterLink, useRoute } from 'vue-router';
+import { api } from '@/api';
+import AppModal from '@/components/AppModal.vue';
+import { formatDate, versionLabels } from '@/lib/presentation';
+import { toasts } from '@/state/toasts';
+import { loadWorkspace } from '@/state/workspace';
+
+const route = useRoute();
+const projectId = computed(() => route.params.projectId as string);
+const project = ref<Project>();
+const versions = ref<Version[]>([]);
+const stages = ref<TemplateStage[]>([]);
+const saving = ref(false);
+const versionOpen = ref(false);
+const projectForm = reactive({ name: '', description: '' });
+const versionForm = reactive({
+  name: '',
+  status: 'planning',
+  plannedReleaseAt: '',
+  description: '',
+});
+
+async function load() {
+  const [projectResult, versionResult] = await Promise.all([
+    api.project(projectId.value),
+    api.versions(projectId.value),
+  ]);
+  project.value = projectResult;
+  versions.value = versionResult;
+  stages.value = projectResult.templateStages.map((item) => ({ ...item }));
+  projectForm.name = projectResult.name;
+  projectForm.description = projectResult.description ?? '';
+}
+
+function addStage() {
+  stages.value.push({
+    id: crypto.randomUUID(),
+    name: '新阶段',
+    order: stages.value.length,
+    ownerIds: [],
+    dependsOnTemplateStageIds: [],
+  });
+}
+
+function removeStage(index: number) {
+  stages.value.splice(index, 1);
+  stages.value.forEach((item, order) => (item.order = order));
+}
+
+async function saveSettings() {
+  if (!project.value) return;
+  saving.value = true;
+  try {
+    await Promise.all([
+      api.updateProject(project.value.id, projectForm),
+      api.updateTemplate(project.value.id, stages.value),
+    ]);
+    toasts.show('项目设置已保存', '模板变化只影响之后创建的需求');
+    await Promise.all([load(), loadWorkspace(true)]);
+  } catch (error) {
+    toasts.show(
+      '保存失败',
+      error instanceof Error ? error.message : undefined,
+      'error',
+    );
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function createVersion() {
+  saving.value = true;
+  try {
+    await api.createVersion(projectId.value, {
+      name: versionForm.name,
+      status: versionForm.status,
+      plannedReleaseAt: versionForm.plannedReleaseAt || undefined,
+      description: versionForm.description,
+    });
+    versionOpen.value = false;
+    toasts.show('版本已创建');
+    await load();
+  } catch (error) {
+    toasts.show(
+      '创建失败',
+      error instanceof Error ? error.message : undefined,
+      'error',
+    );
+  } finally {
+    saving.value = false;
+  }
+}
+
+onMounted(load);
+</script>
+
+<template>
+  <div class="mx-auto max-w-5xl px-4 py-7 sm:px-7 lg:px-9 lg:py-10">
+    <RouterLink
+      :to="`/projects/${projectId}`"
+      class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-indigo-600"
+      ><ArrowLeftIcon class="h-3.5 w-3.5" />返回项目</RouterLink
+    >
+    <div class="mt-3 flex items-end justify-between">
+      <div>
+        <h1
+          class="text-2xl font-semibold tracking-[-.035em] text-slate-900 sm:text-3xl"
+        >
+          项目设置
+        </h1>
+        <p class="mt-1 text-sm text-slate-500">
+          维护项目边界、交付版本与新需求的默认阶段。
+        </p>
+      </div>
+      <button
+        :disabled="saving"
+        class="focus-ring inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 disabled:opacity-50"
+        @click="saveSettings"
+      >
+        <CheckIcon class="h-4 w-4" />保存设置
+      </button>
+    </div>
+
+    <div v-if="project" class="mt-7 space-y-5">
+      <section class="surface p-5 sm:p-6">
+        <h2 class="text-sm font-semibold text-slate-900">基本信息</h2>
+        <div class="mt-4 grid gap-4 sm:grid-cols-[1fr_2fr]">
+          <label
+            ><span class="mb-1.5 block text-xs font-medium text-slate-600"
+              >项目名称</span
+            ><input
+              v-model="projectForm.name"
+              class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm" /></label
+          ><label
+            ><span class="mb-1.5 block text-xs font-medium text-slate-600"
+              >项目说明</span
+            ><input
+              v-model="projectForm.description"
+              class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
+          /></label>
+        </div>
+        <p class="mt-3 text-[11px] text-slate-400">
+          稳定标识：{{ project.key }} · 创建后不建议修改，以保持外部引用稳定。
+        </p>
+      </section>
+
+      <section class="surface overflow-hidden">
+        <div
+          class="flex items-center justify-between border-b border-slate-100 px-5 py-4 sm:px-6"
+        >
+          <div>
+            <h2 class="text-sm font-semibold text-slate-900">需求阶段模板</h2>
+            <p class="mt-0.5 text-[11px] text-slate-400">
+              只影响保存后新建的需求，旧需求不会自动迁移。
+            </p>
+          </div>
+          <button
+            class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:border-indigo-200 hover:text-indigo-600"
+            @click="addStage"
+          >
+            <PlusIcon class="h-3.5 w-3.5" />新增阶段
+          </button>
+        </div>
+        <div class="space-y-2 p-5 sm:p-6">
+          <div
+            v-for="(stage, index) in stages"
+            :key="stage.id"
+            class="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/50 px-3 py-2.5"
+          >
+            <Bars3Icon class="h-4 w-4 text-slate-300" /><span
+              class="grid h-6 w-6 place-items-center rounded-lg bg-white text-[10px] font-bold text-slate-400 ring-1 ring-slate-200"
+              >{{ index + 1 }}</span
+            ><input
+              v-model="stage.name"
+              class="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-700 outline-none"
+            /><button
+              class="rounded-lg p-1.5 text-slate-300 opacity-0 transition hover:bg-rose-50 hover:text-rose-500 group-hover:opacity-100"
+              aria-label="删除阶段"
+              @click="removeStage(index)"
+            >
+              <TrashIcon class="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="surface overflow-hidden">
+        <div
+          class="flex items-center justify-between border-b border-slate-100 px-5 py-4 sm:px-6"
+        >
+          <div>
+            <h2 class="text-sm font-semibold text-slate-900">交付版本</h2>
+            <p class="mt-0.5 text-[11px] text-slate-400">
+              同一长期项目中的计划交付批次。
+            </p>
+          </div>
+          <button
+            class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600"
+            @click="versionOpen = true"
+          >
+            <PlusIcon class="h-3.5 w-3.5" />新建版本
+          </button>
+        </div>
+        <div class="divide-y divide-slate-100 px-5 sm:px-6">
+          <div
+            v-for="version in versions"
+            :key="version.id"
+            class="flex items-center gap-4 py-4"
+          >
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="font-semibold text-slate-800">{{
+                  version.name
+                }}</span
+                ><span
+                  class="rounded-full px-2 py-0.5 text-[9px] font-semibold"
+                  :class="
+                    version.status === 'active'
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : version.status === 'released'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-slate-100 text-slate-500'
+                  "
+                  >{{ versionLabels[version.status] }}</span
+                >
+              </div>
+              <p class="mt-0.5 text-xs text-slate-400">
+                {{ version.description || '未填写说明' }}
+              </p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] text-slate-400">计划发布</p>
+              <p class="mt-0.5 text-xs font-medium text-slate-600">
+                {{ formatDate(version.plannedReleaseAt) }}
+              </p>
+            </div>
+          </div>
+          <p
+            v-if="!versions.length"
+            class="py-8 text-center text-xs text-slate-400"
+          >
+            尚未创建版本，需求可以先留在未排版本中。
+          </p>
+        </div>
+      </section>
+    </div>
+
+    <AppModal
+      :open="versionOpen"
+      title="创建交付版本"
+      description="版本用于组织同一项目中的一次计划交付。"
+      width="sm"
+      @close="versionOpen = false"
+      ><form class="space-y-4" @submit.prevent="createVersion">
+        <label class="block"
+          ><span class="mb-1.5 block text-xs font-medium text-slate-600"
+            >版本名称</span
+          ><input
+            v-model="versionForm.name"
+            required
+            placeholder="例如：2.8 / Rev B"
+            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
+        /></label>
+        <div class="grid grid-cols-2 gap-3">
+          <label
+            ><span class="mb-1.5 block text-xs font-medium text-slate-600"
+              >状态</span
+            ><select
+              v-model="versionForm.status"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
+            >
+              <option value="planning">规划中</option>
+              <option value="active">进行中</option>
+            </select></label
+          ><label
+            ><span class="mb-1.5 block text-xs font-medium text-slate-600"
+              >计划发布</span
+            ><input
+              v-model="versionForm.plannedReleaseAt"
+              type="date"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
+          /></label>
+        </div>
+        <label class="block"
+          ><span class="mb-1.5 block text-xs font-medium text-slate-600"
+            >说明</span
+          ><input
+            v-model="versionForm.description"
+            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
+        /></label>
+        <div class="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            class="rounded-xl px-4 py-2 text-sm text-slate-500"
+            @click="versionOpen = false"
+          >
+            取消</button
+          ><button
+            :disabled="saving"
+            class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white"
+          >
+            创建版本
+          </button>
+        </div>
+      </form></AppModal
+    >
+  </div>
+</template>
