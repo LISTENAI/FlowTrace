@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
 import { entities } from '@/database/entities';
 import { InitialSchema1724428800000 } from '@/database/migrations/1724428800000-initial-schema';
+import { ProjectRhythms1724515200000 } from '@/database/migrations/1724515200000-project-rhythms';
 import { DomainModule } from '@/domain/domain.module';
 import { WorkService } from '@/domain/work.service';
 
@@ -21,7 +22,7 @@ describe.sequential('WorkService business rules', () => {
           type: 'better-sqlite3',
           database: ':memory:',
           entities,
-          migrations: [InitialSchema1724428800000],
+          migrations: [InitialSchema1724428800000, ProjectRhythms1724515200000],
           migrationsRun: true,
           synchronize: false,
         }),
@@ -30,6 +31,27 @@ describe.sequential('WorkService business rules', () => {
     }).compile();
     dataSource = module.get(DataSource);
     work = module.get(WorkService);
+  });
+
+  it('maintains reusable project rhythms without linking existing projects', async () => {
+    const rhythm = await work.createProjectRhythm({
+      name: '算法研究',
+      description: '适合实验性项目',
+      stages: [{ name: '假设' }, { name: '实验' }, { name: '复现' }],
+    });
+    const project = await work.createProject({
+      key: 'LAB',
+      name: '声学实验室',
+      templateStages: rhythm.stages,
+    });
+    await work.updateProjectRhythm(rhythm.id, {
+      stages: [{ name: '探索' }, { name: '验证' }],
+    });
+
+    expect((await work.getProject(project.id)).templateStages).toHaveLength(3);
+    expect((await work.listProjectRhythms())[0]?.stages).toHaveLength(2);
+    await work.deleteProjectRhythm(rhythm.id);
+    expect(await work.listProjectRhythms()).toHaveLength(0);
   });
 
   afterAll(async () => {

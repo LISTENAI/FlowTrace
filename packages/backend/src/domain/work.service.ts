@@ -16,6 +16,7 @@ import type {
   HealthStatus,
   Person,
   Project,
+  ProjectRhythm,
   ProjectSnapshot,
   Requirement,
   RequirementLifecycle,
@@ -45,6 +46,7 @@ import {
   DependencyEntity,
   PersonEntity,
   ProjectEntity,
+  ProjectRhythmEntity,
   RequirementEntity,
   ScheduleHistoryEntity,
   StageEntity,
@@ -60,6 +62,7 @@ import type {
   CreateDependencyDto,
   CreatePersonDto,
   CreateProjectDto,
+  CreateProjectRhythmDto,
   CreateRequirementDto,
   CreateStageDto,
   CreateVersionDto,
@@ -68,6 +71,7 @@ import type {
   UpdateBugDto,
   UpdatePersonDto,
   UpdateProjectDto,
+  UpdateProjectRhythmDto,
   UpdateRequirementDto,
   UpdateStageDto,
   UpdateStatusDto,
@@ -97,6 +101,8 @@ export class WorkService {
     private readonly dataSource: DataSource,
     @InjectRepository(ProjectEntity)
     private readonly projects: Repository<ProjectEntity>,
+    @InjectRepository(ProjectRhythmEntity)
+    private readonly projectRhythms: Repository<ProjectRhythmEntity>,
     @InjectRepository(PersonEntity)
     private readonly people: Repository<PersonEntity>,
     @InjectRepository(VersionEntity)
@@ -118,6 +124,60 @@ export class WorkService {
     @InjectRepository(ChangeEventEntity)
     private readonly changes: Repository<ChangeEventEntity>,
   ) {}
+
+  async listProjectRhythms(): Promise<ProjectRhythm[]> {
+    const rows = await this.projectRhythms.find({
+      order: { sortOrder: 'ASC', createdAt: 'ASC' },
+    });
+    return rows.map((item) => this.toProjectRhythm(item));
+  }
+
+  async createProjectRhythm(
+    input: CreateProjectRhythmDto,
+  ): Promise<ProjectRhythm> {
+    if (await this.projectRhythms.existsBy({ name: input.name })) {
+      throw new BadRequestException(`项目节奏「${input.name}」已存在`);
+    }
+    const last = (
+      await this.projectRhythms.find({
+        order: { sortOrder: 'DESC' },
+        take: 1,
+      })
+    )[0];
+    const rhythm = this.projectRhythms.create({
+      id: randomUUID(),
+      name: input.name,
+      description: input.description || null,
+      stages: this.normalizeTemplate(input.stages),
+      sortOrder: (last?.sortOrder ?? -1) + 1,
+    });
+    return this.toProjectRhythm(await this.projectRhythms.save(rhythm));
+  }
+
+  async updateProjectRhythm(
+    id: string,
+    input: UpdateProjectRhythmDto,
+  ): Promise<ProjectRhythm> {
+    const rhythm = await this.projectRhythms.findOneBy({ id });
+    if (!rhythm) throw new NotFoundException('未找到项目节奏');
+    if (input.name !== undefined && input.name !== rhythm.name) {
+      if (await this.projectRhythms.existsBy({ name: input.name })) {
+        throw new BadRequestException(`项目节奏「${input.name}」已存在`);
+      }
+      rhythm.name = input.name;
+    }
+    if (input.description !== undefined)
+      rhythm.description = input.description || null;
+    if (input.stages !== undefined)
+      rhythm.stages = this.normalizeTemplate(input.stages);
+    return this.toProjectRhythm(await this.projectRhythms.save(rhythm));
+  }
+
+  async deleteProjectRhythm(id: string): Promise<void> {
+    const rhythm = await this.projectRhythms.findOneBy({ id });
+    if (!rhythm) throw new NotFoundException('未找到项目节奏');
+    await this.projectRhythms.remove(rhythm);
+  }
 
   async listProjects(): Promise<Project[]> {
     const projects = await this.projects.find({ order: { updatedAt: 'DESC' } });
@@ -1264,6 +1324,18 @@ export class WorkService {
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       metrics,
+    };
+  }
+
+  private toProjectRhythm(row: ProjectRhythmEntity): ProjectRhythm {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description ?? undefined,
+      stages: row.stages,
+      sortOrder: row.sortOrder,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
     };
   }
 

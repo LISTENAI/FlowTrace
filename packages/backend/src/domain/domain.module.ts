@@ -7,6 +7,7 @@ import {
   HistoryController,
   InsightsController,
   PeopleController,
+  ProjectRhythmsController,
   ProjectsController,
   RequirementsController,
   StagesController,
@@ -18,6 +19,7 @@ import { WorkService } from '@/domain/work.service';
   imports: [TypeOrmModule.forFeature(entities)],
   controllers: [
     ProjectsController,
+    ProjectRhythmsController,
     PeopleController,
     VersionsController,
     RequirementsController,

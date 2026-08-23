@@ -90,6 +90,44 @@ export class TemplateStageDto {
   dependsOnTemplateStageIds?: string[];
 }
 
+export class CreateProjectRhythmDto {
+  @ApiProperty({ example: '软件研发' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  description?: string;
+
+  @ApiProperty({ type: [TemplateStageDto] })
+  @IsArray()
+  stages!: TemplateStageDto[];
+}
+
+export class UpdateProjectRhythmDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  description?: string;
+
+  @ApiPropertyOptional({ type: [TemplateStageDto] })
+  @IsOptional()
+  @IsArray()
+  stages?: TemplateStageDto[];
+}
+
 export class CreateProjectDto extends ChangeContextDto {
   @ApiProperty({ example: 'FW' })
   @IsString()

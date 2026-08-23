@@ -3,6 +3,7 @@ export { ChangeEventEntity } from '@/database/entities/change-event.entity';
 export { DependencyEntity } from '@/database/entities/dependency.entity';
 export { PersonEntity } from '@/database/entities/person.entity';
 export { ProjectEntity } from '@/database/entities/project.entity';
+export { ProjectRhythmEntity } from '@/database/entities/project-rhythm.entity';
 export { RequirementEntity } from '@/database/entities/requirement.entity';
 export { ScheduleHistoryEntity } from '@/database/entities/schedule-history.entity';
 export { StageEntity } from '@/database/entities/stage.entity';
@@ -15,6 +16,7 @@ import { ChangeEventEntity } from '@/database/entities/change-event.entity';
 import { DependencyEntity } from '@/database/entities/dependency.entity';
 import { PersonEntity } from '@/database/entities/person.entity';
 import { ProjectEntity } from '@/database/entities/project.entity';
+import { ProjectRhythmEntity } from '@/database/entities/project-rhythm.entity';
 import { RequirementEntity } from '@/database/entities/requirement.entity';
 import { ScheduleHistoryEntity } from '@/database/entities/schedule-history.entity';
 import { StageEntity } from '@/database/entities/stage.entity';
@@ -24,6 +26,7 @@ import { VersionHistoryEntity } from '@/database/entities/version-history.entity
 
 export const entities = [
   ProjectEntity,
+  ProjectRhythmEntity,
   PersonEntity,
   VersionEntity,
   RequirementEntity,

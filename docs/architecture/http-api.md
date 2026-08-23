@@ -5,6 +5,7 @@
 
 ## 业务入口
 
+- `/project-rhythms`：维护新建项目可选的节奏及其默认环节。
 - `/projects`、`/people`、`/versions`：维护项目边界、负责人目录和交付版本。
 - `/requirements`：创建需求时复制项目当前模板，并支持排期和版本迁移。
 - `/stages`、`/bugs`：维护独立工作项、计划和可补录的状态历史。

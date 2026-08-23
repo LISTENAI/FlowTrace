@@ -21,6 +21,7 @@ import {
   CreateDependencyDto,
   CreatePersonDto,
   CreateProjectDto,
+  CreateProjectRhythmDto,
   CreateRequirementDto,
   CreateStageDto,
   CreateVersionDto,
@@ -29,6 +30,7 @@ import {
   UpdateBugDto,
   UpdatePersonDto,
   UpdateProjectDto,
+  UpdateProjectRhythmDto,
   UpdateRequirementDto,
   UpdateStageDto,
   UpdateStatusDto,
@@ -78,6 +80,34 @@ export class ProjectsController {
   @Post(':id/versions')
   createVersion(@Param('id') id: string, @Body() input: CreateVersionDto) {
     return this.work.createVersion(id, input);
+  }
+}
+
+@ApiTags('项目节奏')
+@Controller('project-rhythms')
+export class ProjectRhythmsController {
+  constructor(@Inject(WorkService) private readonly work: WorkService) {}
+
+  @Get()
+  @ApiOperation({ summary: '列出创建项目时可选的节奏' })
+  list() {
+    return this.work.listProjectRhythms();
+  }
+
+  @Post()
+  create(@Body() input: CreateProjectRhythmDto) {
+    return this.work.createProjectRhythm(input);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() input: UpdateProjectRhythmDto) {
+    return this.work.updateProjectRhythm(id, input);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  remove(@Param('id') id: string) {
+    return this.work.deleteProjectRhythm(id);
   }
 }
 

@@ -49,6 +49,16 @@ export interface Project {
   metrics?: ProjectMetrics;
 }
 
+export interface ProjectRhythm {
+  id: string;
+  name: string;
+  description?: string;
+  stages: TemplateStage[];
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ProjectMetrics {
   incompleteRequirements: number;
   waiting: number;
