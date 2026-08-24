@@ -492,7 +492,9 @@ watch(projectId, () => {
               >
                 <RectangleStackIcon class="h-4 w-4" />
                 <span>展开</span>
-                <span class="text-indigo-600">{{ timelineExpansionLabel }}</span>
+                <span class="text-indigo-600">{{
+                  timelineExpansionLabel
+                }}</span>
                 <ChevronDownIcon
                   class="h-3 w-3 text-slate-400 transition"
                   :class="timelineExpansionOpen ? 'rotate-180' : ''"
@@ -537,10 +539,9 @@ watch(projectId, () => {
                     <CheckIcon class="h-3 w-3" />
                   </span>
                   <span class="min-w-0 flex-1">
-                    <span
-                      class="block text-xs font-semibold text-slate-700"
-                      >{{ item.label }}</span
-                    >
+                    <span class="block text-xs font-semibold text-slate-700">{{
+                      item.label
+                    }}</span>
                     <span class="mt-0.5 block text-[10px] text-slate-400">{{
                       item.hint
                     }}</span>
@@ -601,6 +602,7 @@ watch(projectId, () => {
             :requirements="timelineRequirements"
             :versions="snapshot.versions"
             :mode="timelineMode"
+            @schedule-saved="load"
           />
         </div>
       </section>

@@ -172,7 +172,10 @@ a[class~="inline-flex"] {
   grid-template-columns: var(--timeline-label-width) minmax(0, 1fr);
 }
 
-/* 工具栏与时间线按全局顶栏、日期和业务层级依次吸附。 */
+/*
+ * 页面内容层级最高为 60；全局顶栏、移动导航、通知和对话框依次使用
+ * 70、80/90、90 和 100，避免局部吸顶区域覆盖全局浮层。
+ */
 .timeline-toolbar {
   position: sticky;
   top: 4.5rem;
@@ -191,6 +194,47 @@ a[class~="inline-flex"] {
   overscroll-behavior-x: contain;
   overscroll-behavior-y: auto;
   scrollbar-gutter: stable;
+}
+
+.timeline-row-action {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 0.5rem;
+  color: #94a3b8;
+  opacity: 0;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    opacity 150ms ease;
+}
+
+.group:hover .timeline-row-action,
+.timeline-row-action:focus-visible {
+  opacity: 1;
+}
+
+.timeline-row-action:hover {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+@media (hover: none), (max-width: 640px) {
+  .timeline-row-action {
+    opacity: 1;
+  }
+}
+
+.timeline-pointer-active,
+.timeline-pointer-active * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+.timeline-is-panning {
+  scroll-behavior: auto;
 }
 
 .timeline-ruler {
@@ -346,6 +390,11 @@ a[class~="inline-flex"] {
 .dark .timeline-version-heading,
 .dark .timeline-requirement-heading {
   box-shadow: 0 1px 0 rgba(51, 65, 85, 0.92);
+}
+
+.dark .timeline-row-action:hover {
+  background: rgba(49, 46, 129, 0.34);
+  color: #a5b4fc;
 }
 
 .dark .person-tone-indigo {

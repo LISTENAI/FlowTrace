@@ -16,6 +16,9 @@ const props = withDefaults(
     itemName: string;
     plannedStartAt?: string;
     plannedEndAt?: string;
+    suggestedStartAt?: string;
+    suggestedEndAt?: string;
+    changeSummary?: string;
     currentVersionId?: string;
     versions?: Version[];
   }>(),
@@ -55,12 +58,16 @@ watch(
   () => props.open,
   (open) => {
     if (!open) return;
-    form.plannedStartAt = props.plannedStartAt
-      ? dayjs(props.plannedStartAt).format('YYYY-MM-DD')
-      : '';
-    form.plannedEndAt = props.plannedEndAt
-      ? dayjs(props.plannedEndAt).format('YYYY-MM-DD')
-      : '';
+    form.plannedStartAt = props.suggestedStartAt
+      ? dayjs(props.suggestedStartAt).format('YYYY-MM-DD')
+      : props.plannedStartAt
+        ? dayjs(props.plannedStartAt).format('YYYY-MM-DD')
+        : '';
+    form.plannedEndAt = props.suggestedEndAt
+      ? dayjs(props.suggestedEndAt).format('YYYY-MM-DD')
+      : props.plannedEndAt
+        ? dayjs(props.plannedEndAt).format('YYYY-MM-DD')
+        : '';
     form.versionId = props.currentVersionId ?? '';
     form.reason = '';
   },
@@ -112,11 +119,22 @@ async function save() {
   <AppModal
     :open="open"
     :title="`调整「${itemName}」的计划`"
-    description="保留初始基线，并记录这次调整的时间与原因。"
+    :description="
+      changeSummary
+        ? '确认拖动产生的新日期，并说明本次调整。'
+        : '保留初始基线，并记录这次调整的时间与原因。'
+    "
     width="sm"
     @close="emit('close')"
   >
     <form class="space-y-4" @submit.prevent="save">
+      <div
+        v-if="changeSummary"
+        class="rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-2.5 text-xs text-indigo-700"
+      >
+        <span class="font-semibold">拖动结果</span>
+        <span class="ml-2">{{ changeSummary }}</span>
+      </div>
       <label v-if="supportsVersion" class="block">
         <span class="mb-1.5 block text-xs font-medium text-slate-600"
           >目标版本</span

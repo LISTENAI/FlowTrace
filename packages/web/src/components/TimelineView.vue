@@ -13,7 +13,7 @@ import {
   ChevronDownIcon,
   CubeIcon,
 } from '@heroicons/vue/24/outline';
-import dayjs from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import {
   computed,
   nextTick,
@@ -24,12 +24,23 @@ import {
   watch,
 } from 'vue';
 import { formatDate, statusDot } from '@/lib/presentation';
+import PlanningDialog from '@/components/PlanningDialog.vue';
 import TimelineBar from '@/components/TimelineBar.vue';
 
 type TimelineMode = 'baseline' | 'current' | 'actual';
 type ExpansionMode = 'smart' | 'depth' | 'custom';
 type WorkItem = Stage | Bug;
 type DateRange = { start: string; end: string };
+type SchedulableItem = Requirement | Stage | Bug;
+type ScheduleDragMode = 'move' | 'resize-start' | 'resize-end';
+type TimelinePointerPayload = { event: PointerEvent; track: HTMLElement };
+type ScheduleDragPayload = TimelinePointerPayload & { mode: ScheduleDragMode };
+type PlanningTarget = {
+  item: SchedulableItem;
+  suggestedStartAt?: string;
+  suggestedEndAt?: string;
+  changeSummary?: string;
+};
 type VersionGroup = {
   id: string;
   name: string;
@@ -43,6 +54,7 @@ const props = defineProps<{
   versions: Version[];
   mode: TimelineMode;
 }>();
+const emit = defineEmits<{ scheduleSaved: [] }>();
 const expansionMode = defineModel<ExpansionMode>('expansionMode', {
   default: 'smart',
 });
@@ -54,10 +66,38 @@ const expandedBugGroups = reactive(new Set<string>());
 const timelineSurface = ref<HTMLElement>();
 const scrollContainer = ref<HTMLElement>();
 const labelColumn = ref<HTMLElement>();
+const planningTarget = ref<PlanningTarget>();
+const dragPreview = ref<{
+  itemId: string;
+  start: string;
+  end: string;
+  deltaDays: number;
+  mode: ScheduleDragMode;
+}>();
 const collator = new Intl.Collator('zh-CN', { numeric: true });
 const labelWidth = 320;
 const dayWidth = 32;
 const now = () => new Date().toISOString();
+let activePan:
+  | {
+      pointerId: number;
+      startX: number;
+      startScrollLeft: number;
+      track: HTMLElement;
+    }
+  | undefined;
+let activeScheduleDrag:
+  | {
+      pointerId: number;
+      item: SchedulableItem;
+      mode: ScheduleDragMode;
+      startX: number;
+      trackWidth: number;
+      track: HTMLElement;
+      start: Dayjs;
+      end: Dayjs;
+    }
+  | undefined;
 
 const attentionRank = (item: Requirement | WorkItem) => {
   if ('health' in item) {
@@ -97,6 +137,56 @@ function itemDateRange(item: WorkItem): DateRange | undefined {
   const end =
     item.actualEndAt ?? (remainsOpen ? now() : (lastHistory ?? start));
   return { start, end };
+}
+
+function displayedItemRange(item: WorkItem) {
+  if (dragPreview.value?.itemId === item.id) {
+    return {
+      start: dragPreview.value.start,
+      end: dragPreview.value.end,
+    };
+  }
+  return itemDateRange(item);
+}
+
+function currentScheduleRange(item: SchedulableItem) {
+  const point = item.plannedStartAt ?? item.plannedEndAt;
+  if (!point) return;
+  return {
+    start: dayjs(item.plannedStartAt ?? point).startOf('day'),
+    end: dayjs(item.plannedEndAt ?? point).startOf('day'),
+  };
+}
+
+function planningItemType(item: SchedulableItem) {
+  if ('stages' in item) return 'requirement' as const;
+  return 'key' in item ? ('bug' as const) : ('stage' as const);
+}
+
+function planningItemName(item: SchedulableItem) {
+  if ('stages' in item || 'key' in item) return item.title;
+  return item.name;
+}
+
+function openPlanning(item: SchedulableItem, proposal?: PlanningTarget) {
+  planningTarget.value = proposal ?? { item };
+}
+
+function scheduleChangeSummary(
+  mode: ScheduleDragMode,
+  deltaDays: number,
+  start: Dayjs,
+  end: Dayjs,
+) {
+  const amount = Math.abs(deltaDays);
+  const direction = deltaDays > 0 ? '延后' : '提前';
+  const action =
+    mode === 'move'
+      ? `整体${direction} ${amount} 天`
+      : mode === 'resize-start'
+        ? `开始日期${direction} ${amount} 天`
+        : `结束日期${direction} ${amount} 天`;
+  return `${action}，调整为 ${start.format('M月D日')} → ${end.format('M月D日')}`;
 }
 
 function mergeRanges(ranges: Array<DateRange | undefined>) {
@@ -255,9 +345,7 @@ function syncExpansion() {
 
   replaceSet(
     expandedVersions,
-    expansionDepth.value >= 1
-      ? groups.value.map((group) => group.id)
-      : [],
+    expansionDepth.value >= 1 ? groups.value.map((group) => group.id) : [],
   );
   replaceSet(
     expandedRequirements,
@@ -275,11 +363,9 @@ function syncExpansion() {
   );
 }
 
-watch(
-  [groups, expansionMode, expansionDepth],
-  syncExpansion,
-  { immediate: true },
-);
+watch([groups, expansionMode, expansionDepth], syncExpansion, {
+  immediate: true,
+});
 
 const range = computed(() => {
   const values = groups.value.flatMap((group) => {
@@ -380,6 +466,154 @@ function scrollPageBy(deltaY: number) {
     top: Math.max(0, Math.min(pageScrollLimit(), before + deltaY)),
   });
   return window.scrollY - before;
+}
+
+function removePointerListeners() {
+  window.removeEventListener('pointermove', handlePointerMove);
+  window.removeEventListener('pointerup', finishPointerGesture);
+  window.removeEventListener('pointercancel', cancelPointerGesture);
+  document.documentElement.classList.remove('timeline-pointer-active');
+}
+
+function preparePointerGesture(event: PointerEvent, track: HTMLElement) {
+  if (event.pointerType === 'touch' || event.button !== 0) return false;
+  cancelPointerGesture();
+  event.preventDefault();
+  track.setPointerCapture?.(event.pointerId);
+  document.documentElement.classList.add('timeline-pointer-active');
+  window.addEventListener('pointermove', handlePointerMove);
+  window.addEventListener('pointerup', finishPointerGesture);
+  window.addEventListener('pointercancel', cancelPointerGesture);
+  return true;
+}
+
+function startTimelinePan({ event, track }: TimelinePointerPayload) {
+  const container = scrollContainer.value;
+  if (!container || !preparePointerGesture(event, track)) return;
+  activePan = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startScrollLeft: container.scrollLeft,
+    track,
+  };
+  container.classList.add('timeline-is-panning');
+}
+
+function startScheduleDrag(
+  item: WorkItem,
+  { event, track, mode }: ScheduleDragPayload,
+) {
+  if (props.mode !== 'current') return;
+  const schedule = currentScheduleRange(item);
+  if (!schedule || !preparePointerGesture(event, track)) return;
+  activeScheduleDrag = {
+    pointerId: event.pointerId,
+    item,
+    mode,
+    startX: event.clientX,
+    trackWidth: track.getBoundingClientRect().width,
+    track,
+    ...schedule,
+  };
+}
+
+function handlePointerMove(event: PointerEvent) {
+  if (activePan?.pointerId === event.pointerId) {
+    const container = scrollContainer.value;
+    if (!container) return;
+    event.preventDefault();
+    container.scrollLeft =
+      activePan.startScrollLeft - (event.clientX - activePan.startX);
+    return;
+  }
+
+  if (activeScheduleDrag?.pointerId !== event.pointerId) return;
+  event.preventDefault();
+  const drag = activeScheduleDrag;
+  const renderedDayWidth = drag.trackWidth / range.value.days;
+  const deltaDays = Math.round(
+    (event.clientX - drag.startX) / renderedDayWidth,
+  );
+  if (!deltaDays) {
+    dragPreview.value = undefined;
+    return;
+  }
+
+  let start = drag.start;
+  let end = drag.end;
+  if (drag.mode === 'move') {
+    start = start.add(deltaDays, 'day');
+    end = end.add(deltaDays, 'day');
+  } else if (drag.mode === 'resize-start') {
+    start = start.add(deltaDays, 'day');
+    if (start.isAfter(end)) start = end;
+  } else {
+    end = end.add(deltaDays, 'day');
+    if (end.isBefore(start)) end = start;
+  }
+  const effectiveDeltaDays =
+    drag.mode === 'resize-start'
+      ? start.diff(drag.start, 'day')
+      : drag.mode === 'resize-end'
+        ? end.diff(drag.end, 'day')
+        : deltaDays;
+  if (!effectiveDeltaDays) {
+    dragPreview.value = undefined;
+    return;
+  }
+  dragPreview.value = {
+    itemId: drag.item.id,
+    start: start.toISOString(),
+    end: end.toISOString(),
+    deltaDays: effectiveDeltaDays,
+    mode: drag.mode,
+  };
+}
+
+function finishPointerGesture(event: PointerEvent) {
+  if (
+    activePan?.pointerId !== event.pointerId &&
+    activeScheduleDrag?.pointerId !== event.pointerId
+  )
+    return;
+
+  const drag = activeScheduleDrag;
+  const preview = dragPreview.value;
+  const container = scrollContainer.value;
+  container?.classList.remove('timeline-is-panning');
+  activePan?.track.releasePointerCapture?.(event.pointerId);
+  drag?.track.releasePointerCapture?.(event.pointerId);
+  activePan = undefined;
+  activeScheduleDrag = undefined;
+  removePointerListeners();
+
+  if (drag && preview) {
+    openPlanning(drag.item, {
+      item: drag.item,
+      suggestedStartAt: preview.start,
+      suggestedEndAt: preview.end,
+      changeSummary: scheduleChangeSummary(
+        preview.mode,
+        preview.deltaDays,
+        dayjs(preview.start),
+        dayjs(preview.end),
+      ),
+    });
+  }
+  dragPreview.value = undefined;
+}
+
+function cancelPointerGesture() {
+  scrollContainer.value?.classList.remove('timeline-is-panning');
+  if (activePan) activePan.track.releasePointerCapture?.(activePan.pointerId);
+  if (activeScheduleDrag)
+    activeScheduleDrag.track.releasePointerCapture?.(
+      activeScheduleDrag.pointerId,
+    );
+  activePan = undefined;
+  activeScheduleDrag = undefined;
+  dragPreview.value = undefined;
+  removePointerListeners();
 }
 
 function keepPageAtTimelineAnchor() {
@@ -485,11 +719,14 @@ function toggle(set: Set<string>, id: string) {
 onMounted(() => {
   requestAnimationFrame(scrollToToday);
   window.addEventListener('wheel', handleOuterWheel, { passive: false });
-  window.addEventListener('scroll', keepPageAtTimelineAnchor, { passive: true });
+  window.addEventListener('scroll', keepPageAtTimelineAnchor, {
+    passive: true,
+  });
   keepPageAtTimelineAnchor();
 });
 
 onBeforeUnmount(() => {
+  cancelPointerGesture();
   window.removeEventListener('wheel', handleOuterWheel);
   window.removeEventListener('scroll', keepPageAtTimelineAnchor);
 });
@@ -579,6 +816,7 @@ watch(
               :days="range.days"
               :bar-style="styleFor(versionDateRange(group))"
               bar-class="top-[18px] h-2 bg-indigo-400/75"
+              @pan-start="startTimelinePan"
             />
           </button>
 
@@ -588,68 +826,98 @@ watch(
               :key="requirement.id"
               class="timeline-requirement-group"
             >
-              <button
+              <div
                 class="timeline-requirement-heading timeline-grid group grid w-full border-b border-slate-100 bg-white text-left hover:bg-slate-50/95"
-                @click="toggle(expandedRequirements, requirement.id)"
               >
                 <div
                   class="sticky left-0 z-20 flex h-12 items-center gap-2 border-r border-slate-100 bg-white pl-8 pr-4 group-hover:bg-slate-50"
                 >
-                  <ChevronDownIcon
-                    class="h-3.5 w-3.5 text-slate-400 transition"
-                    :class="
-                      expandedRequirements.has(requirement.id)
-                        ? ''
-                        : '-rotate-90'
-                    "
-                  />
-                  <span
-                    class="font-mono text-[10px] font-semibold text-indigo-500"
-                    >{{ requirement.key }}</span
+                  <button
+                    type="button"
+                    class="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
+                    @click="toggle(expandedRequirements, requirement.id)"
                   >
-                  <span
-                    class="min-w-0 flex-1 truncate text-xs font-semibold text-slate-800"
-                    >{{ requirement.title }}</span
+                    <ChevronDownIcon
+                      class="h-3.5 w-3.5 shrink-0 text-slate-400 transition"
+                      :class="
+                        expandedRequirements.has(requirement.id)
+                          ? ''
+                          : '-rotate-90'
+                      "
+                    />
+                    <span
+                      class="font-mono text-[10px] font-semibold text-indigo-500"
+                      >{{ requirement.key }}</span
+                    >
+                    <span
+                      class="min-w-0 flex-1 truncate text-xs font-semibold text-slate-800"
+                      >{{ requirement.title }}</span
+                    >
+                  </button>
+                  <button
+                    type="button"
+                    class="timeline-row-action focus-ring"
+                    :aria-label="`调整「${requirement.title}」的计划`"
+                    :title="`调整「${requirement.title}」的计划`"
+                    @click="openPlanning(requirement)"
                   >
+                    <CalendarDaysIcon class="h-3.5 w-3.5" />
+                  </button>
                 </div>
                 <TimelineBar
                   :days="range.days"
                   :bar-style="styleFor(requirementDateRange(requirement))"
                   :bar-class="requirementBarClass(requirement)"
+                  @pan-start="startTimelinePan"
                 />
-              </button>
+              </div>
 
               <template v-if="expandedRequirements.has(requirement.id)">
                 <div
                   v-for="stage in requirement.stages"
                   :key="stage.id"
-                  class="timeline-grid grid border-b border-slate-100/80 bg-white"
+                  class="timeline-grid group grid border-b border-slate-100/80 bg-white"
                 >
-                  <button
-                    type="button"
-                    class="sticky left-0 z-20 flex h-10 items-center gap-2 border-r border-slate-100 bg-white pl-12 pr-4 text-left transition hover:bg-slate-50"
-                    :class="
-                      itemDateRange(stage) ? 'cursor-pointer' : 'cursor-default'
-                    "
-                    :title="
-                      itemDateRange(stage)
-                        ? `定位到${stage.name}的开始日期`
-                        : '该阶段暂无时间记录'
-                    "
-                    @click="scrollToItem(stage)"
+                  <div
+                    class="sticky left-0 z-20 flex h-10 items-center gap-1 border-r border-slate-100 bg-white pl-12 pr-3 transition hover:bg-slate-50"
                   >
-                    <span
-                      class="h-2 w-2 rounded-full"
-                      :class="statusDot[stage.status]"
-                    />
-                    <span
-                      class="min-w-0 flex-1 truncate text-[11px] text-slate-600"
-                      >{{ stage.name }}</span
+                    <button
+                      type="button"
+                      class="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
+                      :class="
+                        itemDateRange(stage)
+                          ? 'cursor-pointer'
+                          : 'cursor-default'
+                      "
+                      :title="
+                        itemDateRange(stage)
+                          ? `定位到${stage.name}的开始日期`
+                          : '该阶段暂无时间记录'
+                      "
+                      @click="scrollToItem(stage)"
                     >
-                  </button>
+                      <span
+                        class="h-2 w-2 rounded-full"
+                        :class="statusDot[stage.status]"
+                      />
+                      <span
+                        class="min-w-0 flex-1 truncate text-[11px] text-slate-600"
+                        >{{ stage.name }}</span
+                      >
+                    </button>
+                    <button
+                      type="button"
+                      class="timeline-row-action focus-ring"
+                      :aria-label="`调整「${stage.name}」的计划`"
+                      :title="`调整「${stage.name}」的计划`"
+                      @click="openPlanning(stage)"
+                    >
+                      <CalendarDaysIcon class="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                   <TimelineBar
                     :days="range.days"
-                    :bar-style="styleFor(itemDateRange(stage))"
+                    :bar-style="styleFor(displayedItemRange(stage))"
                     :bar-class="
                       mode === 'baseline'
                         ? 'top-[14px] h-3 border border-dashed border-slate-400 bg-slate-100'
@@ -658,6 +926,11 @@ watch(
                           : 'top-[14px] h-3 bg-indigo-400'
                     "
                     :segments="mode === 'actual' ? segments(stage) : []"
+                    :interactive="
+                      mode === 'current' && Boolean(itemDateRange(stage))
+                    "
+                    @pan-start="startTimelinePan"
+                    @bar-drag-start="startScheduleDrag(stage, $event)"
                   />
                 </div>
 
@@ -691,6 +964,7 @@ watch(
                       styleFor(mergeRanges(requirement.bugs.map(itemDateRange)))
                     "
                     bar-class="top-[16px] h-2 bg-rose-300/80"
+                    @pan-start="startTimelinePan"
                   />
                 </button>
 
@@ -698,39 +972,59 @@ watch(
                   <div
                     v-for="bug in sortBugs(requirement.bugs)"
                     :key="bug.id"
-                    class="timeline-grid grid border-b border-slate-100/80 bg-white"
+                    class="timeline-grid group grid border-b border-slate-100/80 bg-white"
                   >
-                    <button
-                      type="button"
-                      class="sticky left-0 z-20 flex h-10 items-center gap-2 border-r border-slate-100 bg-white pl-16 pr-4 text-left transition hover:bg-slate-50"
-                      :class="
-                        itemDateRange(bug) ? 'cursor-pointer' : 'cursor-default'
-                      "
-                      :title="
-                        itemDateRange(bug)
-                          ? `定位到${bug.key}的开始日期`
-                          : '该 Bug 暂无时间记录'
-                      "
-                      @click="scrollToItem(bug)"
+                    <div
+                      class="sticky left-0 z-20 flex h-10 items-center gap-1 border-r border-slate-100 bg-white pl-16 pr-3 transition hover:bg-slate-50"
                     >
-                      <span
-                        class="h-2 w-2 rounded-full"
-                        :class="statusDot[bug.status]"
-                      />
-                      <span
-                        class="w-20 shrink-0 font-mono text-[9px] font-semibold text-rose-500"
-                        >{{ bug.key }}</span
+                      <button
+                        type="button"
+                        class="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
+                        :class="
+                          itemDateRange(bug)
+                            ? 'cursor-pointer'
+                            : 'cursor-default'
+                        "
+                        :title="
+                          itemDateRange(bug)
+                            ? `定位到${bug.key}的开始日期`
+                            : '该 Bug 暂无时间记录'
+                        "
+                        @click="scrollToItem(bug)"
                       >
-                      <span
-                        class="min-w-0 flex-1 truncate text-[11px] text-slate-600"
-                        >{{ bug.title }}</span
+                        <span
+                          class="h-2 w-2 rounded-full"
+                          :class="statusDot[bug.status]"
+                        />
+                        <span
+                          class="w-20 shrink-0 font-mono text-[9px] font-semibold text-rose-500"
+                          >{{ bug.key }}</span
+                        >
+                        <span
+                          class="min-w-0 flex-1 truncate text-[11px] text-slate-600"
+                          >{{ bug.title }}</span
+                        >
+                      </button>
+                      <button
+                        type="button"
+                        class="timeline-row-action focus-ring"
+                        :aria-label="`调整「${bug.title}」的计划`"
+                        :title="`调整「${bug.title}」的计划`"
+                        @click="openPlanning(bug)"
                       >
-                    </button>
+                        <CalendarDaysIcon class="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                     <TimelineBar
                       :days="range.days"
-                      :bar-style="styleFor(itemDateRange(bug))"
+                      :bar-style="styleFor(displayedItemRange(bug))"
                       bar-class="top-[14px] h-3 bg-rose-400"
                       :segments="mode === 'actual' ? segments(bug) : []"
+                      :interactive="
+                        mode === 'current' && Boolean(itemDateRange(bug))
+                      "
+                      @pan-start="startTimelinePan"
+                      @bar-drag-start="startScheduleDrag(bug, $event)"
                     />
                   </div>
                 </template>
@@ -758,11 +1052,32 @@ watch(
         </span>
         <span>只有一个时间点的事项按当天显示</span>
       </template>
-      <span v-else>
-        {{
-          mode === 'baseline' ? '虚线代表初始基准计划' : '色块代表当前最新计划'
-        }}
-      </span>
+      <span v-else-if="mode === 'baseline'">虚线代表初始基准计划</span>
+      <template v-else>
+        <span>拖动空白处可平移日期</span>
+        <span>拖动阶段或 Bug 条可调整当前计划，汇总条由下级自动计算</span>
+      </template>
     </div>
+
+    <PlanningDialog
+      v-if="planningTarget"
+      :open="Boolean(planningTarget)"
+      :item-id="planningTarget.item.id"
+      :item-type="planningItemType(planningTarget.item)"
+      :item-name="planningItemName(planningTarget.item)"
+      :planned-start-at="planningTarget.item.plannedStartAt"
+      :planned-end-at="planningTarget.item.plannedEndAt"
+      :suggested-start-at="planningTarget.suggestedStartAt"
+      :suggested-end-at="planningTarget.suggestedEndAt"
+      :change-summary="planningTarget.changeSummary"
+      :current-version-id="
+        'versionId' in planningTarget.item
+          ? planningTarget.item.versionId
+          : undefined
+      "
+      :versions="props.versions"
+      @close="planningTarget = undefined"
+      @saved="emit('scheduleSaved')"
+    />
   </div>
 </template>

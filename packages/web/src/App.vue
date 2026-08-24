@@ -34,12 +34,12 @@ onMounted(() => loadWorkspace());
   <div class="min-h-screen lg:grid lg:grid-cols-[15.5rem_minmax(0,1fr)]">
     <div
       v-if="mobileOpen"
-      class="fixed inset-0 z-30 bg-slate-950/20 backdrop-blur-sm lg:hidden"
+      class="fixed inset-0 z-[80] bg-slate-950/20 backdrop-blur-sm lg:hidden"
       @click="mobileOpen = false"
     />
 
     <aside
-      class="fixed inset-y-0 left-0 z-40 flex w-[17rem] flex-col border-r border-slate-200/70 bg-[#f9f9fc]/95 px-3.5 py-4 shadow-xl shadow-slate-900/5 backdrop-blur-xl transition-transform dark:border-slate-800 dark:bg-slate-950/95 lg:sticky lg:top-0 lg:h-screen lg:w-auto lg:translate-x-0 lg:shadow-none"
+      class="fixed inset-y-0 left-0 z-[90] flex w-[17rem] flex-col border-r border-slate-200/70 bg-[#f9f9fc]/95 px-3.5 py-4 shadow-xl shadow-slate-900/5 backdrop-blur-xl transition-transform dark:border-slate-800 dark:bg-slate-950/95 lg:sticky lg:top-0 lg:h-screen lg:w-auto lg:translate-x-0 lg:shadow-none"
       :class="mobileOpen ? 'translate-x-0' : '-translate-x-full'"
     >
       <div class="flex items-center justify-between px-2.5">
@@ -171,7 +171,7 @@ onMounted(() => loadWorkspace());
 
     <main class="min-w-0">
       <header
-        class="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200/60 bg-[#f7f8fb]/85 px-4 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/85 sm:px-7 lg:px-9"
+        class="sticky top-0 z-[70] flex h-16 items-center justify-between border-b border-slate-200/60 bg-[#f7f8fb]/85 px-4 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/85 sm:px-7 lg:px-9"
       >
         <div class="flex items-center gap-3">
           <button

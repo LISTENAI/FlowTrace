@@ -9,7 +9,7 @@ import { toasts } from '@/state/toasts';
 
 <template>
   <div
-    class="pointer-events-none fixed right-4 top-4 z-[70] flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2"
+    class="pointer-events-none fixed right-4 top-4 z-[90] flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2"
   >
     <TransitionGroup
       enter-active-class="transition duration-200 ease-out"

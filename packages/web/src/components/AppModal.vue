@@ -23,7 +23,7 @@ defineEmits<{ close: [] }>();
 
 <template>
   <TransitionRoot appear :show="open" as="template">
-    <Dialog as="div" class="relative z-50" @close="$emit('close')">
+    <Dialog as="div" class="relative z-[100]" @close="$emit('close')">
       <TransitionChild
         as="template"
         enter="duration-200 ease-out"
