@@ -169,6 +169,21 @@ export const api = {
       ownerIds?: string[];
     },
   ) => request<Bug>(`/bugs/${id}/status`, { method: 'POST', body: input }),
+  correctStatusHistory: (
+    id: string,
+    input: {
+      status?: ExecutionStatus;
+      effectiveAt?: string;
+      note?: string;
+      statusReason?: string;
+      expectedResumeAt?: string | null;
+      reason: string;
+    },
+  ) =>
+    request<Stage | Bug>(`/history/status/${id}`, {
+      method: 'PATCH',
+      body: input,
+    }),
   rescheduleBug: (
     id: string,
     input: {

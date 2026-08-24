@@ -532,8 +532,19 @@ a[class~="inline-flex"] {
   color: #a5b4fc;
 }
 
-.dark [class~="text-violet-600"] {
+.dark [class~="text-violet-700"],
+.dark [class~="text-violet-600"],
+.dark [class~="text-violet-600/80"] {
   color: #c4b5fd;
+}
+
+.dark [class~="bg-violet-50"],
+.dark [class~="bg-violet-50/60"] {
+  background-color: rgba(76, 29, 149, 0.26);
+}
+
+.dark [class~="border-violet-100"] {
+  border-color: rgba(139, 92, 246, 0.4);
 }
 
 .dark [class~="border-indigo-100"],
@@ -548,6 +559,7 @@ a[class~="inline-flex"] {
 
 .dark [class~="bg-amber-50"],
 .dark [class~="bg-amber-50/70"],
+.dark [class~="bg-amber-50/60"],
 .dark [class~="bg-amber-50/50"],
 .dark [class~="bg-amber-100"] {
   background-color: rgba(120, 53, 15, 0.25);
@@ -646,6 +658,10 @@ a[class~="inline-flex"] {
 
 .dark [class~="hover:bg-rose-50/40"]:hover {
   background-color: rgba(136, 19, 55, 0.32);
+}
+
+.dark [class~="hover:bg-violet-50"]:hover {
+  background-color: rgba(76, 29, 149, 0.32);
 }
 
 .dark .group:hover [class~="group-hover:bg-slate-100/95"] {

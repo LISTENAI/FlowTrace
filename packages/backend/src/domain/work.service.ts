@@ -1173,6 +1173,15 @@ export class WorkService {
   ): Promise<Stage | Bug> {
     const history = await this.statuses.findOneBy({ id });
     if (!history) throw new NotFoundException('未找到状态历史');
+    const before = {
+      status: history.toStatus,
+      effectiveAt: history.effectiveAt.toISOString(),
+      note: history.note,
+      statusReason: history.reason,
+      expectedResumeAt: iso(history.expectedResumeAt),
+    };
+    const statusChanged =
+      input.status !== undefined && input.status !== history.toStatus;
     if (input.status !== undefined) history.toStatus = input.status;
     if (input.effectiveAt !== undefined)
       history.effectiveAt = new Date(input.effectiveAt);
@@ -1181,6 +1190,31 @@ export class WorkService {
       history.reason = input.statusReason || null;
     if (input.expectedResumeAt !== undefined)
       history.expectedResumeAt = date(input.expectedResumeAt);
+    if (statusChanged && history.toStatus !== 'waiting') {
+      if (input.expectedResumeAt === undefined) history.expectedResumeAt = null;
+      if (
+        history.toStatus !== 'blocked' &&
+        (before.status === 'waiting' || before.status === 'blocked') &&
+        input.statusReason === undefined
+      )
+        history.reason = null;
+    }
+    if (
+      (history.toStatus === 'waiting' || history.toStatus === 'blocked') &&
+      !history.reason?.trim()
+    ) {
+      throw new BadRequestException('等待中或阻塞的历史记录必须填写原因');
+    }
+    const after = {
+      status: history.toStatus,
+      effectiveAt: history.effectiveAt.toISOString(),
+      note: history.note,
+      statusReason: history.reason,
+      expectedResumeAt: iso(history.expectedResumeAt),
+    };
+    if (JSON.stringify(before) === JSON.stringify(after)) {
+      throw new BadRequestException('这条历史记录没有发生变化');
+    }
     await this.dataSource.transaction(async (manager) => {
       await manager.save(history);
       await this.recomputeTrackable(
@@ -1196,8 +1230,26 @@ export class WorkService {
           : await manager
               .getRepository(BugEntity)
               .findOneBy({ id: history.entityId });
-      if (entity)
-        await this.recomputeRequirement(manager, entity.requirementId);
+      if (!entity) throw new NotFoundException('未找到历史记录对应的事项');
+      const requirement = await manager
+        .getRepository(RequirementEntity)
+        .findOneBy({ id: entity.requirementId });
+      if (!requirement) throw new NotFoundException('未找到历史记录对应的需求');
+      await this.recomputeRequirement(manager, entity.requirementId);
+      const itemName =
+        history.entityType === 'stage'
+          ? (entity as StageEntity).name
+          : (entity as BugEntity).key;
+      await this.recordChange(manager, {
+        entityType: history.entityType,
+        entityId: history.entityId,
+        projectId: requirement.projectId,
+        requirementId: requirement.id,
+        type: `${history.entityType}_status_history_corrected`,
+        summary: `${itemName} 修正历史状态记录`,
+        details: { historyId: history.id, before, after },
+        ...context(input),
+      });
     });
     return history.entityType === 'stage'
       ? this.getStage(history.entityId)

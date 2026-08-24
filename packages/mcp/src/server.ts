@@ -577,6 +577,43 @@ export function createFlowTraceMcpServer(
   );
 
   server.registerTool(
+    'correct_status_history',
+    {
+      description:
+        '修正一条已存在的阶段或 Bug 状态历史，并重算实际起止时间。这与在过去追加一条补记不同；必须先通过 get_requirement 确认历史 ID。',
+      inputSchema: {
+        history_id: z.string(),
+        status: statusSchema.optional(),
+        effective_at: z.string().optional(),
+        note: z.string().optional(),
+        status_reason: z.string().optional(),
+        expected_resume_at: z.string().nullable().optional(),
+        agent_name: sourceSchema.agent_name,
+        reason: z.string().min(1).describe('修正这条历史记录的原因'),
+      },
+      annotations: writeAnnotations,
+    },
+    async (input) =>
+      writeResult(
+        api,
+        await api.request(
+          `/history/status/${encodeURIComponent(input.history_id)}`,
+          {
+            method: 'PATCH',
+            body: {
+              status: input.status,
+              effectiveAt: input.effective_at,
+              note: input.note,
+              statusReason: input.status_reason,
+              expectedResumeAt: input.expected_resume_at,
+              ...writeBody(input),
+            },
+          },
+        ),
+      ),
+  );
+
+  server.registerTool(
     'reschedule_bug',
     {
       description:

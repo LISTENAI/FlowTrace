@@ -52,7 +52,7 @@ describe('FlowTrace MCP Server', () => {
     ]);
 
     const tools = await client.listTools();
-    expect(tools.tools).toHaveLength(18);
+    expect(tools.tools).toHaveLength(19);
     expect(tools.tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
         'search',
@@ -69,6 +69,7 @@ describe('FlowTrace MCP Server', () => {
         'reschedule_stage',
         'report_bug',
         'update_bug_status',
+        'correct_status_history',
         'reschedule_bug',
         'add_dependency',
         'remove_dependency',
@@ -139,6 +140,25 @@ describe('FlowTrace MCP Server', () => {
         agentName: '验收调用方',
         statusReason: '等待样板到货',
         reason: '根据晨会信息补录',
+      }),
+    });
+
+    await client.callTool({
+      name: 'correct_status_history',
+      arguments: {
+        history_id: 'status-1',
+        effective_at: '2026-08-23T01:00:00.000Z',
+        reason: '修正邮件时间',
+        agent_name: '验收调用方',
+      },
+    });
+    expect(request).toHaveBeenCalledWith('/history/status/status-1', {
+      method: 'PATCH',
+      body: expect.objectContaining({
+        effectiveAt: '2026-08-23T01:00:00.000Z',
+        reason: '修正邮件时间',
+        source: 'agent',
+        agentName: '验收调用方',
       }),
     });
 

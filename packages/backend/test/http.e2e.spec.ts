@@ -137,7 +137,7 @@ describe.sequential('HTTP API', () => {
       .set('accept', 'application/json, text/event-stream')
       .send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
       .expect(200);
-    expect(tools.body.result.tools).toHaveLength(18);
+    expect(tools.body.result.tools).toHaveLength(19);
     expect(tools.body.result.tools).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'search' }),

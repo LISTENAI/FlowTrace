@@ -419,6 +419,11 @@ export class UpdateStatusDto extends ChangeContextDto {
 }
 
 export class CorrectStatusHistoryDto extends ChangeContextDto {
+  @ApiProperty({ description: '说明为什么需要修正这条历史记录' })
+  @IsString()
+  @IsNotEmpty()
+  declare reason: string;
+
   @ApiPropertyOptional({ enum: executionStatuses })
   @IsOptional()
   @IsIn(executionStatuses)

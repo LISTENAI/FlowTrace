@@ -299,6 +299,53 @@ describe.sequential('WorkService business rules', () => {
     ]);
   });
 
+  it('corrects one named history event and keeps a before-and-after audit', async () => {
+    const requirement = await work.createRequirement({
+      projectId: appProjectId,
+      title: '历史修正审计',
+    });
+    const stage = requirement.stages[0]!;
+    await work.updateStageStatus(stage.id, {
+      status: 'in_progress',
+      effectiveAt: '2026-01-10T09:00:00.000Z',
+    });
+    const history = (await work.getRequirement(requirement.id)).stages[0]!
+      .statusHistory[0]!;
+
+    await work.correctStatusHistory(history.id, {
+      effectiveAt: '2026-01-09T09:00:00.000Z',
+      reason: '根据邮件时间修正',
+      source: 'agent',
+      agentName: '验收 Agent',
+    });
+
+    const updated = (await work.getRequirement(requirement.id)).stages[0]!;
+    expect(updated.actualStartAt).toBe('2026-01-09T09:00:00.000Z');
+    const changes = await work.getChanges({
+      since: '2020-01-01T00:00:00.000Z',
+      requirementId: requirement.id,
+    });
+    expect(changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'stage_status_history_corrected',
+          reason: '根据邮件时间修正',
+          source: 'agent',
+          agentName: '验收 Agent',
+          details: expect.objectContaining({
+            historyId: history.id,
+            before: expect.objectContaining({
+              effectiveAt: '2026-01-10T09:00:00.000Z',
+            }),
+            after: expect.objectContaining({
+              effectiveAt: '2026-01-09T09:00:00.000Z',
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
   it('rejects an actual end before the actual start', async () => {
     const requirement = (
       await work.listRequirements({ projectId: appProjectId })

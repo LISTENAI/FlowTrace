@@ -15,7 +15,8 @@ const props = withDefaults(
     interactive?: boolean;
     segments?: Array<{
       id: string;
-      status: ExecutionStatus;
+      status?: ExecutionStatus;
+      class?: string;
       style?: CSSProperties;
       title: string;
     }>;
@@ -61,7 +62,10 @@ function startBarDrag(event: PointerEvent, mode: ScheduleDragMode) {
         v-for="segment in segments"
         :key="segment.id"
         class="absolute top-[14px] h-3 rounded-sm"
-        :class="statusDot[segment.status]"
+        :class="[
+          segment.status ? statusDot[segment.status] : '',
+          segment.class,
+        ]"
         :style="segment.style"
         :title="segment.title"
       />

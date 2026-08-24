@@ -4,6 +4,7 @@ import type {
   Dependency,
   Requirement,
   Stage,
+  StatusHistory,
   Version,
 } from '@flowtrace/shared';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/vue';
@@ -17,6 +18,7 @@ import {
   ClockIcon,
   EllipsisHorizontalIcon,
   LinkIcon,
+  PencilSquareIcon,
   PlusIcon,
   QueueListIcon,
   TrashIcon,
@@ -31,6 +33,7 @@ import AvatarStack from '@/components/AvatarStack.vue';
 import DeleteWorkItemDialog from '@/components/DeleteWorkItemDialog.vue';
 import OwnerPicker from '@/components/OwnerPicker.vue';
 import PlanningDialog from '@/components/PlanningDialog.vue';
+import StatusHistoryCorrectionDialog from '@/components/StatusHistoryCorrectionDialog.vue';
 import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
 import {
   formatDate,
@@ -57,8 +60,12 @@ const addDependencyOpen = ref(false);
 const saving = ref(false);
 const movingStageId = ref('');
 const statusTarget = ref<Stage | Bug>();
+const correctionTarget = ref<{
+  history: StatusHistory;
+  itemName: string;
+}>();
 const planningTarget = ref<Requirement | Stage | Bug>();
-const ownerTarget = ref<Requirement>();
+const ownerTarget = ref<Requirement | Stage | Bug>();
 const deleteTarget = ref<Requirement | Stage | Bug>();
 const deleting = ref(false);
 const ownerForm = ref<string[]>([]);
@@ -113,6 +120,7 @@ const events = computed(() => {
     title: string;
     detail?: string;
     tone: string;
+    correction?: { history: StatusHistory; itemName: string };
   }> = [];
   for (const stage of requirement.value.stages) {
     for (const history of stage.statusHistory) {
@@ -122,6 +130,7 @@ const events = computed(() => {
         title: `${stage.name} → ${statusLabels[history.toStatus]}`,
         detail: history.reason || history.note,
         tone: statusDot[history.toStatus],
+        correction: { history, itemName: stage.name },
       });
     }
     for (const history of stage.scheduleHistory) {
@@ -149,6 +158,7 @@ const events = computed(() => {
         title: `${bug.key} → ${statusLabels[history.toStatus]}`,
         detail: history.reason || history.note,
         tone: statusDot[history.toStatus],
+        correction: { history, itemName: `${bug.key} ${bug.title}` },
       });
     }
   }
@@ -197,7 +207,7 @@ async function load() {
   }
 }
 
-function openRequirementOwners(item: Requirement) {
+function openOwners(item: Requirement | Stage | Bug) {
   ownerForm.value = [...item.ownerIds];
   ownerTarget.value = item;
 }
@@ -207,7 +217,11 @@ async function saveOwners() {
   assigningOwners.value = true;
   try {
     const input = { ownerIds: ownerForm.value };
-    await api.updateRequirement(ownerTarget.value.id, input);
+    if (ownerTarget.value.id === requirement.value?.id)
+      await api.updateRequirement(ownerTarget.value.id, input);
+    else if ('key' in ownerTarget.value)
+      await api.updateBug(ownerTarget.value.id, input);
+    else await api.updateStage(ownerTarget.value.id, input);
     ownerTarget.value = undefined;
     toasts.show(
       '负责人已更新',
@@ -470,7 +484,7 @@ watch(id, load);
               class="focus-ring flex min-h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 text-slate-500 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
               aria-label="分配需求负责人"
               title="分配需求负责人"
-              @click="openRequirementOwners(requirement)"
+              @click="openOwners(requirement)"
             >
               <UserPlusIcon class="h-3.5 w-3.5" />
               <span class="hidden text-[10px] font-semibold sm:inline"
@@ -521,7 +535,7 @@ watch(id, load);
               <div class="min-w-0">
                 <h2 class="text-sm font-semibold text-slate-900">实际过程</h2>
                 <p class="mt-0.5 text-[11px] text-slate-400">
-                  点击阶段，可同时更新状态和负责人
+                  点击阶段记录进展；负责人和计划使用独立入口
                 </p>
               </div>
               <button class="focus-ring section-action" @click="openStageForm">
@@ -627,6 +641,13 @@ watch(id, load);
                     </button>
                   </div>
                   <button
+                    class="focus-ring mr-1 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-white hover:text-indigo-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                    :aria-label="`分配「${stage.name}」的负责人`"
+                    @click="openOwners(stage)"
+                  >
+                    <UserPlusIcon class="h-4 w-4" />
+                  </button>
+                  <button
                     class="focus-ring mr-2 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-white hover:text-indigo-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                     :aria-label="`调整「${stage.name}」的计划`"
                     @click="planningTarget = stage"
@@ -705,6 +726,13 @@ watch(id, load);
                   ><span class="text-[10px] font-medium text-slate-500">{{
                     statusLabels[bug.status]
                   }}</span>
+                </button>
+                <button
+                  class="focus-ring ml-2 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-slate-50 hover:text-indigo-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                  :aria-label="`分配 ${bug.key} 的负责人`"
+                  @click="openOwners(bug)"
+                >
+                  <UserPlusIcon class="h-4 w-4" />
                 </button>
                 <button
                   class="focus-ring ml-2 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-slate-50 hover:text-indigo-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
@@ -858,24 +886,38 @@ watch(id, load);
               <div
                 v-for="event in events.slice(0, 20)"
                 :key="event.id"
-                class="relative border-l border-slate-200 py-2 pl-4"
+                class="group/history relative border-l border-slate-200 py-2 pl-4"
               >
                 <span
                   class="absolute -left-[4.5px] top-4 h-2 w-2 rounded-full"
                   :class="event.tone"
                 />
-                <p class="text-xs font-medium text-slate-700">
-                  {{ event.title }}
-                </p>
-                <p
-                  v-if="event.detail"
-                  class="mt-0.5 text-[10px] leading-4 text-slate-400"
-                >
-                  {{ event.detail }}
-                </p>
-                <p class="mt-1 text-[9px] text-slate-300">
-                  {{ formatDateTime(event.time) }}
-                </p>
+                <div class="flex items-start gap-2">
+                  <div class="min-w-0 flex-1">
+                    <p class="text-xs font-medium text-slate-700">
+                      {{ event.title }}
+                    </p>
+                    <p
+                      v-if="event.detail"
+                      class="mt-0.5 text-[10px] leading-4 text-slate-400"
+                    >
+                      {{ event.detail }}
+                    </p>
+                    <p class="mt-1 text-[9px] text-slate-300">
+                      {{ formatDateTime(event.time) }}
+                    </p>
+                  </div>
+                  <button
+                    v-if="event.correction"
+                    type="button"
+                    class="focus-ring rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-violet-50 hover:text-violet-600 focus:opacity-100 sm:opacity-0 sm:group-hover/history:opacity-100"
+                    :aria-label="`修正历史记录：${event.title}`"
+                    title="修正这条历史记录"
+                    @click="correctionTarget = event.correction"
+                  >
+                    <PencilSquareIcon class="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           </section>
@@ -893,12 +935,18 @@ watch(id, load);
       "
       :current-status="statusTarget.status"
       :actual-start-at="statusTarget.actualStartAt"
-      :actual-end-at="statusTarget.actualEndAt"
       :status-reason="statusTarget.statusReason"
       :expected-resume-at="statusTarget.expectedResumeAt"
-      :owner-ids="statusTarget.ownerIds"
-      :people="workspace.people"
       @close="statusTarget = undefined"
+      @saved="load"
+    />
+
+    <StatusHistoryCorrectionDialog
+      v-if="correctionTarget"
+      :open="Boolean(correctionTarget)"
+      :item-name="correctionTarget.itemName"
+      :history="correctionTarget.history"
+      @close="correctionTarget = undefined"
       @saved="load"
     />
 
@@ -937,8 +985,16 @@ watch(id, load);
 
     <AppModal
       :open="Boolean(ownerTarget)"
-      title="分配需求负责人"
-      description="这里记录需求的整体协调人；各阶段和 Bug 在各自的状态弹窗中分配。"
+      :title="
+        ownerTarget?.id === requirement?.id
+          ? '分配需求负责人'
+          : '分配执行负责人'
+      "
+      :description="
+        ownerTarget?.id === requirement?.id
+          ? '这里记录需求的整体协调人。'
+          : '负责人分配与实际进展分开记录，不会追加状态历史。'
+      "
       @close="ownerTarget = undefined"
     >
       <form class="space-y-4" @submit.prevent="saveOwners">

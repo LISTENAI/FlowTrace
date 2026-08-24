@@ -53,6 +53,8 @@ const props = defineProps<{
   requirements: Requirement[];
   versions: Version[];
   mode: TimelineMode;
+  focusedStageNames?: string[];
+  includeBugs?: boolean;
 }>();
 const emit = defineEmits<{ scheduleSaved: [] }>();
 const expansionMode = defineModel<ExpansionMode>('expansionMode', {
@@ -202,6 +204,26 @@ function mergeRanges(ranges: Array<DateRange | undefined>) {
   };
 }
 
+const hasStageFocus = computed(() => Boolean(props.focusedStageNames?.length));
+
+function visibleStages(requirement: Requirement) {
+  if (!hasStageFocus.value) return requirement.stages;
+  const names = new Set(props.focusedStageNames);
+  return requirement.stages.filter((stage) => names.has(stage.name));
+}
+
+function visibleBugs(requirement: Requirement) {
+  return !hasStageFocus.value || props.includeBugs ? requirement.bugs : [];
+}
+
+function matchesFocus(requirement: Requirement) {
+  return (
+    !hasStageFocus.value ||
+    visibleStages(requirement).length > 0 ||
+    visibleBugs(requirement).length > 0
+  );
+}
+
 function requirementDateRange(requirement: Requirement) {
   const ownStart =
     props.mode === 'baseline'
@@ -216,11 +238,16 @@ function requirementDateRange(requirement: Requirement) {
         ? requirement.plannedEndAt
         : requirement.actualEndAt;
   const ownPoint = ownStart ?? ownEnd;
+  const childRanges = [
+    ...visibleStages(requirement),
+    ...visibleBugs(requirement),
+  ].map(itemDateRange);
+  const childRange = mergeRanges(childRanges);
+  if (childRange) return childRange;
   return mergeRanges([
-    ownPoint
+    !hasStageFocus.value && ownPoint
       ? { start: ownStart ?? ownPoint, end: ownEnd ?? ownPoint }
       : undefined,
-    ...[...requirement.stages, ...requirement.bugs].map(itemDateRange),
   ]);
 }
 
@@ -244,7 +271,9 @@ function versionDateRange(group: VersionGroup) {
     props.mode === 'actual'
       ? group.version?.actualReleaseAt
       : group.version?.plannedReleaseAt;
-  const versionPoint = versionStart ?? versionEnd;
+  const versionPoint = hasStageFocus.value
+    ? undefined
+    : (versionStart ?? versionEnd);
   return mergeRanges([
     versionPoint
       ? {
@@ -283,13 +312,14 @@ function sortBugs(items: Bug[]) {
 }
 
 const groups = computed<VersionGroup[]>(() => {
+  const focusedRequirements = props.requirements.filter(matchesFocus);
   const versions: VersionGroup[] = props.versions.map((version) => ({
     id: version.id,
     name: version.name,
     status: version.status,
     version,
     requirements: sortRequirements(
-      props.requirements.filter((item) => item.versionId === version.id),
+      focusedRequirements.filter((item) => item.versionId === version.id),
     ),
   }));
   return [
@@ -298,7 +328,7 @@ const groups = computed<VersionGroup[]>(() => {
       name: '需求池',
       status: 'backlog',
       requirements: sortRequirements(
-        props.requirements.filter((item) => !item.versionId),
+        focusedRequirements.filter((item) => !item.versionId),
       ),
     },
     ...versions,
@@ -710,6 +740,67 @@ function segments(item: WorkItem) {
   });
 }
 
+const phaseClasses = [
+  'bg-indigo-400/85',
+  'bg-violet-400/85',
+  'bg-cyan-400/85',
+  'bg-emerald-400/85',
+  'bg-amber-400/85',
+];
+
+function requirementSegments(requirement: Requirement) {
+  if (props.mode === 'actual') {
+    const stageSegments = visibleStages(requirement).flatMap((stage) =>
+      segments(stage).map((segment) => ({
+        ...segment,
+        id: `stage-${stage.id}-${segment.id}`,
+        title: `${stage.name} · ${segment.title}`,
+      })),
+    );
+    const bugSegments = visibleBugs(requirement).flatMap((bug) =>
+      segments(bug).map((segment) => ({
+        ...segment,
+        id: `bug-${bug.id}-${segment.id}`,
+        title: `${bug.key} · ${segment.title}`,
+      })),
+    );
+    return [...stageSegments, ...bugSegments];
+  }
+  const stages = visibleStages(requirement).flatMap((stage, index) => {
+    const value = itemDateRange(stage);
+    if (!value) return [];
+    return [
+      {
+        id: `stage-${stage.id}`,
+        class: [
+          phaseClasses[index % phaseClasses.length],
+          props.mode === 'baseline'
+            ? 'border border-dashed border-slate-400'
+            : '',
+        ].join(' '),
+        style: styleFor(value),
+        title: `${stage.name} · ${formatDate(value.start)} → ${formatDate(value.end)}`,
+      },
+    ];
+  });
+  const bugs = visibleBugs(requirement).flatMap((bug) => {
+    const value = itemDateRange(bug);
+    if (!value) return [];
+    return [
+      {
+        id: `bug-${bug.id}`,
+        class:
+          props.mode === 'baseline'
+            ? 'border border-dashed border-rose-400 bg-rose-50/70'
+            : 'bg-rose-400/80',
+        style: styleFor(value),
+        title: `${bug.key} · ${formatDate(value.start)} → ${formatDate(value.end)}`,
+      },
+    ];
+  });
+  return [...stages, ...bugs];
+}
+
 function toggle(set: Set<string>, id: string) {
   if (set.has(id)) set.delete(id);
   else set.add(id);
@@ -868,13 +959,18 @@ watch(
                   :days="range.days"
                   :bar-style="styleFor(requirementDateRange(requirement))"
                   :bar-class="requirementBarClass(requirement)"
+                  :segments="
+                    expandedRequirements.has(requirement.id)
+                      ? []
+                      : requirementSegments(requirement)
+                  "
                   @pan-start="startTimelinePan"
                 />
               </div>
 
               <template v-if="expandedRequirements.has(requirement.id)">
                 <div
-                  v-for="stage in requirement.stages"
+                  v-for="stage in visibleStages(requirement)"
                   :key="stage.id"
                   class="timeline-grid group grid border-b border-slate-100/80 bg-white"
                 >
@@ -935,7 +1031,7 @@ watch(
                 </div>
 
                 <button
-                  v-if="requirement.bugs.length"
+                  v-if="visibleBugs(requirement).length"
                   class="timeline-grid group grid w-full border-b border-slate-100/80 bg-rose-50/20 text-left hover:bg-rose-50/40"
                   @click="toggle(expandedBugGroups, requirement.id)"
                 >
@@ -955,13 +1051,17 @@ watch(
                       >Bug</span
                     >
                     <span class="text-[10px] text-slate-400">
-                      {{ requirement.bugs.length }} 个
+                      {{ visibleBugs(requirement).length }} 个
                     </span>
                   </div>
                   <TimelineBar
                     :days="range.days"
                     :bar-style="
-                      styleFor(mergeRanges(requirement.bugs.map(itemDateRange)))
+                      styleFor(
+                        mergeRanges(
+                          visibleBugs(requirement).map(itemDateRange),
+                        ),
+                      )
                     "
                     bar-class="top-[16px] h-2 bg-rose-300/80"
                     @pan-start="startTimelinePan"
@@ -970,7 +1070,7 @@ watch(
 
                 <template v-if="expandedBugGroups.has(requirement.id)">
                   <div
-                    v-for="bug in sortBugs(requirement.bugs)"
+                    v-for="bug in sortBugs(visibleBugs(requirement))"
                     :key="bug.id"
                     class="timeline-grid group grid border-b border-slate-100/80 bg-white"
                   >
