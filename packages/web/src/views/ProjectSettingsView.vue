@@ -164,10 +164,7 @@ onMounted(load);
               只影响保存后新建的需求，旧需求不会自动迁移。
             </p>
           </div>
-          <button
-            class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:border-indigo-200 hover:text-indigo-600"
-            @click="addStage"
-          >
+          <button class="focus-ring section-action" @click="addStage">
             <PlusIcon class="h-3.5 w-3.5" />新增阶段
           </button>
         </div>
@@ -204,10 +201,7 @@ onMounted(load);
               同一长期项目中的计划交付批次。
             </p>
           </div>
-          <button
-            class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600"
-            @click="versionOpen = true"
-          >
+          <button class="focus-ring section-action" @click="versionOpen = true">
             <PlusIcon class="h-3.5 w-3.5" />新建版本
           </button>
         </div>

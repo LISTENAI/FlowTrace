@@ -215,7 +215,7 @@ async function confirmDelete() {
                 >默认环节</span
               >
               <button
-                class="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600"
+                class="focus-ring section-action"
                 @click="addStage(rhythm)"
               >
                 <PlusIcon class="h-3.5 w-3.5" />添加环节
@@ -254,7 +254,7 @@ async function confirmDelete() {
           <div class="flex gap-2 lg:flex-col">
             <button
               :disabled="savingId === rhythm.id"
-              class="focus-ring inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white disabled:opacity-50"
+              class="focus-ring section-action section-action-primary justify-center disabled:opacity-50"
               @click="save(rhythm)"
             >
               <CheckIcon class="h-4 w-4" />{{
@@ -262,7 +262,7 @@ async function confirmDelete() {
               }}
             </button>
             <button
-              class="rounded-xl px-3.5 py-2 text-xs font-medium text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+              class="focus-ring section-action section-action-danger justify-center"
               @click="deleteTarget = rhythm"
             >
               删除
@@ -348,7 +348,7 @@ async function confirmDelete() {
           </div>
           <button
             type="button"
-            class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-indigo-600"
+            class="focus-ring section-action mt-2"
             @click="addNewStage"
           >
             <PlusIcon class="h-3.5 w-3.5" />继续添加环节

@@ -346,7 +346,7 @@ watch(id, load);
           </div>
           <div class="flex items-center gap-3">
             <button
-              class="focus-ring inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:border-indigo-200 hover:text-indigo-600"
+              class="focus-ring section-action"
               @click="planningTarget = requirement"
             >
               <CalendarDaysIcon class="h-3.5 w-3.5" />调整计划
@@ -369,7 +369,7 @@ watch(id, load);
                 </p>
               </div>
               <button
-                class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:border-indigo-200 hover:text-indigo-600"
+                class="focus-ring section-action"
                 @click="addStageOpen = true"
               >
                 <PlusIcon class="h-3.5 w-3.5" />新增阶段
@@ -474,7 +474,7 @@ watch(id, load);
                 </div>
               </div>
               <button
-                class="inline-flex items-center gap-1.5 rounded-xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                class="focus-ring section-action section-action-danger"
                 @click="openBugForm"
               >
                 <PlusIcon class="h-3.5 w-3.5" />报告 Bug
@@ -533,10 +533,10 @@ watch(id, load);
                 <h2 class="text-sm font-semibold text-slate-900">协作依赖</h2>
               </div>
               <button
-                class="text-xs font-semibold text-indigo-600"
+                class="focus-ring section-action"
                 @click="prepareDependencies"
               >
-                建立依赖
+                <PlusIcon class="h-3.5 w-3.5" />建立依赖
               </button>
             </div>
             <div class="grid gap-3 p-5 md:grid-cols-2">
