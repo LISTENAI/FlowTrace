@@ -4,7 +4,6 @@ import {
   BoltIcon,
   ChevronRightIcon,
   FolderIcon,
-  PlusIcon,
   QueueListIcon,
   Squares2X2Icon,
   UsersIcon,
@@ -29,10 +28,6 @@ const projectColors = [
 ];
 
 onMounted(() => loadWorkspace());
-
-function requestNewRequirement() {
-  window.dispatchEvent(new CustomEvent('flowtrace:new-requirement'));
-}
 </script>
 
 <template>
@@ -195,14 +190,6 @@ function requestNewRequirement() {
         </div>
         <div class="flex items-center gap-2">
           <ThemeMenu />
-          <button
-            v-if="activeProjectId"
-            class="focus-ring inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3.5 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 transition hover:-translate-y-0.5 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-500"
-            @click="requestNewRequirement"
-          >
-            <PlusIcon class="h-4 w-4" />
-            新建需求
-          </button>
         </div>
       </header>
 

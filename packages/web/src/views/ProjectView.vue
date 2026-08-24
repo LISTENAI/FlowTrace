@@ -16,14 +16,7 @@ import {
   SquaresPlusIcon,
 } from '@heroicons/vue/24/outline';
 import dayjs from 'dayjs';
-import {
-  computed,
-  onBeforeUnmount,
-  onMounted,
-  reactive,
-  ref,
-  watch,
-} from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import { api } from '@/api';
 import AppModal from '@/components/AppModal.vue';
@@ -139,13 +132,7 @@ async function createRequirement() {
   }
 }
 
-onMounted(() => {
-  void load();
-  window.addEventListener('flowtrace:new-requirement', openCreate);
-});
-onBeforeUnmount(() =>
-  window.removeEventListener('flowtrace:new-requirement', openCreate),
-);
+onMounted(() => void load());
 watch(projectId, () => {
   filters.versionId = 'all';
   timelineRequirements.value = [];
