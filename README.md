@@ -50,6 +50,18 @@ npm run dev -w @flowtrace/mcp
 需求见
 [`docs/product/ai-integration-v0.2.md`](docs/product/ai-integration-v0.2.md)。
 
+## Agent Skill
+
+官方 FlowTrace Skill 位于 `skills/flowtrace`，可从 Git 仓库安装：
+
+```bash
+npx skills add LISTENAI/FlowTrace
+```
+
+Skill 教授项目管理判断和写入安全策略，MCP 负责提供自描述的
+业务能力与真实数据。两者独立配置；未安装 Skill 时，MCP Tool 仍
+必须能被正确使用。
+
 ## 正式运行
 
 正式环境使用一个镜像同时提供 Web 和 API，SQLite 数据保存在独立数据卷中：
