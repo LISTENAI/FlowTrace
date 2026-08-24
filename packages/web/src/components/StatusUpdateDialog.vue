@@ -189,12 +189,12 @@ async function save() {
       </div>
 
       <div
-        class="flex items-center justify-between border-t border-slate-100 pt-4"
+        class="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between"
       >
-        <p class="text-[11px] text-slate-400">
+        <p class="text-[11px] leading-5 text-slate-400">
           保存后会自动重算实际时间和需求健康状态
         </p>
-        <div class="flex gap-2">
+        <div class="flex shrink-0 justify-end gap-2">
           <button
             type="button"
             class="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-100"

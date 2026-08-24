@@ -156,9 +156,9 @@ onMounted(load);
 
       <section class="surface overflow-hidden">
         <div
-          class="flex items-center justify-between border-b border-slate-100 px-5 py-4 sm:px-6"
+          class="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:items-center sm:px-6"
         >
-          <div>
+          <div class="min-w-0">
             <h2 class="text-sm font-semibold text-slate-900">需求阶段模板</h2>
             <p class="mt-0.5 text-[11px] text-slate-400">
               只影响保存后新建的需求，旧需求不会自动迁移。
@@ -196,9 +196,9 @@ onMounted(load);
 
       <section class="surface overflow-hidden">
         <div
-          class="flex items-center justify-between border-b border-slate-100 px-5 py-4 sm:px-6"
+          class="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:items-center sm:px-6"
         >
-          <div>
+          <div class="min-w-0">
             <h2 class="text-sm font-semibold text-slate-900">交付版本</h2>
             <p class="mt-0.5 text-[11px] text-slate-400">
               同一长期项目中的计划交付批次。

@@ -53,6 +53,13 @@ button {
   cursor: pointer;
 }
 
+/* 操作按钮保持完整标签；卡片式按钮通过 text-left 保留正常内容换行。 */
+button:not([class~="text-left"]),
+a[class~="inline-flex"] {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 ::selection {
   background: #ddd9ff;
   color: #3f35a7;

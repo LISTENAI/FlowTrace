@@ -360,9 +360,9 @@ watch(id, load);
         <div class="min-w-0 space-y-5">
           <section class="surface overflow-hidden">
             <div
-              class="flex items-center justify-between border-b border-slate-100 px-5 py-4"
+              class="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:items-center"
             >
-              <div>
+              <div class="min-w-0">
                 <h2 class="text-sm font-semibold text-slate-900">实际过程</h2>
                 <p class="mt-0.5 text-[11px] text-slate-400">
                   点击任一行，就地记录状态与生效时间
@@ -456,7 +456,7 @@ watch(id, load);
 
           <section class="surface overflow-hidden">
             <div
-              class="flex items-center justify-between border-b border-slate-100 px-5 py-4"
+              class="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4"
             >
               <div class="flex items-center gap-2">
                 <span
@@ -526,7 +526,7 @@ watch(id, load);
 
           <section class="surface overflow-hidden">
             <div
-              class="flex items-center justify-between border-b border-slate-100 px-5 py-4"
+              class="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4"
             >
               <div class="flex items-center gap-2">
                 <LinkIcon class="h-4.5 w-4.5 text-indigo-500" />
