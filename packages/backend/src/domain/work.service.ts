@@ -957,24 +957,64 @@ export class WorkService {
     ) {
       throw new BadRequestException('进入等待中或阻塞时必须填写原因');
     }
+    const actualStartAt = date(input.actualStartAt);
+    const actualEndAt = date(input.actualEndAt);
+    if (
+      actualStartAt &&
+      actualEndAt &&
+      actualStartAt.getTime() > actualEndAt.getTime()
+    ) {
+      throw new BadRequestException('实际结束时间不能早于实际开始时间');
+    }
+    if (actualEndAt && input.status !== 'done') {
+      throw new BadRequestException('只有已完成事项可以填写实际结束时间');
+    }
     const requirement = await this.findRequirement(entity.requirementId);
     await this.dataSource.transaction(async (manager) => {
-      await manager.save(
-        manager.getRepository(StatusHistoryEntity).create({
-          id: randomUUID(),
-          entityType: kind,
-          entityId: entity.id,
-          fromStatus: null,
-          toStatus: input.status,
-          effectiveAt: date(input.effectiveAt) ?? new Date(),
-          note: input.note ?? null,
-          reason: input.statusReason ?? input.reason ?? null,
-          expectedResumeAt: date(input.expectedResumeAt),
-          source: context(input).source,
-          agentName: input.agentName ?? null,
-        }),
-      );
-      await this.recomputeTrackable(manager, kind, entity.id);
+      const recordsStatus =
+        input.status !== entity.status ||
+        Boolean(
+          input.statusReason?.trim() ||
+          input.expectedResumeAt ||
+          input.note?.trim(),
+        );
+      if (recordsStatus) {
+        await manager.save(
+          manager.getRepository(StatusHistoryEntity).create({
+            id: randomUUID(),
+            entityType: kind,
+            entityId: entity.id,
+            fromStatus: null,
+            toStatus: input.status,
+            effectiveAt:
+              date(input.effectiveAt) ??
+              (input.status === 'done'
+                ? actualEndAt
+                : input.status === 'in_progress'
+                  ? actualStartAt
+                  : null) ??
+              new Date(),
+            note: input.note ?? null,
+            reason: input.statusReason ?? input.reason ?? null,
+            expectedResumeAt: date(input.expectedResumeAt),
+            source: context(input).source,
+            agentName: input.agentName ?? null,
+          }),
+        );
+      }
+      if (actualStartAt || actualEndAt) {
+        await this.reconcileActualPeriod(
+          manager,
+          kind,
+          entity.id,
+          actualStartAt,
+          actualEndAt,
+          input,
+        );
+      }
+      if (recordsStatus || actualStartAt || actualEndAt) {
+        await this.recomputeTrackable(manager, kind, entity.id);
+      }
       if (input.ownerIds !== undefined) {
         const repository = manager.getRepository(
           kind === 'stage' ? StageEntity : BugEntity,
@@ -990,22 +1030,99 @@ export class WorkService {
         kind === 'stage'
           ? (entity as StageEntity).name
           : (entity as BugEntity).key;
-      await this.recordChange(manager, {
-        entityType: kind,
-        entityId: entity.id,
-        projectId: requirement.projectId,
-        requirementId: requirement.id,
-        type: `${kind}_status_changed`,
-        summary: `${name} 状态更新为 ${this.statusLabel(input.status)}`,
-        details: {
-          fromStatus: entity.status,
-          toStatus: input.status,
-          effectiveAt: input.effectiveAt,
-          ownerIds: input.ownerIds,
-        },
-        ...context(input),
-      });
+      if (recordsStatus) {
+        await this.recordChange(manager, {
+          entityType: kind,
+          entityId: entity.id,
+          projectId: requirement.projectId,
+          requirementId: requirement.id,
+          type: `${kind}_status_changed`,
+          summary: `${name} 状态更新为 ${this.statusLabel(input.status)}`,
+          details: {
+            fromStatus: entity.status,
+            toStatus: input.status,
+            effectiveAt: input.effectiveAt,
+            ownerIds: input.ownerIds,
+          },
+          ...context(input),
+        });
+      }
+      if (actualStartAt || actualEndAt) {
+        await this.recordChange(manager, {
+          entityType: kind,
+          entityId: entity.id,
+          projectId: requirement.projectId,
+          requirementId: requirement.id,
+          type: `${kind}_actual_period_corrected`,
+          summary: `${name} 补录实际起止时间`,
+          details: {
+            actualStartAt: iso(actualStartAt),
+            actualEndAt: iso(actualEndAt),
+          },
+          ...context(input),
+        });
+      }
     });
+  }
+
+  private async reconcileActualPeriod(
+    manager: EntityManager,
+    kind: 'stage' | 'bug',
+    entityId: string,
+    actualStartAt: Date | null,
+    actualEndAt: Date | null,
+    input: UpdateStatusDto,
+  ): Promise<void> {
+    const repository = manager.getRepository(StatusHistoryEntity);
+    const history = await repository.find({
+      where: { entityType: kind, entityId },
+      order: { effectiveAt: 'ASC', createdAt: 'ASC' },
+    });
+    if (actualStartAt) {
+      const started = history.find((item) => item.toStatus === 'in_progress');
+      if (started) started.effectiveAt = actualStartAt;
+      else {
+        history.push(
+          repository.create({
+            id: randomUUID(),
+            entityType: kind,
+            entityId,
+            fromStatus: null,
+            toStatus: 'in_progress',
+            effectiveAt: actualStartAt,
+            note: '补录实际开始时间',
+            reason: null,
+            expectedResumeAt: null,
+            source: context(input).source,
+            agentName: input.agentName ?? null,
+          }),
+        );
+      }
+    }
+    if (actualEndAt) {
+      const completed = [...history]
+        .reverse()
+        .find((item) => item.toStatus === 'done');
+      if (completed) completed.effectiveAt = actualEndAt;
+      else {
+        history.push(
+          repository.create({
+            id: randomUUID(),
+            entityType: kind,
+            entityId,
+            fromStatus: null,
+            toStatus: 'done',
+            effectiveAt: actualEndAt,
+            note: '补录实际结束时间',
+            reason: null,
+            expectedResumeAt: null,
+            source: context(input).source,
+            agentName: input.agentName ?? null,
+          }),
+        );
+      }
+    }
+    await repository.save(history);
   }
 
   private async reschedule(
@@ -1073,10 +1190,12 @@ export class WorkService {
     kind: 'stage' | 'bug',
     entityId: string,
   ): Promise<void> {
-    const history = await manager.getRepository(StatusHistoryEntity).find({
-      where: { entityType: kind, entityId },
-      order: { effectiveAt: 'ASC', createdAt: 'ASC' },
-    });
+    const history = this.orderStatusHistory(
+      await manager.getRepository(StatusHistoryEntity).find({
+        where: { entityType: kind, entityId },
+        order: { effectiveAt: 'ASC', createdAt: 'ASC' },
+      }),
+    );
     const latest = history.at(-1);
     if (!latest) return;
     let previousStatus: ExecutionStatus | null = null;
@@ -1453,7 +1572,9 @@ export class WorkService {
       note: row.note ?? undefined,
       statusReason: row.statusReason ?? undefined,
       expectedResumeAt: iso(row.expectedResumeAt),
-      statusHistory: statusHistory.map((item) => this.toStatusHistory(item)),
+      statusHistory: this.orderStatusHistory(statusHistory).map((item) =>
+        this.toStatusHistory(item),
+      ),
       scheduleHistory: scheduleHistory.map((item) =>
         this.toScheduleHistory(item),
       ),
@@ -1481,7 +1602,9 @@ export class WorkService {
       discoveredStageId: row.discoveredStageId ?? undefined,
       discoveredVersionId: row.discoveredVersionId ?? undefined,
       targetVersionId: row.targetVersionId ?? undefined,
-      statusHistory: statusHistory.map((item) => this.toStatusHistory(item)),
+      statusHistory: this.orderStatusHistory(statusHistory).map((item) =>
+        this.toStatusHistory(item),
+      ),
       scheduleHistory: scheduleHistory.map((item) =>
         this.toScheduleHistory(item),
       ),
@@ -1504,6 +1627,22 @@ export class WorkService {
       agentName: row.agentName ?? undefined,
       createdAt: row.createdAt.toISOString(),
     };
+  }
+
+  private orderStatusHistory(
+    rows: StatusHistoryEntity[],
+  ): StatusHistoryEntity[] {
+    const terminal = (status: ExecutionStatus) =>
+      status === 'done' || status === 'canceled' ? 1 : 0;
+    return [...rows].sort((left, right) => {
+      const effective =
+        left.effectiveAt.getTime() - right.effectiveAt.getTime();
+      if (effective) return effective;
+      const terminalOrder = terminal(left.toStatus) - terminal(right.toStatus);
+      if (terminalOrder) return terminalOrder;
+      const created = left.createdAt.getTime() - right.createdAt.getTime();
+      return created || left.id.localeCompare(right.id);
+    });
   }
 
   private toScheduleHistory(row: ScheduleHistoryEntity): ScheduleHistory {

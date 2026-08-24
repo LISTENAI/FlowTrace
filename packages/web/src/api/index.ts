@@ -118,6 +118,8 @@ export const api = {
     input: {
       status: ExecutionStatus;
       effectiveAt?: string;
+      actualStartAt?: string;
+      actualEndAt?: string;
       statusReason?: string;
       expectedResumeAt?: string;
       note?: string;
@@ -145,6 +147,8 @@ export const api = {
     input: {
       status: ExecutionStatus;
       effectiveAt?: string;
+      actualStartAt?: string;
+      actualEndAt?: string;
       statusReason?: string;
       expectedResumeAt?: string;
       note?: string;

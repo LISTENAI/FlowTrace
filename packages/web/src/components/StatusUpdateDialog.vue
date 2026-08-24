@@ -14,6 +14,10 @@ const props = defineProps<{
   itemType: 'stage' | 'bug';
   itemName: string;
   currentStatus: ExecutionStatus;
+  actualStartAt?: string;
+  actualEndAt?: string;
+  statusReason?: string;
+  expectedResumeAt?: string;
   ownerIds: string[];
   people: Person[];
 }>();
@@ -23,6 +27,8 @@ const saving = ref(false);
 const form = reactive({
   status: props.currentStatus,
   effectiveAt: dayjs().format('YYYY-MM-DDTHH:mm'),
+  actualStartAt: '',
+  actualEndAt: '',
   statusReason: '',
   expectedResumeAt: '',
   note: '',
@@ -41,6 +47,17 @@ const statuses: Array<{ id: ExecutionStatus; hint: string }> = [
 const needsReason = computed(() =>
   ['waiting', 'blocked'].includes(form.status),
 );
+const hasActualStart = computed(() =>
+  ['in_progress', 'waiting', 'blocked', 'done'].includes(form.status),
+);
+
+function localTime(value?: string) {
+  return value ? dayjs(value).format('YYYY-MM-DDTHH:mm') : '';
+}
+
+function sameMinute(left: string, right?: string) {
+  return left === localTime(right);
+}
 
 watch(
   () => props.open,
@@ -48,29 +65,70 @@ watch(
     if (!open) return;
     form.status = props.currentStatus;
     form.effectiveAt = dayjs().format('YYYY-MM-DDTHH:mm');
-    form.statusReason = '';
-    form.expectedResumeAt = '';
+    form.actualStartAt = localTime(props.actualStartAt);
+    form.actualEndAt = localTime(props.actualEndAt);
+    form.statusReason = props.statusReason ?? '';
+    form.expectedResumeAt = localTime(props.expectedResumeAt);
     form.note = '';
     form.ownerIds = [...props.ownerIds];
+  },
+);
+
+watch(
+  () => form.status,
+  (status, previous) => {
+    if (status === previous) return;
+    const now = dayjs().format('YYYY-MM-DDTHH:mm');
+    if (status === 'in_progress' && !form.actualStartAt)
+      form.actualStartAt = now;
+    if (status === 'done') {
+      if (!form.actualStartAt) form.actualStartAt = now;
+      if (!form.actualEndAt) form.actualEndAt = now;
+    }
   },
 );
 
 async function save() {
   saving.value = true;
   try {
+    const actualStartAt =
+      hasActualStart.value && form.actualStartAt
+        ? dayjs(form.actualStartAt).toISOString()
+        : undefined;
+    const actualEndAt =
+      form.status === 'done' && form.actualEndAt
+        ? dayjs(form.actualEndAt).toISOString()
+        : undefined;
     const input = {
       status: form.status,
-      effectiveAt: dayjs(form.effectiveAt).toISOString(),
-      statusReason: form.statusReason || undefined,
-      expectedResumeAt: form.expectedResumeAt
-        ? dayjs(form.expectedResumeAt).toISOString()
+      effectiveAt:
+        form.status === 'done' && actualEndAt
+          ? actualEndAt
+          : form.status === 'in_progress' && actualStartAt
+            ? actualStartAt
+            : dayjs(form.effectiveAt).toISOString(),
+      actualStartAt,
+      actualEndAt,
+      statusReason: needsReason.value
+        ? form.statusReason || undefined
         : undefined,
+      expectedResumeAt:
+        form.status === 'waiting' && form.expectedResumeAt
+          ? dayjs(form.expectedResumeAt).toISOString()
+          : undefined,
       note: form.note || undefined,
       ownerIds: form.ownerIds,
     };
     const recordsStatus =
       form.status !== props.currentStatus ||
-      Boolean(form.statusReason || form.expectedResumeAt || form.note);
+      (hasActualStart.value &&
+        !sameMinute(form.actualStartAt, props.actualStartAt)) ||
+      (form.status === 'done' &&
+        !sameMinute(form.actualEndAt, props.actualEndAt)) ||
+      (needsReason.value && form.statusReason !== (props.statusReason ?? '')) ||
+      (form.status === 'waiting' &&
+        !sameMinute(form.expectedResumeAt, props.expectedResumeAt)) ||
+      Boolean(form.note);
     if (recordsStatus) {
       if (props.itemType === 'stage')
         await api.updateStageStatus(props.itemId, input);
@@ -86,7 +144,9 @@ async function save() {
       else await api.updateBug(props.itemId, ownerInput);
       toasts.show(
         '负责人已更新',
-        form.ownerIds.length ? `已分配 ${form.ownerIds.length} 人` : '已设为待分配',
+        form.ownerIds.length
+          ? `已分配 ${form.ownerIds.length} 人`
+          : '已设为待分配',
       );
     }
     emit('saved');
@@ -107,7 +167,7 @@ async function save() {
   <AppModal
     :open="open"
     :title="`记录「${itemName}」的新状态`"
-    description="选择此刻真实发生的状态；生效时间可以补录到过去。"
+    description="状态与实际起止时间都可以事后补录，过程轨迹会据此重算。"
     width="lg"
     @close="$emit('close')"
   >
@@ -190,9 +250,29 @@ async function save() {
       </fieldset>
 
       <div class="grid gap-4 sm:grid-cols-2">
-        <label>
+        <label v-if="hasActualStart">
           <span class="mb-1.5 block text-xs font-medium text-slate-600"
-            >何时生效</span
+            >实际开始时间</span
+          >
+          <input
+            v-model="form.actualStartAt"
+            type="datetime-local"
+            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-indigo-300 focus:bg-white"
+          />
+        </label>
+        <label v-if="form.status === 'done'">
+          <span class="mb-1.5 block text-xs font-medium text-slate-600"
+            >实际结束时间</span
+          >
+          <input
+            v-model="form.actualEndAt"
+            type="datetime-local"
+            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-indigo-300 focus:bg-white"
+          />
+        </label>
+        <label v-if="!hasActualStart">
+          <span class="mb-1.5 block text-xs font-medium text-slate-600"
+            >状态生效时间</span
           >
           <input
             v-model="form.effectiveAt"

@@ -235,11 +235,13 @@ export function createFlowTraceMcpServer(
     'update_stage_status',
     {
       description:
-        '更新阶段状态，支持补录过去的生效时间；进入等待中或阻塞必须说明原因。',
+        '更新阶段状态，可补录实际开始和结束时间；进入等待中或阻塞必须说明原因。',
       inputSchema: {
         stage_id: z.string(),
         status: statusSchema,
         effective_at: z.string().optional(),
+        actual_start_at: z.string().optional(),
+        actual_end_at: z.string().optional(),
         status_reason: z.string().optional(),
         expected_resume_at: z.string().optional(),
         note: z.string().optional(),
@@ -255,6 +257,8 @@ export function createFlowTraceMcpServer(
             body: {
               status: input.status,
               effectiveAt: input.effective_at,
+              actualStartAt: input.actual_start_at,
+              actualEndAt: input.actual_end_at,
               statusReason: input.status_reason,
               expectedResumeAt: input.expected_resume_at,
               note: input.note,
@@ -328,11 +332,13 @@ export function createFlowTraceMcpServer(
   server.registerTool(
     'update_bug_status',
     {
-      description: '更新 Bug 状态并保留历史，支持补录生效时间。',
+      description: '更新 Bug 状态并保留历史，可补录实际开始和结束时间。',
       inputSchema: {
         bug_id: z.string(),
         status: statusSchema,
         effective_at: z.string().optional(),
+        actual_start_at: z.string().optional(),
+        actual_end_at: z.string().optional(),
         status_reason: z.string().optional(),
         expected_resume_at: z.string().optional(),
         note: z.string().optional(),
@@ -346,6 +352,8 @@ export function createFlowTraceMcpServer(
           body: {
             status: input.status,
             effectiveAt: input.effective_at,
+            actualStartAt: input.actual_start_at,
+            actualEndAt: input.actual_end_at,
             statusReason: input.status_reason,
             expectedResumeAt: input.expected_resume_at,
             note: input.note,

@@ -57,6 +57,26 @@ describe('FlowTrace MCP Server', () => {
     });
 
     await client.callTool({
+      name: 'update_stage_status',
+      arguments: {
+        stage_id: 'stage-1',
+        status: 'done',
+        actual_start_at: '2026-08-20T01:00:00.000Z',
+        actual_end_at: '2026-08-21T10:00:00.000Z',
+        agent_name: '验收 Agent',
+      },
+    });
+    expect(request).toHaveBeenLastCalledWith('/stages/stage-1/status', {
+      method: 'POST',
+      body: expect.objectContaining({
+        actualStartAt: '2026-08-20T01:00:00.000Z',
+        actualEndAt: '2026-08-21T10:00:00.000Z',
+        source: 'agent',
+        agentName: '验收 Agent',
+      }),
+    });
+
+    await client.callTool({
       name: 'assign_owners',
       arguments: {
         target_type: 'stage',

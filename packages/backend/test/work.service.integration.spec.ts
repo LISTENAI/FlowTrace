@@ -200,6 +200,67 @@ describe.sequential('WorkService business rules', () => {
     expect(durations.waitingMs).toBe(2 * 24 * 60 * 60 * 1000);
   });
 
+  it('backfills and corrects actual start and end times without duplicate status events', async () => {
+    const requirement = (
+      await work.listRequirements({ projectId: appProjectId })
+    ).find((item) => item.title === '旧需求')!;
+    const stage = (await work.getRequirement(requirement.id)).stages[0]!;
+
+    await work.updateStageStatus(stage.id, {
+      status: 'done',
+      actualStartAt: '2026-01-10T09:00:00.000Z',
+      actualEndAt: '2026-01-12T18:00:00.000Z',
+    });
+    await work.updateStageStatus(stage.id, {
+      status: 'done',
+      actualStartAt: '2026-01-10T10:00:00.000Z',
+      actualEndAt: '2026-01-12T17:00:00.000Z',
+    });
+
+    const updated = (await work.getRequirement(requirement.id)).stages[0]!;
+    expect(updated.actualStartAt).toBe('2026-01-10T10:00:00.000Z');
+    expect(updated.actualEndAt).toBe('2026-01-12T17:00:00.000Z');
+    expect(updated.statusHistory.map((item) => item.toStatus)).toEqual([
+      'in_progress',
+      'done',
+    ]);
+
+    const pointRequirement = await work.createRequirement({
+      projectId: appProjectId,
+      title: '单日节点',
+    });
+    const pointStage = pointRequirement.stages[0]!;
+    await work.updateStageStatus(pointStage.id, {
+      status: 'done',
+      actualStartAt: '2026-01-15T18:00:00.000Z',
+      actualEndAt: '2026-01-15T18:00:00.000Z',
+    });
+    const pointUpdated = (await work.getRequirement(pointRequirement.id))
+      .stages[0]!;
+    expect(pointUpdated.status).toBe('done');
+    expect(pointUpdated.actualStartAt).toBe('2026-01-15T18:00:00.000Z');
+    expect(pointUpdated.actualEndAt).toBe('2026-01-15T18:00:00.000Z');
+    expect(pointUpdated.statusHistory.map((item) => item.toStatus)).toEqual([
+      'in_progress',
+      'done',
+    ]);
+  });
+
+  it('rejects an actual end before the actual start', async () => {
+    const requirement = (
+      await work.listRequirements({ projectId: appProjectId })
+    ).find((item) => item.title === '旧需求')!;
+    const stage = (await work.getRequirement(requirement.id)).stages[0]!;
+
+    await expect(
+      work.updateStageStatus(stage.id, {
+        status: 'done',
+        actualStartAt: '2026-01-13T09:00:00.000Z',
+        actualEndAt: '2026-01-12T09:00:00.000Z',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('requires a reason for waiting and blocked states', async () => {
     const requirement = (
       await work.listRequirements({ projectId: appProjectId })

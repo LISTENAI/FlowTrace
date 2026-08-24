@@ -369,6 +369,16 @@ export class UpdateStatusDto extends ChangeContextDto {
   @IsISO8601()
   effectiveAt?: string;
 
+  @ApiPropertyOptional({ description: '阶段或 Bug 的实际开始时间，允许补录' })
+  @IsOptional()
+  @IsISO8601()
+  actualStartAt?: string;
+
+  @ApiPropertyOptional({ description: '阶段或 Bug 的实际结束时间，允许补录' })
+  @IsOptional()
+  @IsISO8601()
+  actualEndAt?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
