@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -13,7 +14,11 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import type { ChangeContext } from '@flowtrace/shared';
+import {
+  searchEntityTypes,
+  type ChangeContext,
+  type SearchEntityType,
+} from '@flowtrace/shared';
 import {
   BatchDto,
   CorrectStatusHistoryDto,
@@ -325,13 +330,61 @@ export class InsightsController {
     return this.work.getVersionSnapshot(id);
   }
 
+  @Get('snapshots/requirements/:id')
+  requirement(@Param('id') id: string) {
+    return this.work.getRequirementDetail(id);
+  }
+
+  @Get('search')
+  @ApiOperation({ summary: '跨项目搜索可被 Agent 稳定引用的业务对象' })
+  search(
+    @Query('q') query?: string,
+    @Query('types') types?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const selected = types
+      ? types.split(',').filter(Boolean)
+      : [...searchEntityTypes];
+    const invalid = selected.filter(
+      (item) => !searchEntityTypes.includes(item as SearchEntityType),
+    );
+    if (invalid.length) {
+      throw new BadRequestException(`不支持的搜索类型：${invalid.join(', ')}`);
+    }
+    const parsedLimit = limit === undefined ? 20 : Number(limit);
+    if (!Number.isInteger(parsedLimit) || parsedLimit < 1) {
+      throw new BadRequestException('limit 必须是正整数');
+    }
+    return this.work.search(
+      query ?? '',
+      selected as SearchEntityType[],
+      parsedLimit,
+    );
+  }
+
   @Get('changes')
   @ApiOperation({ summary: '获取指定时间之后的结构化增量变化' })
   changes(
     @Query('since') since: string,
     @Query('projectId') projectId?: string,
+    @Query('versionId') versionId?: string,
+    @Query('requirementId') requirementId?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.work.getChanges(since, projectId);
+    const parsedLimit = limit === undefined ? undefined : Number(limit);
+    if (
+      parsedLimit !== undefined &&
+      (!Number.isInteger(parsedLimit) || parsedLimit < 1)
+    ) {
+      throw new BadRequestException('limit 必须是正整数');
+    }
+    return this.work.getChanges({
+      since,
+      projectId,
+      versionId,
+      requirementId,
+      limit: parsedLimit,
+    });
   }
 
   @Post('batch')

@@ -6,6 +6,7 @@ import { InitialSchema1724428800000 } from '@/database/migrations/1724428800000-
 import { ProjectRhythms1724515200000 } from '@/database/migrations/1724515200000-project-rhythms';
 import { SoftDeleteWorkItems1724601600000 } from '@/database/migrations/1724601600000-soft-delete-work-items';
 import { VersionSortOrder1724688000000 } from '@/database/migrations/1724688000000-version-sort-order';
+import { AiChangeContext1724774400000 } from '@/database/migrations/1724774400000-ai-change-context';
 
 let dataSource: DataSource | undefined;
 
@@ -24,6 +25,7 @@ describe('initial database migration', () => {
         ProjectRhythms1724515200000,
         SoftDeleteWorkItems1724601600000,
         VersionSortOrder1724688000000,
+        AiChangeContext1724774400000,
       ],
     });
     await dataSource.initialize();
@@ -48,5 +50,16 @@ describe('initial database migration', () => {
         'change_events',
       ]),
     );
+
+    const versionHistoryColumns = (await dataSource.query(
+      'PRAGMA table_info("version_history")',
+    )) as Array<{ name: string }>;
+    const changeColumns = (await dataSource.query(
+      'PRAGMA table_info("change_events")',
+    )) as Array<{ name: string }>;
+    expect(versionHistoryColumns.map((column) => column.name)).toContain(
+      'effectiveAt',
+    );
+    expect(changeColumns.map((column) => column.name)).toContain('reason');
   });
 });

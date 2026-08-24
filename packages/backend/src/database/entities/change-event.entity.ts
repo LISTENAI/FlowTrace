@@ -29,6 +29,9 @@ export class ChangeEventEntity {
   @Column('simple-json', { nullable: true })
   details!: Record<string, unknown> | null;
 
+  @Column('text', { nullable: true })
+  reason!: string | null;
+
   @Column('text')
   source!: ChangeSource;
 

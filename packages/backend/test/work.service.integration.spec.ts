@@ -9,6 +9,7 @@ import { InitialSchema1724428800000 } from '@/database/migrations/1724428800000-
 import { ProjectRhythms1724515200000 } from '@/database/migrations/1724515200000-project-rhythms';
 import { SoftDeleteWorkItems1724601600000 } from '@/database/migrations/1724601600000-soft-delete-work-items';
 import { VersionSortOrder1724688000000 } from '@/database/migrations/1724688000000-version-sort-order';
+import { AiChangeContext1724774400000 } from '@/database/migrations/1724774400000-ai-change-context';
 import { DomainModule } from '@/domain/domain.module';
 import { WorkService } from '@/domain/work.service';
 
@@ -29,6 +30,7 @@ describe.sequential('WorkService business rules', () => {
             ProjectRhythms1724515200000,
             SoftDeleteWorkItems1724601600000,
             VersionSortOrder1724688000000,
+            AiChangeContext1724774400000,
           ],
           migrationsRun: true,
           synchronize: false,
@@ -382,6 +384,7 @@ describe.sequential('WorkService business rules', () => {
     const moved = await work.moveRequirement(requirement.id, {
       versionId: v2.id,
       reason: '交付窗口调整',
+      effectiveAt: '2026-03-02T09:30:00.000Z',
       source: 'agent',
       agentName: '测试 Agent',
     });
@@ -391,6 +394,7 @@ describe.sequential('WorkService business rules', () => {
       toVersionId: v2.id,
       source: 'agent',
       agentName: '测试 Agent',
+      effectiveAt: '2026-03-02T09:30:00.000Z',
     });
   });
 
@@ -446,5 +450,142 @@ describe.sequential('WorkService business rules', () => {
     expect(first.satisfied).toBe(false);
     expect(reciprocal.active).toBe(true);
     expect(reciprocal.predecessor?.projectName).toBe('设备固件');
+  });
+
+  it('searches or lists stable objects with enough project context', async () => {
+    const [firstProject, secondProject, inactivePerson] = await Promise.all([
+      work.createProject({
+        key: 'SEARCH-A',
+        name: '搜索项目甲',
+        templateStages: [{ name: '开发' }],
+      }),
+      work.createProject({
+        key: 'SEARCH-B',
+        name: '搜索项目乙',
+        templateStages: [{ name: '验证' }],
+      }),
+      work.createPerson({ name: '暂停协作者' }),
+    ]);
+    await work.updatePerson(inactivePerson.id, { active: false });
+    await Promise.all([
+      work.createVersion(firstProject.id, { name: '试运行' }),
+      work.createVersion(secondProject.id, { name: '试运行' }),
+    ]);
+
+    const versions = await work.search('试运行', ['version']);
+    expect(versions).toHaveLength(2);
+    expect(versions.map((item) => item.projectName).sort()).toEqual([
+      '搜索项目乙',
+      '搜索项目甲',
+    ]);
+    expect(await work.search('', ['project'], 50)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: firstProject.id, type: 'project' }),
+        expect.objectContaining({ id: secondProject.id, type: 'project' }),
+      ]),
+    );
+    expect(await work.search('', ['person'], 50)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: inactivePerson.id,
+          type: 'person',
+          active: false,
+        }),
+      ]),
+    );
+  });
+
+  it('returns explicit snapshot lists, requirement context and filtered changes', async () => {
+    const [owner, project] = await Promise.all([
+      work.createPerson({ name: '上下文负责人' }),
+      work.createProject({
+        key: 'CONTEXT',
+        name: '上下文验证',
+        templateStages: [{ name: '方案评审' }],
+      }),
+    ]);
+    const version = await work.createVersion(project.id, { name: '1.0' });
+    const predecessor = await work.createRequirement({
+      projectId: project.id,
+      versionId: version.id,
+      title: '前置准备',
+    });
+    const requirement = await work.createRequirement({
+      projectId: project.id,
+      versionId: version.id,
+      title: '上下文需求',
+      ownerIds: [owner.id],
+      plannedStartAt: '2026-01-01T00:00:00.000Z',
+      plannedEndAt: '2026-01-02T00:00:00.000Z',
+      source: 'agent',
+      agentName: '集成验证',
+    });
+    await work.updateStageStatus(requirement.stages[0]!.id, {
+      status: 'waiting',
+      statusReason: '等待评审材料',
+      ownerIds: [owner.id],
+      source: 'agent',
+      agentName: '集成验证',
+    });
+    await work.reportBug(requirement.id, {
+      title: '评审记录缺失',
+      ownerIds: [owner.id],
+      source: 'agent',
+      agentName: '集成验证',
+    });
+    const dependency = await work.addDependency({
+      successorType: 'stage',
+      successorId: requirement.stages[0]!.id,
+      predecessorType: 'requirement',
+      predecessorId: predecessor.id,
+      source: 'agent',
+      agentName: '集成验证',
+    });
+
+    const detail = await work.getRequirementDetail(requirement.key);
+    expect(detail).toMatchObject({
+      project: { id: project.id, name: '上下文验证' },
+      version: { id: version.id, name: '1.0' },
+    });
+    expect(detail.people.map((item) => item.id)).toContain(owner.id);
+    expect(detail.dependencies.map((item) => item.id)).toContain(dependency.id);
+
+    const snapshot = await work.getVersionSnapshot(version.id);
+    expect(snapshot.waitingItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          requirementKey: requirement.key,
+          reason: '等待评审材料',
+        }),
+      ]),
+    );
+    expect(snapshot.delayedItems.map((item) => item.id)).toContain(
+      requirement.id,
+    );
+    expect(snapshot.openBugs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ requirementId: requirement.id, type: 'bug' }),
+      ]),
+    );
+
+    await work.resolveDependency(dependency.id, {
+      source: 'agent',
+      agentName: '集成验证',
+      reason: '改为并行推进',
+    });
+    const changes = await work.getChanges({
+      since: '2020-01-01T00:00:00.000Z',
+      requirementId: requirement.id,
+    });
+    expect(changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'dependency_removed',
+          reason: '改为并行推进',
+          project: expect.objectContaining({ name: '上下文验证' }),
+          requirement: expect.objectContaining({ key: requirement.key }),
+        }),
+      ]),
+    );
   });
 });

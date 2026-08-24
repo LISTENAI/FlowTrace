@@ -311,6 +311,11 @@ export class MoveVersionDto extends ChangeContextDto {
   @IsOptional()
   @IsString()
   versionId?: string | null;
+
+  @ApiPropertyOptional({ description: '版本迁移实际生效时间，允许补录' })
+  @IsOptional()
+  @IsISO8601()
+  effectiveAt?: string;
 }
 
 export class CreateStageDto extends ChangeContextDto {

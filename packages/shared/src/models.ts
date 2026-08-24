@@ -14,6 +14,15 @@ export type HealthStatus = 'normal' | 'waiting' | 'blocked';
 export type VersionStatus = 'planning' | 'active' | 'released' | 'canceled';
 export type ChangeSource = 'manual' | 'api' | 'agent';
 export type DependencyTargetType = 'requirement' | 'stage' | 'bug';
+export const searchEntityTypes = [
+  'project',
+  'version',
+  'requirement',
+  'stage',
+  'bug',
+  'person',
+] as const;
+export type SearchEntityType = (typeof searchEntityTypes)[number];
 
 export interface ChangeContext {
   source?: ChangeSource;
@@ -156,6 +165,7 @@ export interface VersionHistory {
   reason?: string;
   source: ChangeSource;
   agentName?: string;
+  effectiveAt: string;
   changedAt: string;
 }
 
@@ -213,9 +223,28 @@ export interface ChangeEvent {
   type: string;
   summary: string;
   details?: Record<string, unknown>;
+  reason?: string;
   source: ChangeSource;
   agentName?: string;
   occurredAt: string;
+  project?: Pick<Project, 'id' | 'key' | 'name'>;
+  version?: Pick<Version, 'id' | 'name'>;
+  requirement?: Pick<Requirement, 'id' | 'key' | 'title'>;
+}
+
+export interface SearchResult {
+  type: SearchEntityType;
+  id: string;
+  key?: string;
+  name: string;
+  projectId?: string;
+  projectName?: string;
+  versionId?: string;
+  versionName?: string;
+  requirementId?: string;
+  requirementKey?: string;
+  status?: ExecutionStatus | RequirementLifecycle | VersionStatus;
+  active?: boolean;
 }
 
 export interface RequirementSummary extends Omit<
@@ -244,18 +273,10 @@ export interface ProjectSnapshot {
   versions: Version[];
   metrics: SnapshotMetrics;
   requirements: RequirementSummary[];
-  waitingItems: Array<{
-    id: string;
-    key?: string;
-    name: string;
-    reason?: string;
-  }>;
-  blockedItems: Array<{
-    id: string;
-    key?: string;
-    name: string;
-    reason?: string;
-  }>;
+  waitingItems: SnapshotWorkItem[];
+  blockedItems: SnapshotWorkItem[];
+  delayedItems: RequirementSummary[];
+  openBugs: SnapshotWorkItem[];
   externalDependencies: Dependency[];
   recentChanges: ChangeEvent[];
   generatedAt: string;
@@ -263,6 +284,28 @@ export interface ProjectSnapshot {
 
 export interface VersionSnapshot extends ProjectSnapshot {
   version: Version;
+}
+
+export interface SnapshotWorkItem extends WorkTiming {
+  type: 'stage' | 'bug';
+  id: string;
+  key?: string;
+  name: string;
+  status: ExecutionStatus;
+  reason?: string;
+  expectedResumeAt?: string;
+  ownerIds: string[];
+  requirementId: string;
+  requirementKey: string;
+  requirementTitle: string;
+}
+
+export interface RequirementDetail {
+  requirement: Requirement;
+  project: Project;
+  version?: Version;
+  people: Person[];
+  dependencies: Dependency[];
 }
 
 export interface StatusDuration {
