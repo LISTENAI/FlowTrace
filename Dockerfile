@@ -21,8 +21,10 @@ ENV NODE_ENV=production FLOWTRACE_HOST=0.0.0.0 FLOWTRACE_PORT=3100 FLOWTRACE_SEE
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/backend/package.json ./packages/backend/
-RUN npm ci --omit=dev -w @flowtrace/backend
+COPY packages/mcp/package.json ./packages/mcp/
+RUN npm ci --omit=dev -w @flowtrace/backend -w @flowtrace/mcp
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
+COPY --from=builder /app/packages/mcp/dist ./packages/mcp/dist
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
 COPY --from=builder /app/packages/web/dist ./packages/web/dist
 VOLUME ["/data"]

@@ -12,6 +12,7 @@ docker compose up -d --build
 
 - Web：<http://localhost:5173>
 - API：<http://localhost:3100/api>
+- MCP：<http://localhost:3100/mcp>
 - OpenAPI UI：<http://localhost:3100/api/docs>
 - OpenAPI JSON：<http://localhost:3100/api/openapi.json>
 
@@ -36,15 +37,18 @@ npm test
 npm run build
 ```
 
-MCP Server 默认连接 `http://localhost:3100/api`：
+MCP Server 的正式远程 Endpoint 为 `POST /mcp`。本地调试也可启动
+stdio 入口，它默认连接 `http://127.0.0.1:3100/api`：
 
 ```bash
 npm run build -w @flowtrace/shared
 npm run dev -w @flowtrace/mcp
 ```
 
-可通过 `FLOWTRACE_API_URL` 覆盖 API 地址。产品需求归档见
-[`docs/product/requirements-v0.2.md`](docs/product/requirements-v0.2.md)。
+可通过 `FLOWTRACE_API_URL` 覆盖 API 地址。产品基础需求见
+[`docs/product/requirements-v0.2.md`](docs/product/requirements-v0.2.md)，AI 接入增量
+需求见
+[`docs/product/ai-integration-v0.2.md`](docs/product/ai-integration-v0.2.md)。
 
 ## 正式运行
 

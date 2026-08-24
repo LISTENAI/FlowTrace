@@ -4,7 +4,7 @@ services:
       context: .
       target: dev
     working_dir: /app
-    command: sh -c "npm run build -w @flowtrace/shared && npm run dev -w @flowtrace/backend"
+    command: sh -c "npm run build -w @flowtrace/shared && npm run build -w @flowtrace/mcp && npm run dev -w @flowtrace/backend"
     environment:
       FLOWTRACE_DATABASE_PATH: /data/flowtrace.db
       FLOWTRACE_HOST: 0.0.0.0

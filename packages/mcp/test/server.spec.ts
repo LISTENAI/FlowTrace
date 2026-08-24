@@ -5,10 +5,42 @@ import type { FlowTraceApiClient } from '../src/api-client.js';
 import { createFlowTraceMcpServer } from '../src/server.js';
 
 describe('FlowTrace MCP Server', () => {
-  it('exposes business-semantic tools and maps Agent source fields', async () => {
-    const request = vi
-      .fn()
-      .mockResolvedValue({ id: 'stage-1', status: 'waiting' });
+  it('provides a self-describing bounded catalog, resources and audited writes', async () => {
+    const request = vi.fn(async (path: string) => {
+      if (path.startsWith('/search?')) {
+        return [
+          {
+            type: 'project',
+            id: 'project-1',
+            key: 'DEMO',
+            name: '演示项目',
+          },
+        ];
+      }
+      if (path.startsWith('/dependencies?')) {
+        return [
+          {
+            id: 'dependency-1',
+            active: true,
+            satisfied: false,
+            successor: { requirementId: 'requirement-1' },
+            predecessor: { projectName: '前置项目', name: '准备样件' },
+          },
+        ];
+      }
+      return {
+        id: 'stage-1',
+        requirementId: 'requirement-1',
+        status: 'waiting',
+        statusHistory: [
+          {
+            id: 'status-1',
+            toStatus: 'waiting',
+            effectiveAt: '2026-08-24T01:00:00.000Z',
+          },
+        ],
+      };
+    });
     const api = { request } as unknown as FlowTraceApiClient;
     const server = createFlowTraceMcpServer(api);
     const client = new Client({ name: 'test-client', version: '1.0.0' });
@@ -20,19 +52,59 @@ describe('FlowTrace MCP Server', () => {
     ]);
 
     const tools = await client.listTools();
+    expect(tools.tools).toHaveLength(18);
     expect(tools.tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
+        'search',
+        'get_project_snapshot',
         'get_version_snapshot',
-        'list_people',
-        'create_requirement',
-        'assign_owners',
-        'delete_work_item',
-        'update_stage_status',
-        'report_bug',
+        'get_requirement',
         'get_changes_since',
+        'create_requirement',
+        'update_requirement',
+        'assign_owners',
+        'move_requirement_to_version',
+        'add_stage',
+        'update_stage_status',
+        'reschedule_stage',
+        'report_bug',
+        'update_bug_status',
+        'reschedule_bug',
+        'add_dependency',
+        'remove_dependency',
+        'delete_work_item',
       ]),
     );
     expect(tools.tools.map((tool) => tool.name)).not.toContain('set_field');
+    expect(tools.tools.map((tool) => tool.name)).not.toContain('list_projects');
+    expect(
+      tools.tools.every((tool) => (tool.description?.length ?? 0) >= 20),
+    ).toBe(true);
+    expect(
+      tools.tools.find((tool) => tool.name === 'delete_work_item')?.annotations,
+    ).toMatchObject({ destructiveHint: true, readOnlyHint: false });
+    expect(
+      tools.tools.find((tool) => tool.name === 'search')?.annotations,
+    ).toMatchObject({ readOnlyHint: true });
+
+    const search = await client.callTool({
+      name: 'search',
+      arguments: { query: '', types: ['project'] },
+    });
+    expect(search.structuredContent).toEqual({
+      success: true,
+      data: [
+        {
+          type: 'project',
+          id: 'project-1',
+          key: 'DEMO',
+          name: '演示项目',
+        },
+      ],
+    });
+    expect(request).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/search\?q=&types=project&limit=20$/),
+    );
 
     const response = await client.callTool({
       name: 'update_stage_status',
@@ -40,82 +112,70 @@ describe('FlowTrace MCP Server', () => {
         stage_id: 'stage-1',
         status: 'waiting',
         status_reason: '等待样板到货',
-        agent_name: '验收 Agent',
+        agent_name: '验收调用方',
         reason: '根据晨会信息补录',
       },
     });
     expect(response.structuredContent).toEqual({
-      result: { id: 'stage-1', status: 'waiting' },
+      success: true,
+      entity: expect.objectContaining({
+        id: 'stage-1',
+        status: 'waiting',
+      }),
+      history: {
+        status: expect.objectContaining({ toStatus: 'waiting' }),
+      },
+      warnings: [
+        expect.objectContaining({
+          code: 'dependency_not_satisfied',
+          dependency_id: 'dependency-1',
+        }),
+      ],
     });
     expect(request).toHaveBeenCalledWith('/stages/stage-1/status', {
       method: 'POST',
       body: expect.objectContaining({
         source: 'agent',
-        agentName: '验收 Agent',
+        agentName: '验收调用方',
         statusReason: '等待样板到货',
         reason: '根据晨会信息补录',
       }),
     });
 
     await client.callTool({
-      name: 'update_stage_status',
+      name: 'add_stage',
       arguments: {
-        stage_id: 'stage-1',
-        status: 'done',
-        actual_start_at: '2026-08-20T01:00:00.000Z',
-        actual_end_at: '2026-08-21T10:00:00.000Z',
-        agent_name: '验收 Agent',
+        requirement_id: 'requirement-1',
+        name: '联调',
+        order: 2,
+        agent_name: '验收调用方',
       },
     });
-    expect(request).toHaveBeenLastCalledWith('/stages/stage-1/status', {
+    expect(request).toHaveBeenCalledWith('/requirements/requirement-1/stages', {
       method: 'POST',
-      body: expect.objectContaining({
-        actualStartAt: '2026-08-20T01:00:00.000Z',
-        actualEndAt: '2026-08-21T10:00:00.000Z',
-        source: 'agent',
-        agentName: '验收 Agent',
-      }),
+      body: expect.objectContaining({ order: 2, source: 'agent' }),
     });
 
-    await client.callTool({
-      name: 'assign_owners',
-      arguments: {
-        target_type: 'stage',
-        target_id: 'stage-1',
-        owner_ids: ['person-1', 'person-2'],
-        agent_name: '验收 Agent',
-        reason: '按项目分工更新',
-      },
+    const resources = await client.listResources();
+    expect(resources.resources.map((resource) => resource.uri)).toEqual([
+      'flowtrace://guide',
+      'flowtrace://concepts/model',
+      'flowtrace://concepts/status',
+      'flowtrace://concepts/schedule',
+      'flowtrace://concepts/dependency',
+      'flowtrace://concepts/rework',
+    ]);
+    const statusResource = await client.readResource({
+      uri: 'flowtrace://concepts/status',
     });
-    expect(request).toHaveBeenLastCalledWith('/stages/stage-1', {
-      method: 'PATCH',
-      body: {
-        ownerIds: ['person-1', 'person-2'],
-        source: 'agent',
-        agentName: '验收 Agent',
-        reason: '按项目分工更新',
-      },
+    expect(statusResource.contents[0]).toMatchObject({
+      uri: 'flowtrace://concepts/status',
+      mimeType: 'text/markdown',
     });
-
-    await client.callTool({
-      name: 'delete_work_item',
-      arguments: {
-        target_type: 'stage',
-        target_id: 'stage-1',
-        confirmation: '开发',
-        reason: '重复创建',
-        agent_name: '验收 Agent',
-      },
-    });
-    expect(request).toHaveBeenLastCalledWith('/stages/stage-1', {
-      method: 'DELETE',
-      body: {
-        confirmation: '开发',
-        reason: '重复创建',
-        source: 'agent',
-        agentName: '验收 Agent',
-      },
-    });
+    expect(statusResource.contents[0]).toHaveProperty(
+      'text',
+      expect.stringContaining('等待中'),
+    );
 
     await client.close();
     await server.close();

@@ -1,8 +1,14 @@
-import { ValidationPipe, type INestApplication } from '@nestjs/common';
+import {
+  RequestMethod,
+  ValidationPipe,
+  type INestApplication,
+} from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 export function configureApp(app: INestApplication) {
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api', {
+    exclude: [{ path: 'mcp', method: RequestMethod.ALL }],
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,

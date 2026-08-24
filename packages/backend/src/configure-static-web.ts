@@ -26,6 +26,7 @@ export function configureStaticWeb(app: NestExpressApplication) {
     const isPageRequest =
       request.method === 'GET' &&
       !request.path.startsWith('/api') &&
+      request.path !== '/mcp' &&
       !extname(request.path);
     if (!isPageRequest) {
       next();

@@ -1,13 +1,15 @@
 # 正式部署
 
 FlowTrace 的正式交付物是单一应用镜像。NestJS 在同一端口提供 Web 静态资源、
-前端路由回退、HTTP API 和 Swagger；SQLite 数据库位于容器外的 `/data` 卷。
+前端路由回退、HTTP API、Swagger 和远程 MCP；SQLite 数据库位于
+容器外的 `/data` 卷。
 
 ```text
-浏览器 ──> :3100 ──> FlowTrace 镜像 ──> /data/flowtrace.db
-                    ├─ Web 与前端路由
-                    ├─ /api
-                    └─ /api/docs
+浏览器 / MCP 调用方 ──> :3100 ──> FlowTrace 镜像 ──> /data/flowtrace.db
+                                ├─ Web 与前端路由
+                                ├─ /api
+                                ├─ /mcp
+                                └─ /api/docs
 ```
 
 在源码目录构建和启动：

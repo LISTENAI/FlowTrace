@@ -11,6 +11,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@flowtrace/mcp": "^0.1.0",
     "@flowtrace/shared": "^0.1.0",
     "@nestjs/common": "^11.2.1",
     "@nestjs/core": "^11.2.1",

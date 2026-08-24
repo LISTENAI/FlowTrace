@@ -1,7 +1,7 @@
 export class FlowTraceApiClient {
   constructor(
     private readonly baseUrl = process.env.FLOWTRACE_API_URL ??
-      'http://localhost:3100/api',
+      'http://127.0.0.1:3100/api',
   ) {}
 
   async request<T>(
