@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { personToneClass } from '@/lib/person-color';
 import { workspace } from '@/state/workspace';
 
 const props = withDefaults(
@@ -12,13 +13,6 @@ const owners = computed(() =>
     .map((id) => workspace.people.find((person) => person.id === id))
     .filter(Boolean),
 );
-
-const colors = [
-  'bg-indigo-100 text-indigo-700',
-  'bg-amber-100 text-amber-700',
-  'bg-cyan-100 text-cyan-700',
-  'bg-rose-100 text-rose-700',
-];
 </script>
 
 <template>
@@ -27,13 +21,13 @@ const colors = [
     :class="compact ? '-space-x-1' : '-space-x-1.5'"
   >
     <div
-      v-for="(owner, index) in owners.slice(0, max)"
+      v-for="owner in owners.slice(0, max)"
       :key="owner?.id"
       :title="owner?.name"
       class="grid place-items-center rounded-full border-2 border-white font-semibold ring-1 ring-slate-100"
       :class="[
         compact ? 'h-6 w-6 text-[10px]' : 'h-7 w-7 text-[11px]',
-        colors[index % colors.length],
+        personToneClass(owner?.id ?? ''),
       ]"
     >
       {{ owner?.name.slice(-2) }}

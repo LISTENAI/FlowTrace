@@ -168,6 +168,52 @@ a[class~="inline-flex"] {
   color: #4f46e5;
 }
 
+/* 人员色调由稳定 ID 映射，所有视图共享同一视觉身份。 */
+.person-tone-indigo {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.person-tone-cyan {
+  background: #cffafe;
+  color: #0e7490;
+}
+
+.person-tone-amber {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.person-tone-rose {
+  background: #ffe4e6;
+  color: #be123c;
+}
+
+.person-tone-violet {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.person-tone-emerald {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.person-tone-sky {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.person-tone-orange {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+/* 半透明卡片各自形成层叠上下文，菜单展开时需连同卡片一起置顶。 */
+.person-card:has([aria-expanded='true']) {
+  z-index: 40;
+}
+
 .dark body {
   color: #dbe4f0;
   background:
@@ -243,6 +289,46 @@ a[class~="inline-flex"] {
   border-color: #818cf8;
   background: rgba(49, 46, 129, 0.28);
   color: #a5b4fc;
+}
+
+.dark .person-tone-indigo {
+  background: rgba(67, 56, 202, 0.34);
+  color: #c7d2fe;
+}
+
+.dark .person-tone-cyan {
+  background: rgba(14, 116, 144, 0.34);
+  color: #a5f3fc;
+}
+
+.dark .person-tone-amber {
+  background: rgba(180, 83, 9, 0.34);
+  color: #fde68a;
+}
+
+.dark .person-tone-rose {
+  background: rgba(190, 18, 60, 0.34);
+  color: #fecdd3;
+}
+
+.dark .person-tone-violet {
+  background: rgba(109, 40, 217, 0.34);
+  color: #ddd6fe;
+}
+
+.dark .person-tone-emerald {
+  background: rgba(4, 120, 87, 0.34);
+  color: #a7f3d0;
+}
+
+.dark .person-tone-sky {
+  background: rgba(3, 105, 161, 0.34);
+  color: #bae6fd;
+}
+
+.dark .person-tone-orange {
+  background: rgba(194, 65, 12, 0.34);
+  color: #fed7aa;
 }
 
 .dark [class~="text-slate-900"],

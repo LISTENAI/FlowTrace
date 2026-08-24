@@ -55,6 +55,8 @@ export class UpdatePersonDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
   name?: string;
 
   @ApiPropertyOptional()

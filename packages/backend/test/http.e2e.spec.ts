@@ -122,6 +122,25 @@ describe('HTTP API', () => {
     );
   });
 
+  it('renames a person without changing the stable identity', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/people')
+      .send({ name: '小树', note: '研发协作' })
+      .expect(201);
+
+    const updated = await request(app.getHttpServer())
+      .patch(`/api/people/${created.body.id}`)
+      .send({ name: '小澍', note: '项目协作' })
+      .expect(200);
+
+    expect(updated.body).toMatchObject({
+      id: created.body.id,
+      name: '小澍',
+      note: '项目协作',
+      active: true,
+    });
+  });
+
   it('rejects unknown fields instead of silently accepting ambiguous Agent input', async () => {
     await request(app.getHttpServer())
       .post('/api/projects')
