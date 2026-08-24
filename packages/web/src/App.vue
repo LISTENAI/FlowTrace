@@ -3,6 +3,7 @@ import {
   Bars3BottomLeftIcon,
   BoltIcon,
   ChevronRightIcon,
+  CpuChipIcon,
   FolderIcon,
   QueueListIcon,
   Squares2X2Icon,
@@ -115,6 +116,19 @@ onMounted(() => loadWorkspace());
         >
           <QueueListIcon class="h-[18px] w-[18px]" />
           项目节奏
+        </RouterLink>
+        <RouterLink
+          to="/settings/ai-integration"
+          class="focus-ring flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition"
+          :class="
+            route.name === 'ai-integration'
+              ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80'
+              : 'text-slate-500 hover:bg-white/70 hover:text-slate-800'
+          "
+          @click="mobileOpen = false"
+        >
+          <CpuChipIcon class="h-[18px] w-[18px]" />
+          AI 接入
         </RouterLink>
       </nav>
 

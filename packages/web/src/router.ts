@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import PeopleView from '@/views/PeopleView.vue';
+import AiIntegrationView from '@/views/AiIntegrationView.vue';
 import ProjectListView from '@/views/ProjectListView.vue';
 import ProjectSettingsView from '@/views/ProjectSettingsView.vue';
 import ProjectRhythmsView from '@/views/ProjectRhythmsView.vue';
@@ -22,6 +23,11 @@ export const router = createRouter({
       component: RequirementView,
     },
     { path: '/people', name: 'people', component: PeopleView },
+    {
+      path: '/settings/ai-integration',
+      name: 'ai-integration',
+      component: AiIntegrationView,
+    },
     {
       path: '/settings/project-rhythms',
       name: 'project-rhythms',
