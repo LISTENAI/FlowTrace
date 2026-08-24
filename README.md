@@ -45,3 +45,15 @@ npm run dev -w @flowtrace/mcp
 
 可通过 `FLOWTRACE_API_URL` 覆盖 API 地址。产品需求归档见
 [`docs/product/requirements-v0.2.md`](docs/product/requirements-v0.2.md)。
+
+## 正式运行
+
+正式环境使用一个镜像同时提供 Web 和 API，SQLite 数据保存在独立数据卷中：
+
+```bash
+docker compose -f compose.production.yml up -d --build
+```
+
+默认访问地址为 <http://localhost:3100>。当前版本没有账号和权限隔离，只能
+部署在可信内网或受控私有网络中，不能直接暴露到公网。详细说明见
+[`docs/architecture/deployment.md`](docs/architecture/deployment.md)。

@@ -15,15 +15,17 @@ FROM base AS builder
 COPY . .
 RUN npm run build
 
-FROM node:24-bookworm-slim AS backend-runtime
+FROM node:24-bookworm-slim AS app-runtime
 WORKDIR /app
-ENV NODE_ENV=production FLOWTRACE_HOST=0.0.0.0 FLOWTRACE_PORT=3100 FLOWTRACE_SEED_DEMO=false
+ENV NODE_ENV=production FLOWTRACE_HOST=0.0.0.0 FLOWTRACE_PORT=3100 FLOWTRACE_SEED_DEMO=false FLOWTRACE_WEB_ROOT=/app/packages/web/dist
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/backend/package.json ./packages/backend/
 RUN npm ci --omit=dev -w @flowtrace/backend
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
+COPY --from=builder /app/packages/web/dist ./packages/web/dist
 VOLUME ["/data"]
 EXPOSE 3100
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:3100/api/health').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"]
 CMD ["node", "packages/backend/dist/main.js"]

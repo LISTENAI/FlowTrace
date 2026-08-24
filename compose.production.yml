@@ -1,0 +1,20 @@
+services:
+  flowtrace:
+    image: ${FLOWTRACE_IMAGE:-flowtrace:local}
+    build:
+      context: .
+      target: app-runtime
+    init: true
+    restart: unless-stopped
+    environment:
+      FLOWTRACE_DATABASE_PATH: /data/flowtrace.db
+      FLOWTRACE_HOST: 0.0.0.0
+      FLOWTRACE_PORT: 3100
+      FLOWTRACE_SEED_DEMO: "false"
+    ports:
+      - "${FLOWTRACE_PUBLISH_PORT:-3100}:3100"
+    volumes:
+      - flowtrace_data:/data
+
+volumes:
+  flowtrace_data:

@@ -1,20 +1,38 @@
 import 'reflect-metadata';
 import type { INestApplication } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
 import { configureApp } from '@/configure-app';
+import { configureStaticWeb } from '@/configure-static-web';
 import { entities } from '@/database/entities';
 import { InitialSchema1724428800000 } from '@/database/migrations/1724428800000-initial-schema';
 import { ProjectRhythms1724515200000 } from '@/database/migrations/1724515200000-project-rhythms';
 import { DomainModule } from '@/domain/domain.module';
 
 describe('HTTP API', () => {
+  const originalWebRoot = process.env.FLOWTRACE_WEB_ROOT;
   let app: INestApplication;
+  let webRoot: string;
 
   beforeAll(async () => {
+    webRoot = await mkdtemp(join(tmpdir(), 'flowtrace-web-'));
+    await mkdir(join(webRoot, 'assets'));
+    await writeFile(
+      join(webRoot, 'index.html'),
+      '<!doctype html><html><body>FlowTrace Web</body></html>',
+    );
+    await writeFile(
+      join(webRoot, 'assets', 'app.js'),
+      'window.flowtrace = true;',
+    );
+    process.env.FLOWTRACE_WEB_ROOT = webRoot;
     const module = await Test.createTestingModule({
       imports: [
         TypeOrmModule.forRoot({
@@ -27,13 +45,33 @@ describe('HTTP API', () => {
         DomainModule,
       ],
     }).compile();
-    app = module.createNestApplication();
+    app = module.createNestApplication<NestExpressApplication>();
     configureApp(app);
+    configureStaticWeb(app as NestExpressApplication);
     await app.init();
   });
 
   afterAll(async () => {
     if (app) await app.close();
+    await rm(webRoot, { recursive: true, force: true });
+    if (originalWebRoot === undefined) delete process.env.FLOWTRACE_WEB_ROOT;
+    else process.env.FLOWTRACE_WEB_ROOT = originalWebRoot;
+  });
+
+  it('serves the Web app and client routes alongside the API', async () => {
+    await request(app.getHttpServer())
+      .get('/')
+      .expect(200)
+      .expect(/FlowTrace Web/);
+    await request(app.getHttpServer())
+      .get('/projects/example')
+      .expect(200)
+      .expect(/FlowTrace Web/);
+    await request(app.getHttpServer())
+      .get('/assets/app.js')
+      .expect(200)
+      .expect(/window\.flowtrace/);
+    await request(app.getHttpServer()).get('/api/health').expect(200);
   });
 
   it('publishes a machine-readable OpenAPI document', async () => {
