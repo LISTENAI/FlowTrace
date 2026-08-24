@@ -14,11 +14,20 @@ import {
   CubeIcon,
 } from '@heroicons/vue/24/outline';
 import dayjs from 'dayjs';
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from 'vue';
 import { formatDate, statusDot } from '@/lib/presentation';
 import TimelineBar from '@/components/TimelineBar.vue';
 
 type TimelineMode = 'baseline' | 'current' | 'actual';
+type ExpansionMode = 'smart' | 'depth' | 'custom';
 type WorkItem = Stage | Bug;
 type DateRange = { start: string; end: string };
 type VersionGroup = {
@@ -34,6 +43,10 @@ const props = defineProps<{
   versions: Version[];
   mode: TimelineMode;
 }>();
+const expansionMode = defineModel<ExpansionMode>('expansionMode', {
+  default: 'smart',
+});
+const expansionDepth = defineModel<number>('expansionDepth', { default: 1 });
 
 const expandedVersions = reactive(new Set<string>());
 const expandedRequirements = reactive(new Set<string>());
@@ -41,7 +54,6 @@ const expandedBugGroups = reactive(new Set<string>());
 const timelineSurface = ref<HTMLElement>();
 const scrollContainer = ref<HTMLElement>();
 const labelColumn = ref<HTMLElement>();
-const initializedVersions = new Set<string>();
 const collator = new Intl.Collator('zh-CN', { numeric: true });
 const labelWidth = 320;
 const dayWidth = 32;
@@ -203,15 +215,69 @@ const groups = computed<VersionGroup[]>(() => {
   ];
 });
 
+function replaceSet(set: Set<string>, ids: string[]) {
+  set.clear();
+  for (const id of ids) set.add(id);
+}
+
+function pruneSet(set: Set<string>, validIds: Set<string>) {
+  for (const id of set) {
+    if (!validIds.has(id)) set.delete(id);
+  }
+}
+
+function syncExpansion() {
+  const requirements = groups.value.flatMap((group) => group.requirements);
+  if (expansionMode.value === 'custom') {
+    pruneSet(expandedVersions, new Set(groups.value.map((group) => group.id)));
+    pruneSet(
+      expandedRequirements,
+      new Set(requirements.map((requirement) => requirement.id)),
+    );
+    pruneSet(
+      expandedBugGroups,
+      new Set(requirements.map((requirement) => requirement.id)),
+    );
+    return;
+  }
+
+  if (expansionMode.value === 'smart') {
+    replaceSet(
+      expandedVersions,
+      groups.value
+        .filter((group) => group.status === 'active')
+        .map((group) => group.id),
+    );
+    expandedRequirements.clear();
+    expandedBugGroups.clear();
+    return;
+  }
+
+  replaceSet(
+    expandedVersions,
+    expansionDepth.value >= 1
+      ? groups.value.map((group) => group.id)
+      : [],
+  );
+  replaceSet(
+    expandedRequirements,
+    expansionDepth.value >= 2
+      ? requirements.map((requirement) => requirement.id)
+      : [],
+  );
+  replaceSet(
+    expandedBugGroups,
+    expansionDepth.value >= 3
+      ? requirements
+          .filter((requirement) => requirement.bugs.length)
+          .map((requirement) => requirement.id)
+      : [],
+  );
+}
+
 watch(
-  groups,
-  (items) => {
-    for (const group of items) {
-      if (initializedVersions.has(group.id)) continue;
-      initializedVersions.add(group.id);
-      if (group.status === 'active') expandedVersions.add(group.id);
-    }
-  },
+  [groups, expansionMode, expansionDepth],
+  syncExpansion,
   { immediate: true },
 );
 
@@ -290,10 +356,49 @@ function wheelDeltaInPixels(event: WheelEvent) {
   return event.deltaY;
 }
 
+function documentOffsetTop(element: HTMLElement) {
+  let top = 0;
+  let current: HTMLElement | null = element;
+  while (current) {
+    top += current.offsetTop;
+    current = current.offsetParent as HTMLElement | null;
+  }
+  return top;
+}
+
+function pageScrollLimit() {
+  const surface = timelineSurface.value;
+  if (!surface) return Number.POSITIVE_INFINITY;
+  const configuredTop = Number.parseFloat(getComputedStyle(surface).top);
+  const stickyTop = Number.isFinite(configuredTop) ? configuredTop : 0;
+  return Math.max(0, documentOffsetTop(surface) - stickyTop);
+}
+
 function scrollPageBy(deltaY: number) {
   const before = window.scrollY;
-  window.scrollBy({ top: deltaY });
+  window.scrollTo({
+    top: Math.max(0, Math.min(pageScrollLimit(), before + deltaY)),
+  });
   return window.scrollY - before;
+}
+
+function keepPageAtTimelineAnchor() {
+  const limit = pageScrollLimit();
+  if (window.scrollY > limit + 1) window.scrollTo({ top: limit });
+}
+
+function handleOuterWheel(event: WheelEvent) {
+  if (event.ctrlKey || event.shiftKey) return;
+  const container = scrollContainer.value;
+  if (container && event.composedPath().includes(container)) return;
+  if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+
+  const deltaY = wheelDeltaInPixels(event);
+  const limit = pageScrollLimit();
+  if (deltaY > 0 && window.scrollY + deltaY > limit) {
+    event.preventDefault();
+    window.scrollTo({ top: limit });
+  }
 }
 
 function handleTimelineWheel(event: WheelEvent) {
@@ -374,9 +479,20 @@ function segments(item: WorkItem) {
 function toggle(set: Set<string>, id: string) {
   if (set.has(id)) set.delete(id);
   else set.add(id);
+  expansionMode.value = 'custom';
 }
 
-onMounted(() => requestAnimationFrame(scrollToToday));
+onMounted(() => {
+  requestAnimationFrame(scrollToToday);
+  window.addEventListener('wheel', handleOuterWheel, { passive: false });
+  window.addEventListener('scroll', keepPageAtTimelineAnchor, { passive: true });
+  keepPageAtTimelineAnchor();
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('wheel', handleOuterWheel);
+  window.removeEventListener('scroll', keepPageAtTimelineAnchor);
+});
 
 watch(
   () => props.requirements.length,

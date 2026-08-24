@@ -172,15 +172,21 @@ a[class~="inline-flex"] {
   grid-template-columns: var(--timeline-label-width) minmax(0, 1fr);
 }
 
-/* 时间线吸附后保留日期与当前层级，垂直滚动在页面和时间线间级联。 */
-.timeline-surface {
+/* 工具栏与时间线按全局顶栏、日期和业务层级依次吸附。 */
+.timeline-toolbar {
   position: sticky;
   top: 4.5rem;
+  z-index: 60;
+}
+
+.timeline-surface {
+  position: sticky;
+  top: 8.25rem;
   z-index: 10;
 }
 
 .timeline-scroll {
-  max-height: calc(100dvh - 10rem);
+  max-height: calc(100dvh - 11.75rem);
   overflow: auto;
   overscroll-behavior-x: contain;
   overscroll-behavior-y: auto;

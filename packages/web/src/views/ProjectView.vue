@@ -8,11 +8,13 @@ import {
   AdjustmentsHorizontalIcon,
   ArrowPathIcon,
   CalendarDaysIcon,
+  CheckIcon,
   ChevronDownIcon,
   Cog6ToothIcon,
   ExclamationTriangleIcon,
   ListBulletIcon,
   PlusIcon,
+  RectangleStackIcon,
   SquaresPlusIcon,
 } from '@heroicons/vue/24/outline';
 import dayjs from 'dayjs';
@@ -34,6 +36,9 @@ const loading = ref(true);
 const error = ref('');
 const view = ref<'list' | 'timeline'>('list');
 const timelineMode = ref<'baseline' | 'current' | 'actual'>('current');
+const timelineExpansionMode = ref<'smart' | 'depth' | 'custom'>('smart');
+const timelineExpansionDepth = ref(1);
+const timelineExpansionOpen = ref(false);
 const timelineRequirements = ref<Requirement[]>([]);
 const createOpen = ref(false);
 const saving = ref(false);
@@ -69,6 +74,46 @@ const requirements = computed(() => {
 const activeFilters = computed(
   () => Object.values(filters).filter((value) => value !== 'all').length,
 );
+const timelineExpansionOptions = [
+  { value: 'smart', label: '智能', hint: '按版本状态展开' },
+  { value: 0, label: '版本', hint: '只看版本汇总' },
+  { value: 1, label: '需求', hint: '显示版本内需求' },
+  { value: 2, label: '过程', hint: '显示需求的各个阶段' },
+  { value: 3, label: '明细', hint: '同时显示具体 Bug' },
+] as const;
+const timelineExpansionLabel = computed(() => {
+  if (timelineExpansionMode.value === 'smart') return '智能';
+  if (timelineExpansionMode.value === 'custom') return '自定义';
+  return (
+    timelineExpansionOptions.find(
+      (item) => item.value === timelineExpansionDepth.value,
+    )?.label ?? '自定义'
+  );
+});
+
+function setTimelineExpansionDepth(value: number) {
+  timelineExpansionDepth.value = Math.max(0, Math.min(3, Math.round(value)));
+  timelineExpansionMode.value = 'depth';
+}
+
+function resetTimelineExpansion() {
+  timelineExpansionDepth.value = 1;
+  timelineExpansionMode.value = 'smart';
+}
+
+function selectTimelineExpansion(value: 'smart' | number) {
+  if (value === 'smart') resetTimelineExpansion();
+  else setTimelineExpansionDepth(value);
+  timelineExpansionOpen.value = false;
+}
+
+function timelineExpansionSelected(value: 'smart' | number) {
+  if (value === 'smart') return timelineExpansionMode.value === 'smart';
+  return (
+    timelineExpansionMode.value === 'depth' &&
+    timelineExpansionDepth.value === value
+  );
+}
 
 async function load() {
   loading.value = true;
@@ -327,17 +372,15 @@ watch(projectId, () => {
 
       <section class="mt-7">
         <div
-          class="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"
+          class="timeline-toolbar mb-2 flex flex-wrap items-center gap-1.5 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm"
         >
-          <div class="flex flex-wrap items-center gap-2">
-            <div
-              class="flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm"
-            >
+          <div class="flex shrink-0 items-center gap-1">
+            <div class="flex items-center gap-1">
               <button
-                class="rounded-lg px-3 py-1.5 text-xs font-semibold transition"
+                class="h-9 rounded-xl px-3 text-xs font-semibold transition"
                 :class="
                   view === 'list'
-                    ? 'bg-slate-900 text-white'
+                    ? 'bg-slate-900 text-white dark:bg-indigo-500'
                     : 'text-slate-500 hover:bg-slate-50'
                 "
                 @click="setView('list')"
@@ -347,10 +390,10 @@ watch(projectId, () => {
                 >
               </button>
               <button
-                class="rounded-lg px-3 py-1.5 text-xs font-semibold transition"
+                class="h-9 rounded-xl px-3 text-xs font-semibold transition"
                 :class="
                   view === 'timeline'
-                    ? 'bg-slate-900 text-white'
+                    ? 'bg-slate-900 text-white dark:bg-indigo-500'
                     : 'text-slate-500 hover:bg-slate-50'
                 "
                 @click="setView('timeline')"
@@ -360,10 +403,14 @@ watch(projectId, () => {
                 >
               </button>
             </div>
+            <span class="mx-1 h-5 w-px bg-slate-200" />
             <div class="relative">
               <button
-                class="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-sm"
-                @click="filtersOpen = !filtersOpen"
+                class="focus-ring inline-flex h-9 items-center gap-2 rounded-xl px-2.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
+                @click="
+                  filtersOpen = !filtersOpen;
+                  timelineExpansionOpen = false;
+                "
               >
                 <AdjustmentsHorizontalIcon class="h-4 w-4" />筛选
                 <span
@@ -375,7 +422,7 @@ watch(projectId, () => {
               </button>
               <div
                 v-if="filtersOpen"
-                class="absolute left-0 top-11 z-20 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-900/10"
+                class="absolute left-0 top-11 z-30 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-900/10"
               >
                 <label class="block text-[11px] font-medium text-slate-500"
                   >目标版本<select
@@ -421,32 +468,107 @@ watch(projectId, () => {
                 >
               </div>
             </div>
-            <span class="text-xs text-slate-400"
-              >{{ requirements.length }} 项需求</span
+            <span
+              class="whitespace-nowrap px-1.5 text-[11px] font-medium text-slate-400"
+              :aria-label="`${requirements.length} 项需求`"
+              >{{ requirements.length }} 项</span
             >
           </div>
 
           <div
             v-if="view === 'timeline'"
-            class="flex items-center gap-1 rounded-xl bg-slate-100 p-1"
+            class="ml-auto flex max-w-full shrink-0 items-center justify-end gap-1 max-sm:w-full max-sm:justify-between"
           >
-            <button
-              v-for="item in [
-                { id: 'baseline', label: '初始计划' },
-                { id: 'current', label: '当前计划' },
-                { id: 'actual', label: '实际过程' },
-              ]"
-              :key="item.id"
-              class="rounded-lg px-3 py-1.5 text-[11px] font-semibold transition"
-              :class="
-                timelineMode === item.id
-                  ? 'bg-white text-slate-800 shadow-sm'
-                  : 'text-slate-500'
-              "
-              @click="timelineMode = item.id as typeof timelineMode"
-            >
-              {{ item.label }}
-            </button>
+            <div class="relative">
+              <button
+                type="button"
+                class="focus-ring inline-flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-indigo-600"
+                aria-haspopup="menu"
+                :aria-expanded="timelineExpansionOpen"
+                @click="
+                  timelineExpansionOpen = !timelineExpansionOpen;
+                  filtersOpen = false;
+                "
+              >
+                <RectangleStackIcon class="h-4 w-4" />
+                <span>展开</span>
+                <span class="text-indigo-600">{{ timelineExpansionLabel }}</span>
+                <ChevronDownIcon
+                  class="h-3 w-3 text-slate-400 transition"
+                  :class="timelineExpansionOpen ? 'rotate-180' : ''"
+                />
+              </button>
+
+              <button
+                v-if="timelineExpansionOpen"
+                type="button"
+                aria-label="关闭展开层级菜单"
+                class="fixed inset-0 z-20 cursor-default"
+                @click="timelineExpansionOpen = false"
+              />
+              <div
+                v-if="timelineExpansionOpen"
+                role="menu"
+                aria-label="展开层级"
+                class="absolute right-0 top-11 z-30 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-900/10"
+              >
+                <button
+                  v-for="item in timelineExpansionOptions"
+                  :key="item.value"
+                  type="button"
+                  role="menuitemradio"
+                  :aria-checked="timelineExpansionSelected(item.value)"
+                  class="focus-ring flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50"
+                  :class="
+                    timelineExpansionSelected(item.value)
+                      ? 'bg-indigo-50/70'
+                      : ''
+                  "
+                  @click="selectTimelineExpansion(item.value)"
+                >
+                  <span
+                    class="grid h-5 w-5 shrink-0 place-items-center rounded-full border"
+                    :class="
+                      timelineExpansionSelected(item.value)
+                        ? 'border-indigo-500 bg-indigo-500 text-white'
+                        : 'border-slate-200 text-transparent'
+                    "
+                  >
+                    <CheckIcon class="h-3 w-3" />
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span
+                      class="block text-xs font-semibold text-slate-700"
+                      >{{ item.label }}</span
+                    >
+                    <span class="mt-0.5 block text-[10px] text-slate-400">{{
+                      item.hint
+                    }}</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <span class="mx-1 h-5 w-px bg-slate-200" />
+            <div class="flex items-center gap-0.5">
+              <button
+                v-for="item in [
+                  { id: 'baseline', label: '初始计划' },
+                  { id: 'current', label: '当前计划' },
+                  { id: 'actual', label: '实际过程' },
+                ]"
+                :key="item.id"
+                class="h-9 rounded-xl px-2.5 text-[11px] font-semibold transition"
+                :class="
+                  timelineMode === item.id
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'
+                "
+                @click="timelineMode = item.id as typeof timelineMode"
+              >
+                {{ item.label }}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -474,6 +596,8 @@ watch(projectId, () => {
         </div>
         <div v-else>
           <TimelineView
+            v-model:expansion-depth="timelineExpansionDepth"
+            v-model:expansion-mode="timelineExpansionMode"
             :requirements="timelineRequirements"
             :versions="snapshot.versions"
             :mode="timelineMode"
