@@ -1,19 +1,27 @@
-FROM node:24-bookworm AS base
+FROM node:24-bookworm AS workspace
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/backend/package.json ./packages/backend/
 COPY packages/web/package.json ./packages/web/
 COPY packages/mcp/package.json ./packages/mcp/
+
+FROM workspace AS base
 RUN npm ci
 
 FROM base AS dev
 COPY . .
 EXPOSE 3100 5173
 
-FROM base AS builder
+FROM workspace AS build-dependencies
+RUN npm ci --ignore-scripts
+
+FROM build-dependencies AS builder
 COPY . .
 RUN npm run build
+
+FROM workspace AS production-dependencies
+RUN npm ci --omit=dev -w @flowtrace/backend -w @flowtrace/mcp
 
 FROM node:24-bookworm-slim AS app-runtime
 WORKDIR /app
@@ -22,7 +30,7 @@ COPY package.json package-lock.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/backend/package.json ./packages/backend/
 COPY packages/mcp/package.json ./packages/mcp/
-RUN npm ci --omit=dev -w @flowtrace/backend -w @flowtrace/mcp
+COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/mcp/dist ./packages/mcp/dist
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
