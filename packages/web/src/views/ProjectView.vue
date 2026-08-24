@@ -475,6 +475,7 @@ watch(projectId, () => {
         <div v-else>
           <TimelineView
             :requirements="timelineRequirements"
+            :versions="snapshot.versions"
             :mode="timelineMode"
           />
         </div>

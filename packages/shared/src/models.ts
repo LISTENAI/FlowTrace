@@ -71,6 +71,7 @@ export interface Version {
   projectId: string;
   name: string;
   status: VersionStatus;
+  sortOrder: number;
   plannedStartAt?: string;
   plannedReleaseAt?: string;
   actualReleaseAt?: string;

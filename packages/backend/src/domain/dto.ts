@@ -217,6 +217,12 @@ export class UpdateVersionDto extends ChangeContextDto {
   @IsIn(['planning', 'active', 'released', 'canceled'])
   status?: VersionStatus;
 
+  @ApiPropertyOptional({ minimum: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  sortOrder?: number;
+
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()
   @IsISO8601()

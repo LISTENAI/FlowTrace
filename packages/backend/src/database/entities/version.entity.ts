@@ -15,6 +15,9 @@ export class VersionEntity extends BaseEntity {
   @Column('text', { default: 'planning' })
   status!: VersionStatus;
 
+  @Column('integer', { default: 0 })
+  sortOrder!: number;
+
   @Column('datetime', { nullable: true })
   plannedStartAt!: Date | null;
 

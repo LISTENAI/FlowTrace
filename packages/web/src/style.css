@@ -168,6 +168,10 @@ a[class~="inline-flex"] {
   color: #4f46e5;
 }
 
+.timeline-grid {
+  grid-template-columns: var(--timeline-label-width) minmax(0, 1fr);
+}
+
 /* 人员色调由稳定 ID 映射，所有视图共享同一视觉身份。 */
 .person-tone-indigo {
   background: #e0e7ff;
@@ -210,7 +214,7 @@ a[class~="inline-flex"] {
 }
 
 /* 半透明卡片各自形成层叠上下文，菜单展开时需连同卡片一起置顶。 */
-.person-card:has([aria-expanded='true']) {
+.person-card:has([aria-expanded="true"]) {
   z-index: 40;
 }
 
@@ -363,6 +367,8 @@ a[class~="inline-flex"] {
 }
 
 .dark [class~="bg-slate-50"],
+.dark [class~="bg-slate-50/95"],
+.dark [class~="bg-slate-50/80"],
 .dark [class~="bg-slate-50/70"],
 .dark [class~="bg-slate-50/60"],
 .dark [class~="bg-slate-50/50"] {
@@ -459,9 +465,11 @@ a[class~="inline-flex"] {
 }
 
 .dark [class~="bg-rose-50"],
+.dark [class~="bg-rose-50/80"],
 .dark [class~="bg-rose-50/70"],
 .dark [class~="bg-rose-50/50"],
 .dark [class~="bg-rose-50/35"],
+.dark [class~="bg-rose-50/20"],
 .dark [class~="bg-rose-100"] {
   background-color: rgba(136, 19, 55, 0.24);
 }
@@ -525,9 +533,29 @@ a[class~="inline-flex"] {
   background-color: #273449;
 }
 
+.dark [class~="hover:bg-slate-100/70"]:hover {
+  background-color: rgba(39, 52, 73, 0.88);
+}
+
 .dark [class~="hover:bg-slate-50"]:hover,
 .dark [class~="hover:bg-slate-50/60"]:hover {
   background-color: rgba(30, 41, 59, 0.82);
+}
+
+.dark [class~="hover:bg-rose-50/40"]:hover {
+  background-color: rgba(136, 19, 55, 0.32);
+}
+
+.dark .group:hover [class~="group-hover:bg-slate-100/95"] {
+  background-color: rgba(39, 52, 73, 0.95);
+}
+
+.dark .group:hover [class~="group-hover:bg-slate-50"] {
+  background-color: rgba(30, 41, 59, 0.82);
+}
+
+.dark .group:hover [class~="group-hover:bg-rose-50/80"] {
+  background-color: rgba(136, 19, 55, 0.32);
 }
 
 .dark [class~="focus:bg-white"]:focus {

@@ -8,6 +8,7 @@ import { entities } from '@/database/entities';
 import { InitialSchema1724428800000 } from '@/database/migrations/1724428800000-initial-schema';
 import { ProjectRhythms1724515200000 } from '@/database/migrations/1724515200000-project-rhythms';
 import { SoftDeleteWorkItems1724601600000 } from '@/database/migrations/1724601600000-soft-delete-work-items';
+import { VersionSortOrder1724688000000 } from '@/database/migrations/1724688000000-version-sort-order';
 import { DomainModule } from '@/domain/domain.module';
 import { WorkService } from '@/domain/work.service';
 
@@ -27,6 +28,7 @@ describe.sequential('WorkService business rules', () => {
             InitialSchema1724428800000,
             ProjectRhythms1724515200000,
             SoftDeleteWorkItems1724601600000,
+            VersionSortOrder1724688000000,
           ],
           migrationsRun: true,
           synchronize: false,
@@ -390,6 +392,23 @@ describe.sequential('WorkService business rules', () => {
       source: 'agent',
       agentName: '测试 Agent',
     });
+  });
+
+  it('keeps versions in the manually maintained order', async () => {
+    const project = await work.createProject({
+      key: 'VORDER',
+      name: '版本排序验证',
+      templateStages: [{ name: '开发' }],
+    });
+    const first = await work.createVersion(project.id, { name: '先行版本' });
+    const second = await work.createVersion(project.id, { name: '后续版本' });
+
+    await work.updateVersion(first.id, { sortOrder: 1 });
+    await work.updateVersion(second.id, { sortOrder: 0 });
+
+    expect(
+      (await work.listVersions(project.id)).map((item) => item.name),
+    ).toEqual(['后续版本', '先行版本']);
   });
 
   it('allows cross-project reciprocal collaboration and only reports satisfaction', async () => {

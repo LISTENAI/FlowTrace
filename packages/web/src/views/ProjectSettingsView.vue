@@ -25,6 +25,7 @@ const versions = ref<Version[]>([]);
 const stages = ref<TemplateStage[]>([]);
 const saving = ref(false);
 const versionOpen = ref(false);
+const versionOrderSaving = ref(false);
 const projectForm = reactive({ name: '', description: '' });
 const versionForm = reactive({
   name: '',
@@ -110,6 +111,32 @@ async function createVersion() {
     );
   } finally {
     saving.value = false;
+  }
+}
+
+async function moveVersion(index: number, offset: number) {
+  const target = index + offset;
+  const currentVersion = versions.value[index];
+  const targetVersion = versions.value[target];
+  if (!currentVersion || !targetVersion || versionOrderSaving.value) return;
+  versionOrderSaving.value = true;
+  try {
+    await Promise.all([
+      api.updateVersion(currentVersion.id, { sortOrder: target }),
+      api.updateVersion(targetVersion.id, { sortOrder: index }),
+    ]);
+    const [moved] = versions.value.splice(index, 1);
+    if (moved) versions.value.splice(target, 0, moved);
+    toasts.show('版本顺序已更新');
+  } catch (error) {
+    toasts.show(
+      '排序失败',
+      error instanceof Error ? error.message : undefined,
+      'error',
+    );
+    await load();
+  } finally {
+    versionOrderSaving.value = false;
   }
 }
 
@@ -236,7 +263,7 @@ onMounted(async () => {
           <div class="min-w-0">
             <h2 class="text-sm font-semibold text-slate-900">交付版本</h2>
             <p class="mt-0.5 text-[11px] text-slate-400">
-              同一长期项目中的计划交付批次。
+              同一长期项目中的计划交付批次，可按实际管理习惯调整顺序。
             </p>
           </div>
           <button class="focus-ring section-action" @click="versionOpen = true">
@@ -245,10 +272,11 @@ onMounted(async () => {
         </div>
         <div class="divide-y divide-slate-100 px-5 sm:px-6">
           <div
-            v-for="version in versions"
+            v-for="(version, index) in versions"
             :key="version.id"
             class="flex items-center gap-4 py-4"
           >
+            <Bars3Icon class="h-4 w-4 shrink-0 text-slate-300" />
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
                 <span class="font-semibold text-slate-800">{{
@@ -275,6 +303,26 @@ onMounted(async () => {
               <p class="mt-0.5 text-xs font-medium text-slate-600">
                 {{ formatDate(version.plannedReleaseAt) }}
               </p>
+            </div>
+            <div class="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                class="rounded-lg p-1.5 text-slate-300 transition hover:bg-slate-50 hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-25"
+                :disabled="versionOrderSaving || index === 0"
+                :aria-label="`上移版本${version.name}`"
+                @click="moveVersion(index, -1)"
+              >
+                <ChevronUpIcon class="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                class="rounded-lg p-1.5 text-slate-300 transition hover:bg-slate-50 hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-25"
+                :disabled="versionOrderSaving || index === versions.length - 1"
+                :aria-label="`下移版本${version.name}`"
+                @click="moveVersion(index, 1)"
+              >
+                <ChevronDownIcon class="h-4 w-4" />
+              </button>
             </div>
           </div>
           <p

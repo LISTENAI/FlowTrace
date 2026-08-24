@@ -272,7 +272,7 @@ export class WorkService {
   async listVersions(projectId: string): Promise<Version[]> {
     const rows = await this.versions.find({
       where: { projectId },
-      order: { createdAt: 'DESC' },
+      order: { sortOrder: 'ASC', createdAt: 'DESC' },
     });
     return rows.map((item) => this.toVersion(item));
   }
@@ -282,11 +282,19 @@ export class WorkService {
     input: CreateVersionDto,
   ): Promise<Version> {
     const project = await this.findProject(projectId);
+    const last = (
+      await this.versions.find({
+        where: { projectId: project.id },
+        order: { sortOrder: 'DESC' },
+        take: 1,
+      })
+    )[0];
     const version = this.versions.create({
       id: randomUUID(),
       projectId: project.id,
       name: input.name,
       status: input.status ?? 'planning',
+      sortOrder: (last?.sortOrder ?? -1) + 1,
       plannedStartAt: date(input.plannedStartAt),
       plannedReleaseAt: date(input.plannedReleaseAt),
       actualReleaseAt: null,
@@ -309,6 +317,7 @@ export class WorkService {
     if (!version) throw new NotFoundException('未找到版本');
     if (input.name !== undefined) version.name = input.name;
     if (input.status !== undefined) version.status = input.status;
+    if (input.sortOrder !== undefined) version.sortOrder = input.sortOrder;
     if (input.plannedStartAt !== undefined)
       version.plannedStartAt = date(input.plannedStartAt);
     if (input.plannedReleaseAt !== undefined)
@@ -1620,6 +1629,7 @@ export class WorkService {
       projectId: row.projectId,
       name: row.name,
       status: row.status,
+      sortOrder: row.sortOrder,
       plannedStartAt: iso(row.plannedStartAt),
       plannedReleaseAt: iso(row.plannedReleaseAt),
       actualReleaseAt: iso(row.actualReleaseAt),

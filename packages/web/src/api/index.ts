@@ -67,6 +67,8 @@ export const api = {
       method: 'POST',
       body: input,
     }),
+  updateVersion: (id: string, input: Record<string, unknown>) =>
+    request<Version>(`/versions/${id}`, { method: 'PATCH', body: input }),
   requirements: (filters: Record<string, string | undefined>) => {
     const query = new URLSearchParams();
     Object.entries(filters).forEach(
