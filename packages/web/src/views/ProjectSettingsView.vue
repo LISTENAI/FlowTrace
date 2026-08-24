@@ -4,6 +4,8 @@ import {
   ArrowLeftIcon,
   Bars3Icon,
   CheckIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   PlusIcon,
   TrashIcon,
 } from '@heroicons/vue/24/outline';
@@ -11,6 +13,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import { api } from '@/api';
 import AppModal from '@/components/AppModal.vue';
+import { createLocalId } from '@/lib/local-id';
 import { formatDate, versionLabels } from '@/lib/presentation';
 import { toasts } from '@/state/toasts';
 import { loadWorkspace } from '@/state/workspace';
@@ -44,12 +47,21 @@ async function load() {
 
 function addStage() {
   stages.value.push({
-    id: crypto.randomUUID(),
+    id: createLocalId(),
     name: '新阶段',
     order: stages.value.length,
     ownerIds: [],
     dependsOnTemplateStageIds: [],
   });
+}
+
+function moveStage(index: number, offset: number) {
+  const target = index + offset;
+  if (target < 0 || target >= stages.value.length) return;
+  const [stage] = stages.value.splice(index, 1);
+  if (!stage) return;
+  stages.value.splice(target, 0, stage);
+  stages.value.forEach((item, order) => (item.order = order));
 }
 
 function removeStage(index: number) {
@@ -181,7 +193,26 @@ onMounted(load);
               v-model="stage.name"
               class="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-700 outline-none"
             /><button
-              class="rounded-lg p-1.5 text-slate-300 opacity-0 transition hover:bg-rose-50 hover:text-rose-500 group-hover:opacity-100"
+              type="button"
+              class="rounded-lg p-1.5 text-slate-300 transition hover:bg-white hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-25"
+              :disabled="index === 0"
+              :aria-label="`上移${stage.name}`"
+              @click="moveStage(index, -1)"
+            >
+              <ChevronUpIcon class="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              class="rounded-lg p-1.5 text-slate-300 transition hover:bg-white hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-25"
+              :disabled="index === stages.length - 1"
+              :aria-label="`下移${stage.name}`"
+              @click="moveStage(index, 1)"
+            >
+              <ChevronDownIcon class="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              class="rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-rose-50 hover:text-rose-500 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
               aria-label="删除阶段"
               @click="removeStage(index)"
             >

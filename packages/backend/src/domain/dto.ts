@@ -3,6 +3,7 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsISO8601,
   IsNotEmpty,
   IsOptional,
@@ -10,6 +11,7 @@ import {
   Matches,
   MaxLength,
   MinLength,
+  Min,
 } from 'class-validator';
 import {
   executionStatuses,
@@ -316,6 +318,8 @@ export class CreateStageDto extends ChangeContextDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsInt()
+  @Min(0)
   order?: number;
 
   @ApiPropertyOptional()
@@ -348,6 +352,8 @@ export class UpdateStageDto extends ChangeContextDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsInt()
+  @Min(0)
   order?: number;
 }
 

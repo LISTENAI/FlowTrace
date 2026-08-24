@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { ProjectRhythm, TemplateStage } from '@flowtrace/shared';
 import {
-  ArrowLongRightIcon,
   CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   PlusIcon,
   QueueListIcon,
   TrashIcon,
@@ -10,6 +11,7 @@ import {
 import { onMounted, reactive, ref } from 'vue';
 import { api } from '@/api';
 import AppModal from '@/components/AppModal.vue';
+import { createLocalId } from '@/lib/local-id';
 import { toasts } from '@/state/toasts';
 
 const rhythms = ref<ProjectRhythm[]>([]);
@@ -36,8 +38,8 @@ async function load() {
 
 function emptyStage(order: number): TemplateStage {
   return {
-    id: crypto.randomUUID(),
-    name: '',
+    id: createLocalId(),
+    name: '新环节',
     order,
     ownerIds: [],
     dependsOnTemplateStageIds: [],
@@ -48,8 +50,18 @@ function addStage(rhythm: ProjectRhythm) {
   rhythm.stages.push(emptyStage(rhythm.stages.length));
 }
 
+function moveStage(rhythm: ProjectRhythm, index: number, offset: number) {
+  const target = index + offset;
+  if (target < 0 || target >= rhythm.stages.length) return;
+  const [stage] = rhythm.stages.splice(index, 1);
+  if (!stage) return;
+  rhythm.stages.splice(target, 0, stage);
+  rhythm.stages.forEach((item, order) => (item.order = order));
+}
+
 function removeStage(rhythm: ProjectRhythm, index: number) {
   rhythm.stages.splice(index, 1);
+  rhythm.stages.forEach((item, order) => (item.order = order));
 }
 
 async function save(rhythm: ProjectRhythm) {
@@ -210,44 +222,60 @@ async function confirmDelete() {
           </div>
 
           <div>
-            <div class="mb-2 flex items-center justify-between">
-              <span class="text-[11px] font-semibold text-slate-400"
-                >默认环节</span
+            <span class="mb-1.5 block text-[11px] font-semibold text-slate-400"
+              >默认环节</span
+            >
+            <div
+              class="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2"
+            >
+              <div
+                v-for="(stage, index) in rhythm.stages"
+                :key="stage.id"
+                class="group flex min-h-10 min-w-0 items-center rounded-xl border border-slate-200 bg-white shadow-sm focus-within:border-indigo-300"
               >
+                <span
+                  class="pl-2.5 font-mono text-[10px] font-semibold text-slate-300"
+                  >{{ index + 1 }}</span
+                >
+                <input
+                  v-model="stage.name"
+                  :aria-label="`${rhythm.name}第 ${index + 1} 个环节`"
+                  class="min-w-0 flex-1 bg-transparent px-2 py-2 text-xs font-medium text-slate-700 outline-none"
+                />
+                <button
+                  type="button"
+                  class="rounded-md p-1 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-25"
+                  :disabled="index === 0"
+                  :aria-label="`左移${stage.name || '空白环节'}`"
+                  @click="moveStage(rhythm, index, -1)"
+                >
+                  <ChevronLeftIcon class="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  class="rounded-md p-1 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-25"
+                  :disabled="index === rhythm.stages.length - 1"
+                  :aria-label="`右移${stage.name || '空白环节'}`"
+                  @click="moveStage(rhythm, index, 1)"
+                >
+                  <ChevronRightIcon class="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  class="mr-1 rounded-md p-1 text-slate-300 opacity-60 transition hover:bg-rose-50 hover:text-rose-500 group-hover:opacity-100"
+                  :aria-label="`删除${stage.name || '空白环节'}`"
+                  @click="removeStage(rhythm, index)"
+                >
+                  <TrashIcon class="h-3.5 w-3.5" />
+                </button>
+              </div>
               <button
-                class="focus-ring section-action"
+                type="button"
+                class="focus-ring stage-slot-action"
                 @click="addStage(rhythm)"
               >
                 <PlusIcon class="h-3.5 w-3.5" />添加环节
               </button>
-            </div>
-            <div class="flex flex-wrap items-center gap-1.5">
-              <template v-for="(stage, index) in rhythm.stages" :key="stage.id">
-                <div
-                  class="group flex items-center rounded-xl border border-slate-200 bg-white shadow-sm focus-within:border-indigo-300"
-                >
-                  <span
-                    class="pl-2.5 font-mono text-[10px] font-semibold text-slate-300"
-                    >{{ index + 1 }}</span
-                  >
-                  <input
-                    v-model="stage.name"
-                    :aria-label="`${rhythm.name}第 ${index + 1} 个环节`"
-                    class="w-24 bg-transparent px-2 py-2 text-xs font-medium text-slate-700 outline-none sm:w-28"
-                  />
-                  <button
-                    class="mr-1 rounded-md p-1 text-slate-300 opacity-60 transition hover:bg-rose-50 hover:text-rose-500 group-hover:opacity-100"
-                    :aria-label="`删除${stage.name || '空白环节'}`"
-                    @click="removeStage(rhythm, index)"
-                  >
-                    <TrashIcon class="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <ArrowLongRightIcon
-                  v-if="index < rhythm.stages.length - 1"
-                  class="h-4 w-4 text-slate-300"
-                />
-              </template>
             </div>
           </div>
 
@@ -348,7 +376,7 @@ async function confirmDelete() {
           </div>
           <button
             type="button"
-            class="focus-ring section-action mt-2"
+            class="focus-ring stage-slot-action mt-2 w-full"
             @click="addNewStage"
           >
             <PlusIcon class="h-3.5 w-3.5" />继续添加环节

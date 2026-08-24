@@ -11,6 +11,8 @@ import {
   BugAntIcon,
   CalendarDaysIcon,
   CheckIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   ClockIcon,
   LinkIcon,
   PlusIcon,
@@ -46,13 +48,19 @@ const addStageOpen = ref(false);
 const addBugOpen = ref(false);
 const addDependencyOpen = ref(false);
 const saving = ref(false);
+const movingStageId = ref('');
 const statusTarget = ref<Stage | Bug>();
 const planningTarget = ref<Requirement | Stage | Bug>();
 const candidateRequirements = ref<
   Array<{ id: string; key: string; title: string; projectId: string }>
 >([]);
 const selectedPredecessor = ref<Requirement>();
-const stageForm = reactive({ name: '', note: '', ownerIds: [] as string[] });
+const stageForm = reactive({
+  name: '',
+  note: '',
+  ownerIds: [] as string[],
+  order: 0,
+});
 const bugForm = reactive({
   title: '',
   description: '',
@@ -71,6 +79,7 @@ const dependencyForm = reactive({
 const project = computed(() =>
   workspace.projects.find((item) => item.id === requirement.value?.projectId),
 );
+const stageOptions = computed(() => requirement.value?.stages ?? []);
 
 const events = computed(() => {
   if (!requirement.value) return [];
@@ -170,6 +179,11 @@ function toggleOwner(target: string[], ownerId: string) {
   else target.push(ownerId);
 }
 
+function openStageForm() {
+  stageForm.order = requirement.value?.stages.length ?? 0;
+  addStageOpen.value = true;
+}
+
 async function addStage() {
   if (!requirement.value) return;
   saving.value = true;
@@ -178,12 +192,14 @@ async function addStage() {
       name: stageForm.name,
       note: stageForm.note,
       ownerIds: stageForm.ownerIds,
+      order: stageForm.order,
     });
     addStageOpen.value = false;
     toasts.show('阶段已加入过程', stageForm.name);
     stageForm.name = '';
     stageForm.note = '';
     stageForm.ownerIds = [];
+    stageForm.order = 0;
     await load();
   } catch (error) {
     toasts.show(
@@ -193,6 +209,29 @@ async function addStage() {
     );
   } finally {
     saving.value = false;
+  }
+}
+
+async function moveStage(stage: Stage, index: number, offset: number) {
+  if (!requirement.value) return;
+  const target = index + offset;
+  if (target < 0 || target >= requirement.value.stages.length) return;
+  movingStageId.value = stage.id;
+  try {
+    await api.updateStage(stage.id, {
+      order: target,
+      reason: '手动调整实际过程顺序',
+    });
+    await load();
+    toasts.show('阶段顺序已调整', `${stage.name} 现在位于第 ${target + 1} 位`);
+  } catch (error) {
+    toasts.show(
+      '调整失败',
+      error instanceof Error ? error.message : undefined,
+      'error',
+    );
+  } finally {
+    movingStageId.value = '';
   }
 }
 
@@ -368,10 +407,7 @@ watch(id, load);
                   点击任一行，就地记录状态与生效时间
                 </p>
               </div>
-              <button
-                class="focus-ring section-action"
-                @click="addStageOpen = true"
-              >
+              <button class="focus-ring section-action" @click="openStageForm">
                 <PlusIcon class="h-3.5 w-3.5" />新增阶段
               </button>
             </div>
@@ -442,8 +478,29 @@ watch(id, load);
                       >{{ statusLabels[stage.status] }}</span
                     >
                   </button>
+                  <div class="mr-1 flex shrink-0 flex-col gap-0.5">
+                    <button
+                      class="focus-ring rounded-md p-1 text-slate-300 transition hover:bg-white hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-20"
+                      :disabled="index === 0 || movingStageId === stage.id"
+                      :aria-label="`上移${stage.name}`"
+                      @click="moveStage(stage, index, -1)"
+                    >
+                      <ChevronUpIcon class="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      class="focus-ring rounded-md p-1 text-slate-300 transition hover:bg-white hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-20"
+                      :disabled="
+                        index === requirement.stages.length - 1 ||
+                        movingStageId === stage.id
+                      "
+                      :aria-label="`下移${stage.name}`"
+                      @click="moveStage(stage, index, 1)"
+                    >
+                      <ChevronDownIcon class="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                   <button
-                    class="focus-ring mr-2 rounded-lg p-1.5 text-slate-300 opacity-0 transition hover:bg-white hover:text-indigo-600 group-hover:opacity-100 focus:opacity-100"
+                    class="focus-ring mr-2 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-white hover:text-indigo-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                     :aria-label="`调整「${stage.name}」的计划`"
                     @click="planningTarget = stage"
                   >
@@ -511,7 +568,7 @@ watch(id, load);
                   }}</span>
                 </button>
                 <button
-                  class="focus-ring ml-2 rounded-lg p-1.5 text-slate-300 opacity-0 transition hover:bg-slate-50 hover:text-indigo-600 group-hover:opacity-100 focus:opacity-100"
+                  class="focus-ring ml-2 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-slate-50 hover:text-indigo-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                   :aria-label="`调整「${bug.title}」的计划`"
                   @click="planningTarget = bug"
                 >
@@ -739,6 +796,24 @@ watch(id, load);
             rows="2"
             class="focus-ring w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
           />
+        </label>
+        <label class="block">
+          <span class="mb-1.5 block text-xs font-medium text-slate-600"
+            >插入位置</span
+          >
+          <select
+            v-model.number="stageForm.order"
+            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
+          >
+            <option :value="0">放在最前面</option>
+            <option
+              v-for="(stage, index) in stageOptions"
+              :key="stage.id"
+              :value="index + 1"
+            >
+              在「{{ stage.name }}」之后
+            </option>
+          </select>
         </label>
         <fieldset>
           <legend class="mb-2 text-xs font-medium text-slate-600">

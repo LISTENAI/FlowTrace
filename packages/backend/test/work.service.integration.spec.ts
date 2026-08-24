@@ -84,6 +84,39 @@ describe.sequential('WorkService business rules', () => {
     expect(second.stages.map((item) => item.name)).toEqual(['验证']);
   });
 
+  it('inserts and reorders actual stages without duplicate positions', async () => {
+    const project = await work.createProject({
+      key: 'ORDER',
+      name: '过程顺序验证',
+      templateStages: [{ name: '设计' }, { name: '开发' }, { name: '测试' }],
+    });
+    const requirement = await work.createRequirement({
+      projectId: project.id,
+      title: '验证阶段排序',
+    });
+
+    await work.addStage(requirement.id, { name: '评审', order: 1 });
+    const inserted = await work.getRequirement(requirement.id);
+    expect(inserted.stages.map((stage) => stage.name)).toEqual([
+      '设计',
+      '评审',
+      '开发',
+      '测试',
+    ]);
+    expect(inserted.stages.map((stage) => stage.order)).toEqual([0, 1, 2, 3]);
+
+    const testing = inserted.stages.find((stage) => stage.name === '测试')!;
+    await work.updateStage(testing.id, { order: 1 });
+    const reordered = await work.getRequirement(requirement.id);
+    expect(reordered.stages.map((stage) => stage.name)).toEqual([
+      '设计',
+      '测试',
+      '评审',
+      '开发',
+    ]);
+    expect(reordered.stages.map((stage) => stage.order)).toEqual([0, 1, 2, 3]);
+  });
+
   it('keeps backfilled status history ordered and calculates real durations', async () => {
     const requirement = (
       await work.listRequirements({ projectId: appProjectId })

@@ -522,48 +522,106 @@ export class WorkService {
   }
 
   async addStage(requirementId: string, input: CreateStageDto): Promise<Stage> {
-    const requirement = await this.findRequirement(requirementId);
-    const maxOrder = await this.stages.maximum('order', {
-      requirementId: requirement.id,
+    const stageId = await this.dataSource.transaction(async (manager) => {
+      const requirement = await manager
+        .getRepository(RequirementEntity)
+        .findOneBy({ id: requirementId });
+      if (!requirement) throw new NotFoundException('未找到需求');
+
+      const stageRepository = manager.getRepository(StageEntity);
+      const existing = await stageRepository.find({
+        where: { requirementId: requirement.id },
+        order: { order: 'ASC', createdAt: 'ASC' },
+      });
+      const targetOrder = Math.min(
+        Math.max(input.order ?? existing.length, 0),
+        existing.length,
+      );
+      existing.forEach((item, index) => {
+        item.order = index >= targetOrder ? index + 1 : index;
+      });
+      await stageRepository.save(existing);
+
+      const stage = stageRepository.create({
+        id: randomUUID(),
+        requirementId: requirement.id,
+        name: input.name,
+        order: targetOrder,
+        ownerIds: input.ownerIds ?? [],
+        status: 'not_started',
+        note: input.note ?? null,
+        statusReason: null,
+        expectedResumeAt: null,
+        baselineStartAt: date(input.plannedStartAt),
+        baselineEndAt: date(input.plannedEndAt),
+        plannedStartAt: date(input.plannedStartAt),
+        plannedEndAt: date(input.plannedEndAt),
+        actualStartAt: null,
+        actualEndAt: null,
+      });
+      await stageRepository.save(stage);
+      await this.recordChange(manager, {
+        entityType: 'stage',
+        entityId: stage.id,
+        projectId: requirement.projectId,
+        requirementId: requirement.id,
+        type: 'stage_added',
+        summary: `${requirement.key} 新增阶段「${stage.name}」`,
+        details: { order: targetOrder },
+        ...context(input),
+      });
+      return stage.id;
     });
-    const stage = this.stages.create({
-      id: randomUUID(),
-      requirementId: requirement.id,
-      name: input.name,
-      order: input.order ?? (maxOrder ?? -1) + 1,
-      ownerIds: input.ownerIds ?? [],
-      status: 'not_started',
-      note: input.note ?? null,
-      statusReason: null,
-      expectedResumeAt: null,
-      baselineStartAt: date(input.plannedStartAt),
-      baselineEndAt: date(input.plannedEndAt),
-      plannedStartAt: date(input.plannedStartAt),
-      plannedEndAt: date(input.plannedEndAt),
-      actualStartAt: null,
-      actualEndAt: null,
-    });
-    await this.stages.save(stage);
-    await this.recordChange(this.dataSource.manager, {
-      entityType: 'stage',
-      entityId: stage.id,
-      projectId: requirement.projectId,
-      requirementId: requirement.id,
-      type: 'stage_added',
-      summary: `${requirement.key} 新增阶段「${stage.name}」`,
-      ...context(input),
-    });
-    return this.toStage(stage, [], []);
+    return this.getStage(stageId);
   }
 
   async updateStage(id: string, input: UpdateStageDto): Promise<Stage> {
-    const stage = await this.findStage(id);
-    if (input.name !== undefined) stage.name = input.name;
-    if (input.ownerIds !== undefined) stage.ownerIds = input.ownerIds;
-    if (input.note !== undefined) stage.note = input.note || null;
-    if (input.order !== undefined) stage.order = input.order;
-    await this.stages.save(stage);
-    return this.getStage(stage.id);
+    await this.dataSource.transaction(async (manager) => {
+      const stageRepository = manager.getRepository(StageEntity);
+      const stage = await stageRepository.findOneBy({ id });
+      if (!stage) throw new NotFoundException('未找到阶段');
+      const requirement = await manager
+        .getRepository(RequirementEntity)
+        .findOneBy({ id: stage.requirementId });
+      if (!requirement) throw new NotFoundException('未找到需求');
+
+      if (input.name !== undefined) stage.name = input.name;
+      if (input.ownerIds !== undefined) stage.ownerIds = input.ownerIds;
+      if (input.note !== undefined) stage.note = input.note || null;
+
+      if (input.order === undefined) {
+        await stageRepository.save(stage);
+        return;
+      }
+
+      const siblings = await stageRepository.find({
+        where: { requirementId: stage.requirementId },
+        order: { order: 'ASC', createdAt: 'ASC' },
+      });
+      const fromOrder = siblings.findIndex((item) => item.id === stage.id);
+      const withoutStage = siblings.filter((item) => item.id !== stage.id);
+      const targetOrder = Math.min(
+        Math.max(input.order, 0),
+        withoutStage.length,
+      );
+      withoutStage.splice(targetOrder, 0, stage);
+      withoutStage.forEach((item, order) => (item.order = order));
+      await stageRepository.save(withoutStage);
+
+      if (fromOrder !== targetOrder) {
+        await this.recordChange(manager, {
+          entityType: 'stage',
+          entityId: stage.id,
+          projectId: requirement.projectId,
+          requirementId: requirement.id,
+          type: 'stage_order_changed',
+          summary: `${requirement.key} 调整阶段「${stage.name}」顺序`,
+          details: { fromOrder, toOrder: targetOrder },
+          ...context(input),
+        });
+      }
+    });
+    return this.getStage(id);
   }
 
   async updateStageStatus(id: string, input: UpdateStatusDto): Promise<Stage> {

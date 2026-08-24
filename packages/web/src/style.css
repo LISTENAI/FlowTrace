@@ -139,6 +139,35 @@ a[class~="inline-flex"] {
   color: #fff;
 }
 
+/* 列表中的新增入口占据一个完整空位，避免与标题栏操作混淆。 */
+.stage-slot-action {
+  display: flex;
+  min-height: 2.625rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: 0.75rem;
+  background: rgba(248, 250, 252, 0.72);
+  color: #94a3b8;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition:
+    color 150ms ease,
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.stage-slot-action:hover {
+  border-color: #a5b4fc;
+  background: rgba(238, 242, 255, 0.72);
+  color: #4f46e5;
+}
+
 .dark body {
   color: #dbe4f0;
   background:
@@ -201,6 +230,19 @@ a[class~="inline-flex"] {
   border-color: #818cf8;
   background: #6366f1;
   color: #fff;
+}
+
+.dark .stage-slot-action {
+  border-color: #475569;
+  background: rgba(17, 27, 45, 0.72);
+  color: #94a3b8;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.dark .stage-slot-action:hover {
+  border-color: #818cf8;
+  background: rgba(49, 46, 129, 0.28);
+  color: #a5b4fc;
 }
 
 .dark [class~="text-slate-900"],
