@@ -1,9 +1,12 @@
 import type { RequirementLifecycle } from '@flowtrace/shared';
-import { Column, Entity, Index } from 'typeorm';
+import { Column, DeleteDateColumn, Entity, Index } from 'typeorm';
 import { BaseEntity } from '@/database/entities/base';
 
 @Entity('requirements')
 export class RequirementEntity extends BaseEntity {
+  @DeleteDateColumn({ type: 'datetime', nullable: true })
+  deletedAt!: Date | null;
+
   @Index({ unique: true })
   @Column('text')
   key!: string;

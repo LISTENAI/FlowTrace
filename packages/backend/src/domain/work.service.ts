@@ -66,6 +66,7 @@ import type {
   CreateRequirementDto,
   CreateStageDto,
   CreateVersionDto,
+  DeleteWorkItemDto,
   MoveVersionDto,
   RescheduleDto,
   UpdateBugDto,
@@ -468,6 +469,36 @@ export class WorkService {
     return this.getRequirement(requirement.id);
   }
 
+  async deleteRequirement(id: string, input: DeleteWorkItemDto): Promise<void> {
+    const requirement = await this.findRequirement(id);
+    this.assertDeleteConfirmation(requirement.key, input.confirmation);
+    await this.dataSource.transaction(async (manager) => {
+      const [stages, bugs] = await Promise.all([
+        manager.getRepository(StageEntity).findBy({ requirementId: id }),
+        manager.getRepository(BugEntity).findBy({ requirementId: id }),
+      ]);
+      await this.deactivateDependencies(manager, [
+        { type: 'requirement', id },
+        ...stages.map((item) => ({ type: 'stage' as const, id: item.id })),
+        ...bugs.map((item) => ({ type: 'bug' as const, id: item.id })),
+      ]);
+      await this.recordChange(manager, {
+        entityType: 'requirement',
+        entityId: requirement.id,
+        projectId: requirement.projectId,
+        type: 'requirement_deleted',
+        summary: `删除需求 ${requirement.key}「${requirement.title}」`,
+        details: { reason: input.reason },
+        ...context(input),
+      });
+      await manager
+        .getRepository(StageEntity)
+        .softDelete({ requirementId: id });
+      await manager.getRepository(BugEntity).softDelete({ requirementId: id });
+      await manager.getRepository(RequirementEntity).softDelete(id);
+    });
+  }
+
   async moveRequirement(
     id: string,
     input: MoveVersionDto,
@@ -636,10 +667,31 @@ export class WorkService {
     return this.getStage(stage.id);
   }
 
-  async deleteStage(id: string): Promise<void> {
+  async deleteStage(id: string, input: DeleteWorkItemDto): Promise<void> {
     const stage = await this.findStage(id);
-    await this.assertDeletable('stage', stage.id);
-    await this.stages.remove(stage);
+    this.assertDeleteConfirmation(stage.name, input.confirmation);
+    const requirement = await this.findRequirement(stage.requirementId);
+    await this.dataSource.transaction(async (manager) => {
+      await this.deactivateDependencies(manager, [{ type: 'stage', id }]);
+      await this.recordChange(manager, {
+        entityType: 'stage',
+        entityId: stage.id,
+        projectId: requirement.projectId,
+        requirementId: requirement.id,
+        type: 'stage_deleted',
+        summary: `${requirement.key} 删除阶段「${stage.name}」`,
+        details: { reason: input.reason },
+        ...context(input),
+      });
+      await manager.getRepository(StageEntity).softDelete(id);
+      const siblings = await manager.getRepository(StageEntity).find({
+        where: { requirementId: requirement.id },
+        order: { order: 'ASC', createdAt: 'ASC' },
+      });
+      siblings.forEach((item, order) => (item.order = order));
+      await manager.save(siblings);
+      await this.recomputeRequirement(manager, requirement.id);
+    });
   }
 
   async reportBug(requirementId: string, input: CreateBugDto): Promise<Bug> {
@@ -723,10 +775,25 @@ export class WorkService {
     return this.getBug(bug.id);
   }
 
-  async deleteBug(id: string): Promise<void> {
+  async deleteBug(id: string, input: DeleteWorkItemDto): Promise<void> {
     const bug = await this.findBug(id);
-    await this.assertDeletable('bug', bug.id);
-    await this.bugs.remove(bug);
+    this.assertDeleteConfirmation(bug.key, input.confirmation);
+    const requirement = await this.findRequirement(bug.requirementId);
+    await this.dataSource.transaction(async (manager) => {
+      await this.deactivateDependencies(manager, [{ type: 'bug', id }]);
+      await this.recordChange(manager, {
+        entityType: 'bug',
+        entityId: bug.id,
+        projectId: requirement.projectId,
+        requirementId: requirement.id,
+        type: 'bug_deleted',
+        summary: `${requirement.key} 删除 ${bug.key}「${bug.title}」`,
+        details: { reason: input.reason },
+        ...context(input),
+      });
+      await manager.getRepository(BugEntity).softDelete(id);
+      await this.recomputeRequirement(manager, requirement.id);
+    });
   }
 
   async correctStatusHistory(
@@ -1259,25 +1326,30 @@ export class WorkService {
     await manager.save(requirement);
   }
 
-  private async assertDeletable(
-    kind: 'stage' | 'bug',
-    id: string,
-  ): Promise<void> {
-    const [historyCount, scheduleCount, dependencyCount] = await Promise.all([
-      this.statuses.countBy({ entityType: kind, entityId: id }),
-      this.schedules.countBy({ entityType: kind, entityId: id }),
-      this.dependencyRepository.count({
-        where: [
-          { successorType: kind, successorId: id },
-          { predecessorType: kind, predecessorId: id },
-        ],
-      }),
-    ]);
-    if (historyCount || scheduleCount || dependencyCount) {
-      throw new BadRequestException(
-        '该事项已有历史或依赖关系，请改为已取消以保留记录',
-      );
+  private assertDeleteConfirmation(expected: string, actual: string): void {
+    if (actual.trim() !== expected) {
+      throw new BadRequestException(`请输入「${expected}」确认删除`);
     }
+  }
+
+  private async deactivateDependencies(
+    manager: EntityManager,
+    targets: Array<{ type: DependencyTargetType; id: string }>,
+  ): Promise<void> {
+    const keys = new Set(targets.map((item) => `${item.type}:${item.id}`));
+    const repository = manager.getRepository(DependencyEntity);
+    const dependencies = await repository.findBy({ active: true });
+    const affected = dependencies.filter(
+      (item) =>
+        keys.has(`${item.successorType}:${item.successorId}`) ||
+        keys.has(`${item.predecessorType}:${item.predecessorId}`),
+    );
+    const resolvedAt = new Date();
+    for (const dependency of affected) {
+      dependency.active = false;
+      dependency.resolvedAt = resolvedAt;
+    }
+    await repository.save(affected);
   }
 
   private async getStage(id: string): Promise<Stage> {

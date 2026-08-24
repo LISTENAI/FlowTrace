@@ -7,6 +7,7 @@ import { DataSource } from 'typeorm';
 import { entities } from '@/database/entities';
 import { InitialSchema1724428800000 } from '@/database/migrations/1724428800000-initial-schema';
 import { ProjectRhythms1724515200000 } from '@/database/migrations/1724515200000-project-rhythms';
+import { SoftDeleteWorkItems1724601600000 } from '@/database/migrations/1724601600000-soft-delete-work-items';
 import { DomainModule } from '@/domain/domain.module';
 import { WorkService } from '@/domain/work.service';
 
@@ -22,7 +23,11 @@ describe.sequential('WorkService business rules', () => {
           type: 'better-sqlite3',
           database: ':memory:',
           entities,
-          migrations: [InitialSchema1724428800000, ProjectRhythms1724515200000],
+          migrations: [
+            InitialSchema1724428800000,
+            ProjectRhythms1724515200000,
+            SoftDeleteWorkItems1724601600000,
+          ],
           migrationsRun: true,
           synchronize: false,
         }),
@@ -155,6 +160,50 @@ describe.sequential('WorkService business rules', () => {
       '开发',
     ]);
     expect(reordered.stages.map((stage) => stage.order)).toEqual([0, 1, 2, 3]);
+  });
+
+  it('soft deletes requirements and stages after explicit confirmation', async () => {
+    const project = await work.createProject({
+      key: 'DELETE',
+      name: '删除验证',
+      templateStages: [{ name: '需求评审' }, { name: '开发' }],
+    });
+    const requirement = await work.createRequirement({
+      projectId: project.id,
+      title: '误建需求',
+    });
+    const review = requirement.stages[0]!;
+    await work.updateStageStatus(review.id, { status: 'in_progress' });
+
+    await expect(
+      work.deleteStage(review.id, {
+        confirmation: '错误名称',
+        reason: '测试误操作保护',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await work.deleteStage(review.id, {
+      confirmation: review.name,
+      reason: '阶段建错',
+    });
+
+    const afterStageDelete = await work.getRequirement(requirement.id);
+    expect(afterStageDelete.stages.map((item) => item.name)).toEqual(['开发']);
+    expect(
+      await dataSource.getRepository('status_history').countBy({
+        entityType: 'stage',
+        entityId: review.id,
+      }),
+    ).toBe(1);
+
+    await work.deleteRequirement(requirement.id, {
+      confirmation: requirement.key,
+      reason: '需求重复创建',
+    });
+    expect(
+      (await work.listRequirements({ projectId: project.id })).map(
+        (item) => item.id,
+      ),
+    ).not.toContain(requirement.id);
   });
 
   it('keeps backfilled status history ordered and calculates real durations', async () => {
@@ -378,15 +427,5 @@ describe.sequential('WorkService business rules', () => {
     expect(first.satisfied).toBe(false);
     expect(reciprocal.active).toBe(true);
     expect(reciprocal.predecessor?.projectName).toBe('设备固件');
-  });
-
-  it('prevents deleting work that already has history', async () => {
-    const requirement = (
-      await work.listRequirements({ projectId: appProjectId })
-    )[0]!;
-    const stage = (await work.getRequirement(requirement.id)).stages[0]!;
-    await expect(work.deleteStage(stage.id)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
   });
 });

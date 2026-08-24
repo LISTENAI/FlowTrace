@@ -1,9 +1,12 @@
 import type { ExecutionStatus } from '@flowtrace/shared';
-import { Column, Entity, Index } from 'typeorm';
+import { Column, DeleteDateColumn, Entity, Index } from 'typeorm';
 import { BaseEntity } from '@/database/entities/base';
 
 @Entity('bugs')
 export class BugEntity extends BaseEntity {
+  @DeleteDateColumn({ type: 'datetime', nullable: true })
+  deletedAt!: Date | null;
+
   @Index({ unique: true })
   @Column('text')
   key!: string;

@@ -89,6 +89,14 @@ export const api = {
       method: 'PATCH',
       body: input,
     }),
+  deleteRequirement: (
+    id: string,
+    input: { confirmation: string; reason: string },
+  ) =>
+    request<void>(`/requirements/${id}`, {
+      method: 'DELETE',
+      body: input,
+    }),
   moveRequirement: (id: string, versionId: string | null, reason?: string) =>
     request<Requirement>(`/requirements/${id}/move-version`, {
       method: 'POST',
@@ -113,6 +121,8 @@ export const api = {
     }),
   updateStage: (id: string, input: Record<string, unknown>) =>
     request<Stage>(`/stages/${id}`, { method: 'PATCH', body: input }),
+  deleteStage: (id: string, input: { confirmation: string; reason: string }) =>
+    request<void>(`/stages/${id}`, { method: 'DELETE', body: input }),
   updateStageStatus: (
     id: string,
     input: {
@@ -142,6 +152,8 @@ export const api = {
     }),
   updateBug: (id: string, input: Record<string, unknown>) =>
     request<Bug>(`/bugs/${id}`, { method: 'PATCH', body: input }),
+  deleteBug: (id: string, input: { confirmation: string; reason: string }) =>
+    request<void>(`/bugs/${id}`, { method: 'DELETE', body: input }),
   updateBugStatus: (
     id: string,
     input: {

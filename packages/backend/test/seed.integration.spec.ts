@@ -6,6 +6,7 @@ import { DataSource } from 'typeorm';
 import { entities } from '@/database/entities';
 import { InitialSchema1724428800000 } from '@/database/migrations/1724428800000-initial-schema';
 import { ProjectRhythms1724515200000 } from '@/database/migrations/1724515200000-project-rhythms';
+import { SoftDeleteWorkItems1724601600000 } from '@/database/migrations/1724601600000-soft-delete-work-items';
 import { DomainModule } from '@/domain/domain.module';
 import { WorkService } from '@/domain/work.service';
 import { SeedService } from '@/seed/seed.service';
@@ -24,7 +25,11 @@ describe.sequential('SeedService experience data', () => {
           type: 'better-sqlite3',
           database: ':memory:',
           entities,
-          migrations: [InitialSchema1724428800000, ProjectRhythms1724515200000],
+          migrations: [
+            InitialSchema1724428800000,
+            ProjectRhythms1724515200000,
+            SoftDeleteWorkItems1724601600000,
+          ],
           migrationsRun: true,
           synchronize: false,
         }),

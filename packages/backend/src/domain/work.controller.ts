@@ -25,6 +25,7 @@ import {
   CreateRequirementDto,
   CreateStageDto,
   CreateVersionDto,
+  DeleteWorkItemDto,
   MoveVersionDto,
   RescheduleDto,
   UpdateBugDto,
@@ -214,6 +215,13 @@ export class RequirementsController {
   reportBug(@Param('id') id: string, @Body() input: CreateBugDto) {
     return this.work.reportBug(id, input);
   }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @ApiOperation({ summary: '软删除需求及其事项，并保留审计历史' })
+  remove(@Param('id') id: string, @Body() input: DeleteWorkItemDto) {
+    return this.work.deleteRequirement(id, input);
+  }
 }
 
 @ApiTags('阶段')
@@ -240,8 +248,9 @@ export class StagesController {
 
   @Delete(':id')
   @HttpCode(204)
-  remove(@Param('id') id: string) {
-    return this.work.deleteStage(id);
+  @ApiOperation({ summary: '软删除阶段，并保留状态和排期历史' })
+  remove(@Param('id') id: string, @Body() input: DeleteWorkItemDto) {
+    return this.work.deleteStage(id, input);
   }
 }
 
@@ -268,8 +277,9 @@ export class BugsController {
 
   @Delete(':id')
   @HttpCode(204)
-  remove(@Param('id') id: string) {
-    return this.work.deleteBug(id);
+  @ApiOperation({ summary: '软删除 Bug，并保留状态和排期历史' })
+  remove(@Param('id') id: string, @Body() input: DeleteWorkItemDto) {
+    return this.work.deleteBug(id, input);
   }
 }
 

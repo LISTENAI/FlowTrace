@@ -176,6 +176,42 @@ export function createFlowTraceMcpServer(
   );
 
   server.registerTool(
+    'delete_work_item',
+    {
+      description:
+        '软删除误建的需求、阶段或 Bug；默认视图不再显示，但过程和删除审计仍保留。',
+      inputSchema: {
+        target_type: z.enum(['requirement', 'stage', 'bug']),
+        target_id: z.string().describe('事项稳定 ID'),
+        confirmation: z.string().describe('需求编号、阶段名称或 Bug 编号'),
+        reason: z.string().min(1).describe('删除原因'),
+        agent_name: z.string().default('FlowTrace MCP Agent'),
+      },
+    },
+    async (input) => {
+      const collection = {
+        requirement: 'requirements',
+        stage: 'stages',
+        bug: 'bugs',
+      }[input.target_type];
+      return result(
+        await api.request(
+          `/${collection}/${encodeURIComponent(input.target_id)}`,
+          {
+            method: 'DELETE',
+            body: {
+              confirmation: input.confirmation,
+              source: 'agent',
+              agentName: input.agent_name,
+              reason: input.reason,
+            },
+          },
+        ),
+      );
+    },
+  );
+
+  server.registerTool(
     'move_requirement_to_version',
     {
       description:

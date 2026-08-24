@@ -26,6 +26,7 @@ describe('FlowTrace MCP Server', () => {
         'list_people',
         'create_requirement',
         'assign_owners',
+        'delete_work_item',
         'update_stage_status',
         'report_bug',
         'get_changes_since',
@@ -93,6 +94,26 @@ describe('FlowTrace MCP Server', () => {
         source: 'agent',
         agentName: '验收 Agent',
         reason: '按项目分工更新',
+      },
+    });
+
+    await client.callTool({
+      name: 'delete_work_item',
+      arguments: {
+        target_type: 'stage',
+        target_id: 'stage-1',
+        confirmation: '开发',
+        reason: '重复创建',
+        agent_name: '验收 Agent',
+      },
+    });
+    expect(request).toHaveBeenLastCalledWith('/stages/stage-1', {
+      method: 'DELETE',
+      body: {
+        confirmation: '开发',
+        reason: '重复创建',
+        source: 'agent',
+        agentName: '验收 Agent',
       },
     });
 

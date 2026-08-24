@@ -38,6 +38,18 @@ export class ChangeContextDto {
   reason?: string;
 }
 
+export class DeleteWorkItemDto extends ChangeContextDto {
+  @ApiProperty({ description: '必须与事项编号或名称完全一致' })
+  @IsString()
+  @IsNotEmpty()
+  confirmation!: string;
+
+  @ApiProperty({ description: '删除原因会保留在审计记录中' })
+  @IsString()
+  @IsNotEmpty()
+  declare reason: string;
+}
+
 export class CreatePersonDto {
   @ApiProperty({ example: '张三' })
   @IsString()

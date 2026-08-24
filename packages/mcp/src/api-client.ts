@@ -6,7 +6,10 @@ export class FlowTraceApiClient {
 
   async request<T>(
     path: string,
-    options: { method?: 'GET' | 'POST' | 'PATCH' | 'PUT'; body?: unknown } = {},
+    options: {
+      method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+      body?: unknown;
+    } = {},
   ): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: options.method ?? 'GET',

@@ -6,6 +6,7 @@ import type {
   Stage,
   Version,
 } from '@flowtrace/shared';
+import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/vue';
 import {
   ArrowLeftIcon,
   BugAntIcon,
@@ -14,17 +15,20 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   ClockIcon,
+  EllipsisHorizontalIcon,
   LinkIcon,
   PlusIcon,
   QueueListIcon,
+  TrashIcon,
   UserPlusIcon,
 } from '@heroicons/vue/24/outline';
 import dayjs from 'dayjs';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { RouterLink, useRoute } from 'vue-router';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { api } from '@/api';
 import AppModal from '@/components/AppModal.vue';
 import AvatarStack from '@/components/AvatarStack.vue';
+import DeleteWorkItemDialog from '@/components/DeleteWorkItemDialog.vue';
 import OwnerPicker from '@/components/OwnerPicker.vue';
 import PlanningDialog from '@/components/PlanningDialog.vue';
 import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
@@ -41,6 +45,7 @@ import { toasts } from '@/state/toasts';
 import { loadWorkspace, workspace } from '@/state/workspace';
 
 const route = useRoute();
+const router = useRouter();
 const id = computed(() => route.params.requirementId as string);
 const requirement = ref<Requirement>();
 const dependencies = ref<Dependency[]>([]);
@@ -54,6 +59,8 @@ const movingStageId = ref('');
 const statusTarget = ref<Stage | Bug>();
 const planningTarget = ref<Requirement | Stage | Bug>();
 const ownerTarget = ref<Requirement>();
+const deleteTarget = ref<Requirement | Stage | Bug>();
+const deleting = ref(false);
 const ownerForm = ref<string[]>([]);
 const assigningOwners = ref(false);
 const candidateRequirements = ref<
@@ -85,6 +92,19 @@ const project = computed(() =>
   workspace.projects.find((item) => item.id === requirement.value?.projectId),
 );
 const stageOptions = computed(() => requirement.value?.stages ?? []);
+const deleteConfirmation = computed(() => {
+  const target = deleteTarget.value;
+  if (!target) return '';
+  if (target.id === requirement.value?.id) return requirement.value.key;
+  return 'key' in target ? target.key : target.name;
+});
+const deleteLabel = computed(() => {
+  const target = deleteTarget.value;
+  if (!target) return '事项';
+  if (target.id === requirement.value?.id)
+    return `需求 ${requirement.value.key}`;
+  return 'key' in target ? `Bug ${target.key}` : `阶段「${target.name}」`;
+});
 const events = computed(() => {
   if (!requirement.value) return [];
   const result: Array<{
@@ -359,6 +379,34 @@ async function addDependency() {
   }
 }
 
+async function removeWorkItem(input: { confirmation: string; reason: string }) {
+  const target = deleteTarget.value;
+  if (!target || !requirement.value) return;
+  deleting.value = true;
+  try {
+    if (target.id === requirement.value.id) {
+      const projectId = requirement.value.projectId;
+      await api.deleteRequirement(target.id, input);
+      toasts.show('需求已删除', '过程与删除审计仍已保留');
+      await router.push(`/projects/${projectId}`);
+      return;
+    }
+    if ('key' in target) await api.deleteBug(target.id, input);
+    else await api.deleteStage(target.id, input);
+    deleteTarget.value = undefined;
+    toasts.show('事项已删除', '默认视图不再显示，历史审计仍已保留');
+    await load();
+  } catch (error) {
+    toasts.show(
+      '删除失败',
+      error instanceof Error ? error.message : undefined,
+      'error',
+    );
+  } finally {
+    deleting.value = false;
+  }
+}
+
 onMounted(load);
 watch(id, load);
 </script>
@@ -430,6 +478,36 @@ watch(id, load);
               >
               <AvatarStack :owner-ids="requirement.ownerIds" :max="5" compact />
             </button>
+            <Menu as="div" class="relative shrink-0">
+              <MenuButton
+                class="focus-ring grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-400 shadow-sm transition hover:text-slate-700"
+                aria-label="需求的更多操作"
+              >
+                <EllipsisHorizontalIcon class="h-5 w-5" />
+              </MenuButton>
+              <Transition
+                enter-active-class="transition duration-150 ease-out"
+                enter-from-class="translate-y-1 opacity-0 scale-95"
+                enter-to-class="translate-y-0 opacity-100 scale-100"
+                leave-active-class="transition duration-100 ease-in"
+                leave-from-class="translate-y-0 opacity-100 scale-100"
+                leave-to-class="translate-y-1 opacity-0 scale-95"
+              >
+                <MenuItems
+                  class="absolute right-0 z-30 mt-1.5 w-36 origin-top-right rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl outline-none"
+                >
+                  <MenuItem v-slot="{ active }">
+                    <button
+                      class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-rose-600 transition"
+                      :class="active ? 'bg-rose-50' : ''"
+                      @click="deleteTarget = requirement"
+                    >
+                      <TrashIcon class="h-4 w-4" />删除需求
+                    </button>
+                  </MenuItem>
+                </MenuItems>
+              </Transition>
+            </Menu>
           </div>
         </div>
       </div>
@@ -555,6 +633,13 @@ watch(id, load);
                   >
                     <CalendarDaysIcon class="h-4 w-4" />
                   </button>
+                  <button
+                    class="focus-ring mr-2 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-rose-50 hover:text-rose-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                    :aria-label="`删除阶段「${stage.name}」`"
+                    @click="deleteTarget = stage"
+                  >
+                    <TrashIcon class="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -627,6 +712,13 @@ watch(id, load);
                   @click="planningTarget = bug"
                 >
                   <CalendarDaysIcon class="h-4 w-4" />
+                </button>
+                <button
+                  class="focus-ring ml-1 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-rose-50 hover:text-rose-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                  :aria-label="`删除 ${bug.key}`"
+                  @click="deleteTarget = bug"
+                >
+                  <TrashIcon class="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -808,6 +900,15 @@ watch(id, load);
       :people="workspace.people"
       @close="statusTarget = undefined"
       @saved="load"
+    />
+
+    <DeleteWorkItemDialog
+      :open="Boolean(deleteTarget)"
+      :item-label="deleteLabel"
+      :confirmation-text="deleteConfirmation"
+      :saving="deleting"
+      @close="deleteTarget = undefined"
+      @confirm="removeWorkItem"
     />
 
     <PlanningDialog
