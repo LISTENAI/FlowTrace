@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type {
   Bug,
+  ExecutionStatus,
   Requirement,
   Stage,
   Version,
@@ -37,6 +38,7 @@ const props = defineProps<{
 const expandedVersions = reactive(new Set<string>());
 const expandedRequirements = reactive(new Set<string>());
 const expandedBugGroups = reactive(new Set<string>());
+const timelineSurface = ref<HTMLElement>();
 const scrollContainer = ref<HTMLElement>();
 const labelColumn = ref<HTMLElement>();
 const initializedVersions = new Set<string>();
@@ -118,6 +120,19 @@ function requirementDateRange(requirement: Requirement) {
       : undefined,
     ...[...requirement.stages, ...requirement.bugs].map(itemDateRange),
   ]);
+}
+
+function requirementStatus(requirement: Requirement): ExecutionStatus {
+  if (requirement.health === 'blocked') return 'blocked';
+  if (requirement.health === 'waiting') return 'waiting';
+  return requirement.lifecycle;
+}
+
+function requirementBarClass(requirement: Requirement) {
+  if (props.mode === 'baseline') {
+    return 'top-[18px] h-2 border border-dashed border-slate-400 bg-slate-100';
+  }
+  return `top-[18px] h-2 ${statusDot[requirementStatus(requirement)]}`;
 }
 
 function versionDateRange(group: VersionGroup) {
@@ -267,6 +282,64 @@ function scrollToItem(item: WorkItem) {
   scrollToDate(itemDateRange(item)?.start);
 }
 
+function wheelDeltaInPixels(event: WheelEvent) {
+  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16;
+  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+    return event.deltaY * window.innerHeight;
+  }
+  return event.deltaY;
+}
+
+function scrollPageBy(deltaY: number) {
+  const before = window.scrollY;
+  window.scrollBy({ top: deltaY });
+  return window.scrollY - before;
+}
+
+function handleTimelineWheel(event: WheelEvent) {
+  if (event.ctrlKey || event.shiftKey) return;
+
+  const surface = timelineSurface.value;
+  const container = scrollContainer.value;
+  const deltaY = wheelDeltaInPixels(event);
+  if (!surface || !container || !deltaY) return;
+  if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+
+  const maxScrollTop = container.scrollHeight - container.clientHeight;
+  if (maxScrollTop <= 0) return;
+
+  event.preventDefault();
+
+  const configuredTop = Number.parseFloat(getComputedStyle(surface).top);
+  const stickyTop = Number.isFinite(configuredTop) ? configuredTop : 0;
+  const distanceToStickyTop = surface.getBoundingClientRect().top - stickyTop;
+
+  if (deltaY > 0) {
+    let remaining = deltaY;
+    if (distanceToStickyTop > 1) {
+      remaining -= Math.max(
+        0,
+        scrollPageBy(Math.min(remaining, distanceToStickyTop)),
+      );
+    }
+
+    const before = container.scrollTop;
+    container.scrollTop += Math.min(
+      remaining,
+      maxScrollTop - container.scrollTop,
+    );
+    remaining -= container.scrollTop - before;
+    if (remaining > 0) scrollPageBy(remaining);
+    return;
+  }
+
+  let remaining = -deltaY;
+  const before = container.scrollTop;
+  container.scrollTop -= Math.min(remaining, container.scrollTop);
+  remaining -= before - container.scrollTop;
+  if (remaining > 0) scrollPageBy(-remaining);
+}
+
 function styleFor(value?: DateRange) {
   if (!value) return undefined;
   const start = dayjs(value.start).startOf('day');
@@ -315,8 +388,12 @@ watch(
 </script>
 
 <template>
-  <div class="surface overflow-hidden">
-    <div ref="scrollContainer" class="overflow-x-auto">
+  <div ref="timelineSurface" class="timeline-surface surface overflow-hidden">
+    <div
+      ref="scrollContainer"
+      class="timeline-scroll"
+      @wheel="handleTimelineWheel"
+    >
       <div
         class="w-full [--timeline-label-width:min(20rem,62vw)]"
         :style="{
@@ -324,7 +401,7 @@ watch(
         }"
       >
         <div
-          class="timeline-grid grid border-b border-slate-100 bg-slate-50/70"
+          class="timeline-ruler timeline-grid grid border-b border-slate-100 bg-slate-50/95 backdrop-blur"
         >
           <div
             ref="labelColumn"
@@ -360,9 +437,13 @@ watch(
           </div>
         </div>
 
-        <template v-for="group in groups" :key="group.id">
+        <section
+          v-for="group in groups"
+          :key="group.id"
+          class="timeline-version-group"
+        >
           <button
-            class="timeline-grid group grid w-full border-b border-slate-200 bg-slate-50/80 text-left hover:bg-slate-100/70"
+            class="timeline-version-heading timeline-grid group grid w-full border-b border-slate-200 bg-slate-50/95 text-left backdrop-blur hover:bg-slate-100/95"
             @click="toggle(expandedVersions, group.id)"
           >
             <div
@@ -386,12 +467,13 @@ watch(
           </button>
 
           <template v-if="expandedVersions.has(group.id)">
-            <template
+            <section
               v-for="requirement in group.requirements"
               :key="requirement.id"
+              class="timeline-requirement-group"
             >
               <button
-                class="timeline-grid group grid w-full border-b border-slate-100 bg-white text-left hover:bg-slate-50/60"
+                class="timeline-requirement-heading timeline-grid group grid w-full border-b border-slate-100 bg-white text-left hover:bg-slate-50/95"
                 @click="toggle(expandedRequirements, requirement.id)"
               >
                 <div
@@ -417,7 +499,7 @@ watch(
                 <TimelineBar
                   :days="range.days"
                   :bar-style="styleFor(requirementDateRange(requirement))"
-                  bar-class="top-[19px] h-1.5 bg-slate-400/65"
+                  :bar-class="requirementBarClass(requirement)"
                 />
               </button>
 
@@ -537,9 +619,9 @@ watch(
                   </div>
                 </template>
               </template>
-            </template>
+            </section>
           </template>
-        </template>
+        </section>
       </div>
     </div>
     <div

@@ -172,6 +172,47 @@ a[class~="inline-flex"] {
   grid-template-columns: var(--timeline-label-width) minmax(0, 1fr);
 }
 
+/* 时间线吸附后保留日期与当前层级，垂直滚动在页面和时间线间级联。 */
+.timeline-surface {
+  position: sticky;
+  top: 4.5rem;
+  z-index: 10;
+}
+
+.timeline-scroll {
+  max-height: calc(100dvh - 10rem);
+  overflow: auto;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.timeline-ruler {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: 0 1px 0 rgba(226, 232, 240, 0.92);
+}
+
+.timeline-version-group,
+.timeline-requirement-group {
+  position: relative;
+}
+
+.timeline-version-heading {
+  position: sticky;
+  top: 3.5rem;
+  z-index: 40;
+  box-shadow: 0 1px 0 rgba(226, 232, 240, 0.88);
+}
+
+.timeline-requirement-heading {
+  position: sticky;
+  top: 6.5rem;
+  z-index: 30;
+  box-shadow: 0 1px 0 rgba(241, 245, 249, 0.96);
+}
+
 /* 人员色调由稳定 ID 映射，所有视图共享同一视觉身份。 */
 .person-tone-indigo {
   background: #e0e7ff;
@@ -293,6 +334,12 @@ a[class~="inline-flex"] {
   border-color: #818cf8;
   background: rgba(49, 46, 129, 0.28);
   color: #a5b4fc;
+}
+
+.dark .timeline-ruler,
+.dark .timeline-version-heading,
+.dark .timeline-requirement-heading {
+  box-shadow: 0 1px 0 rgba(51, 65, 85, 0.92);
 }
 
 .dark .person-tone-indigo {
