@@ -401,7 +401,7 @@ export class WorkService {
           requirementId: requirement.id,
           name: template.name,
           order: template.order,
-          ownerIds: template.ownerIds,
+          ownerIds: [],
           status: 'not_started',
           note: null,
           statusReason: null,
@@ -975,6 +975,16 @@ export class WorkService {
         }),
       );
       await this.recomputeTrackable(manager, kind, entity.id);
+      if (input.ownerIds !== undefined) {
+        const repository = manager.getRepository(
+          kind === 'stage' ? StageEntity : BugEntity,
+        );
+        const current = await repository.findOneBy({ id: entity.id });
+        if (current) {
+          current.ownerIds = input.ownerIds;
+          await repository.save(current);
+        }
+      }
       await this.recomputeRequirement(manager, requirement.id);
       const name =
         kind === 'stage'
@@ -991,6 +1001,7 @@ export class WorkService {
           fromStatus: entity.status,
           toStatus: input.status,
           effectiveAt: input.effectiveAt,
+          ownerIds: input.ownerIds,
         },
         ...context(input),
       });
@@ -1589,7 +1600,6 @@ export class WorkService {
     stages: Array<{
       id?: string;
       name: string;
-      ownerIds?: string[];
       dependsOnTemplateStageIds?: string[];
     }>,
   ): TemplateStage[] {
@@ -1598,7 +1608,7 @@ export class WorkService {
       id: ids[order] as string,
       name: stage.name,
       order,
-      ownerIds: stage.ownerIds ?? [],
+      ownerIds: [],
       dependsOnTemplateStageIds: (stage.dependsOnTemplateStageIds ?? []).filter(
         (id) => ids.includes(id),
       ),

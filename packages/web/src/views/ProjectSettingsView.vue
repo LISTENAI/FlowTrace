@@ -113,7 +113,9 @@ async function createVersion() {
   }
 }
 
-onMounted(load);
+onMounted(async () => {
+  await Promise.all([load(), loadWorkspace()]);
+});
 </script>
 
 <template>
@@ -184,7 +186,7 @@ onMounted(load);
           <div
             v-for="(stage, index) in stages"
             :key="stage.id"
-            class="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/50 px-3 py-2.5"
+            class="group grid grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/50 px-3 py-2.5 sm:flex sm:gap-3"
           >
             <Bars3Icon class="h-4 w-4 text-slate-300" /><span
               class="grid h-6 w-6 place-items-center rounded-lg bg-white text-[10px] font-bold text-slate-400 ring-1 ring-slate-200"
@@ -192,32 +194,37 @@ onMounted(load);
             ><input
               v-model="stage.name"
               class="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-700 outline-none"
-            /><button
-              type="button"
-              class="rounded-lg p-1.5 text-slate-300 transition hover:bg-white hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-25"
-              :disabled="index === 0"
-              :aria-label="`上移${stage.name}`"
-              @click="moveStage(index, -1)"
+            />
+            <div
+              class="col-span-3 flex items-center justify-end gap-1 border-t border-slate-200/70 pt-2 sm:contents"
             >
-              <ChevronUpIcon class="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              class="rounded-lg p-1.5 text-slate-300 transition hover:bg-white hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-25"
-              :disabled="index === stages.length - 1"
-              :aria-label="`下移${stage.name}`"
-              @click="moveStage(index, 1)"
-            >
-              <ChevronDownIcon class="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              class="rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-rose-50 hover:text-rose-500 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-              aria-label="删除阶段"
-              @click="removeStage(index)"
-            >
-              <TrashIcon class="h-4 w-4" />
-            </button>
+              <button
+                type="button"
+                class="rounded-lg p-1.5 text-slate-300 transition hover:bg-white hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-25"
+                :disabled="index === 0"
+                :aria-label="`上移${stage.name}`"
+                @click="moveStage(index, -1)"
+              >
+                <ChevronUpIcon class="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                class="rounded-lg p-1.5 text-slate-300 transition hover:bg-white hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-25"
+                :disabled="index === stages.length - 1"
+                :aria-label="`下移${stage.name}`"
+                @click="moveStage(index, 1)"
+              >
+                <ChevronDownIcon class="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                class="rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-rose-50 hover:text-rose-500 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                aria-label="删除阶段"
+                @click="removeStage(index)"
+              >
+                <TrashIcon class="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       </section>

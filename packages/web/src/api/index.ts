@@ -121,6 +121,7 @@ export const api = {
       statusReason?: string;
       expectedResumeAt?: string;
       note?: string;
+      ownerIds?: string[];
     },
   ) => request<Stage>(`/stages/${id}/status`, { method: 'POST', body: input }),
   rescheduleStage: (
@@ -137,6 +138,8 @@ export const api = {
       method: 'POST',
       body: input,
     }),
+  updateBug: (id: string, input: Record<string, unknown>) =>
+    request<Bug>(`/bugs/${id}`, { method: 'PATCH', body: input }),
   updateBugStatus: (
     id: string,
     input: {
@@ -145,6 +148,7 @@ export const api = {
       statusReason?: string;
       expectedResumeAt?: string;
       note?: string;
+      ownerIds?: string[];
     },
   ) => request<Bug>(`/bugs/${id}/status`, { method: 'POST', body: input }),
   rescheduleBug: (

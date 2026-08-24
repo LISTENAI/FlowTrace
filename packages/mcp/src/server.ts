@@ -44,6 +44,14 @@ export function createFlowTraceMcpServer(
   );
 
   server.registerTool(
+    'list_people',
+    {
+      description: '列出当前可分配的负责人及其稳定 ID。',
+    },
+    async () => result(await api.request('/people')),
+  );
+
+  server.registerTool(
     'list_versions',
     {
       description: '列出指定项目的交付版本。',
@@ -132,6 +140,39 @@ export function createFlowTraceMcpServer(
           },
         }),
       ),
+  );
+
+  server.registerTool(
+    'assign_owners',
+    {
+      description:
+        '为需求、阶段或 Bug 分配独立负责人，可选择多人或清空为待分配。',
+      inputSchema: {
+        target_type: z.enum(['requirement', 'stage', 'bug']),
+        target_id: z.string().describe('事项稳定 ID'),
+        owner_ids: z.array(z.string()).describe('人员稳定 ID 列表'),
+        ...sourceSchema,
+      },
+    },
+    async (input) => {
+      const collection = {
+        requirement: 'requirements',
+        stage: 'stages',
+        bug: 'bugs',
+      }[input.target_type];
+      return result(
+        await api.request(
+          `/${collection}/${encodeURIComponent(input.target_id)}`,
+          {
+            method: 'PATCH',
+            body: {
+              ownerIds: input.owner_ids,
+              ...writeBody(input),
+            },
+          },
+        ),
+      );
+    },
   );
 
   server.registerTool(

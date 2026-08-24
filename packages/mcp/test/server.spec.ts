@@ -23,7 +23,9 @@ describe('FlowTrace MCP Server', () => {
     expect(tools.tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
         'get_version_snapshot',
+        'list_people',
         'create_requirement',
+        'assign_owners',
         'update_stage_status',
         'report_bug',
         'get_changes_since',
@@ -52,6 +54,26 @@ describe('FlowTrace MCP Server', () => {
         statusReason: '等待样板到货',
         reason: '根据晨会信息补录',
       }),
+    });
+
+    await client.callTool({
+      name: 'assign_owners',
+      arguments: {
+        target_type: 'stage',
+        target_id: 'stage-1',
+        owner_ids: ['person-1', 'person-2'],
+        agent_name: '验收 Agent',
+        reason: '按项目分工更新',
+      },
+    });
+    expect(request).toHaveBeenLastCalledWith('/stages/stage-1', {
+      method: 'PATCH',
+      body: {
+        ownerIds: ['person-1', 'person-2'],
+        source: 'agent',
+        agentName: '验收 Agent',
+        reason: '按项目分工更新',
+      },
     });
 
     await client.close();

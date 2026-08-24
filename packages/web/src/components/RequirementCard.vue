@@ -26,6 +26,7 @@ import {
   statusLabels,
   statusTone,
 } from '@/lib/presentation';
+import { workspace } from '@/state/workspace';
 
 const props = defineProps<{
   summary: RequirementSummary;
@@ -284,6 +285,8 @@ async function refreshed() {
         'title' in statusTarget ? statusTarget.title : statusTarget.name
       "
       :current-status="statusTarget.status"
+      :owner-ids="statusTarget.ownerIds"
+      :people="workspace.people"
       @close="statusTarget = undefined"
       @saved="refreshed"
     />

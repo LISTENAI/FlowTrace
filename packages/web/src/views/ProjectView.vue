@@ -27,6 +27,7 @@ import {
 import { RouterLink, useRoute } from 'vue-router';
 import { api } from '@/api';
 import AppModal from '@/components/AppModal.vue';
+import OwnerPicker from '@/components/OwnerPicker.vue';
 import RequirementCard from '@/components/RequirementCard.vue';
 import TimelineView from '@/components/TimelineView.vue';
 import { formatDate } from '@/lib/presentation';
@@ -136,12 +137,6 @@ async function createRequirement() {
   } finally {
     saving.value = false;
   }
-}
-
-function toggleOwner(id: string) {
-  const index = form.ownerIds.indexOf(id);
-  if (index >= 0) form.ownerIds.splice(index, 1);
-  else form.ownerIds.push(id);
 }
 
 onMounted(() => {
@@ -563,24 +558,12 @@ watch(projectId, () => {
           </div>
           <fieldset>
             <legend class="mb-2 text-xs font-medium text-slate-600">
-              谁来共同负责
+              需求整体协调人（可选）
             </legend>
-            <div class="flex flex-wrap gap-2">
-              <button
-                v-for="person in workspace.people"
-                :key="person.id"
-                type="button"
-                class="rounded-full border px-3 py-1.5 text-xs font-medium transition"
-                :class="
-                  form.ownerIds.includes(person.id)
-                    ? 'border-indigo-300 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-100'
-                    : 'border-slate-200 text-slate-500 hover:border-slate-300'
-                "
-                @click="toggleOwner(person.id)"
-              >
-                {{ person.name }}
-              </button>
-            </div>
+            <OwnerPicker v-model="form.ownerIds" :people="workspace.people" />
+            <p class="mt-2 text-[10px] leading-4 text-slate-400">
+              各阶段会复制项目模板中的默认负责人，创建后仍可分别调整。
+            </p>
           </fieldset>
           <div
             class="flex items-center justify-between rounded-2xl bg-indigo-50/60 px-4 py-3 text-xs text-indigo-700"

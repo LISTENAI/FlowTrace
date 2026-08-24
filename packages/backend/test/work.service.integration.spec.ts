@@ -84,6 +84,46 @@ describe.sequential('WorkService business rules', () => {
     expect(second.stages.map((item) => item.name)).toEqual(['验证']);
   });
 
+  it('assigns requirement, stage and bug owners independently after creation', async () => {
+    const [coordinator, designer, developer] = await Promise.all([
+      work.createPerson({ name: '协调人' }),
+      work.createPerson({ name: '设计负责人' }),
+      work.createPerson({ name: '开发负责人' }),
+    ]);
+    const project = await work.createProject({
+      key: 'OWNERS',
+      name: '负责人验证',
+      templateStages: [{ name: '需求设计' }, { name: '开发' }],
+    });
+    const requirement = await work.createRequirement({
+      projectId: project.id,
+      title: '验证独立分配',
+      ownerIds: [coordinator.id],
+    });
+
+    expect(requirement.ownerIds).toEqual([coordinator.id]);
+    expect(requirement.stages.map((stage) => stage.ownerIds)).toEqual([[], []]);
+
+    await work.updateStageStatus(requirement.stages[0]!.id, {
+      status: 'in_progress',
+      ownerIds: [coordinator.id, designer.id],
+    });
+    const bug = await work.reportBug(requirement.id, {
+      title: '联调异常',
+      ownerIds: [developer.id],
+    });
+    await work.updateBugStatus(bug.id, {
+      status: 'in_progress',
+      ownerIds: [designer.id],
+    });
+
+    const updated = await work.getRequirement(requirement.id);
+    expect(updated.stages[0]!.ownerIds).toEqual([coordinator.id, designer.id]);
+    expect(updated.stages[0]!.status).toBe('in_progress');
+    expect(updated.bugs[0]!.ownerIds).toEqual([designer.id]);
+    expect(updated.bugs[0]!.status).toBe('in_progress');
+  });
+
   it('inserts and reorders actual stages without duplicate positions', async () => {
     const project = await work.createProject({
       key: 'ORDER',

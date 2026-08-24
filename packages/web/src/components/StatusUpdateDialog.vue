@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import type { ExecutionStatus } from '@flowtrace/shared';
+import type { ExecutionStatus, Person } from '@flowtrace/shared';
 import dayjs from 'dayjs';
 import { computed, reactive, ref, watch } from 'vue';
 import { api } from '@/api';
 import AppModal from '@/components/AppModal.vue';
+import OwnerPicker from '@/components/OwnerPicker.vue';
 import { statusDot, statusLabels } from '@/lib/presentation';
 import { toasts } from '@/state/toasts';
 
@@ -13,6 +14,8 @@ const props = defineProps<{
   itemType: 'stage' | 'bug';
   itemName: string;
   currentStatus: ExecutionStatus;
+  ownerIds: string[];
+  people: Person[];
 }>();
 
 const emit = defineEmits<{ close: []; saved: [] }>();
@@ -23,6 +26,7 @@ const form = reactive({
   statusReason: '',
   expectedResumeAt: '',
   note: '',
+  ownerIds: [...props.ownerIds],
 });
 
 const statuses: Array<{ id: ExecutionStatus; hint: string }> = [
@@ -47,6 +51,7 @@ watch(
     form.statusReason = '';
     form.expectedResumeAt = '';
     form.note = '';
+    form.ownerIds = [...props.ownerIds];
   },
 );
 
@@ -61,14 +66,29 @@ async function save() {
         ? dayjs(form.expectedResumeAt).toISOString()
         : undefined,
       note: form.note || undefined,
+      ownerIds: form.ownerIds,
     };
-    if (props.itemType === 'stage')
-      await api.updateStageStatus(props.itemId, input);
-    else await api.updateBugStatus(props.itemId, input);
-    toasts.show(
-      '轨迹已记录',
-      `${props.itemName} · ${statusLabels[form.status]}`,
-    );
+    const recordsStatus =
+      form.status !== props.currentStatus ||
+      Boolean(form.statusReason || form.expectedResumeAt || form.note);
+    if (recordsStatus) {
+      if (props.itemType === 'stage')
+        await api.updateStageStatus(props.itemId, input);
+      else await api.updateBugStatus(props.itemId, input);
+      toasts.show(
+        '轨迹已记录',
+        `${props.itemName} · ${statusLabels[form.status]}`,
+      );
+    } else {
+      const ownerInput = { ownerIds: form.ownerIds };
+      if (props.itemType === 'stage')
+        await api.updateStage(props.itemId, ownerInput);
+      else await api.updateBug(props.itemId, ownerInput);
+      toasts.show(
+        '负责人已更新',
+        form.ownerIds.length ? `已分配 ${form.ownerIds.length} 人` : '已设为待分配',
+      );
+    }
     emit('saved');
     emit('close');
   } catch (error) {
@@ -164,6 +184,11 @@ async function save() {
         </label>
       </div>
 
+      <fieldset>
+        <legend class="mb-2 text-xs font-medium text-slate-600">负责人</legend>
+        <OwnerPicker v-model="form.ownerIds" :people="people" />
+      </fieldset>
+
       <div class="grid gap-4 sm:grid-cols-2">
         <label>
           <span class="mb-1.5 block text-xs font-medium text-slate-600"
@@ -192,7 +217,7 @@ async function save() {
         class="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between"
       >
         <p class="text-[11px] leading-5 text-slate-400">
-          保存后会自动重算实际时间和需求健康状态
+          状态变化会写入过程轨迹；只调整负责人时不会重复写入状态历史
         </p>
         <div class="flex shrink-0 justify-end gap-2">
           <button
@@ -206,7 +231,7 @@ async function save() {
             :disabled="saving"
             class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 disabled:opacity-50"
           >
-            {{ saving ? '正在记录…' : '写入过程轨迹' }}
+            {{ saving ? '正在保存…' : '保存变更' }}
           </button>
         </div>
       </div>

@@ -85,12 +85,6 @@ export class TemplateStageDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  ownerIds?: string[];
-
-  @ApiPropertyOptional({ type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
   dependsOnTemplateStageIds?: string[];
 }
 
@@ -363,6 +357,12 @@ export class UpdateStatusDto extends ChangeContextDto {
   @ApiProperty({ enum: executionStatuses })
   @IsIn(executionStatuses)
   status!: ExecutionStatus;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  ownerIds?: string[];
 
   @ApiPropertyOptional({ description: '状态实际生效时间，允许补录' })
   @IsOptional()

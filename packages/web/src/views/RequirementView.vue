@@ -17,6 +17,7 @@ import {
   LinkIcon,
   PlusIcon,
   QueueListIcon,
+  UserPlusIcon,
 } from '@heroicons/vue/24/outline';
 import dayjs from 'dayjs';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
@@ -24,6 +25,7 @@ import { RouterLink, useRoute } from 'vue-router';
 import { api } from '@/api';
 import AppModal from '@/components/AppModal.vue';
 import AvatarStack from '@/components/AvatarStack.vue';
+import OwnerPicker from '@/components/OwnerPicker.vue';
 import PlanningDialog from '@/components/PlanningDialog.vue';
 import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
 import {
@@ -51,6 +53,9 @@ const saving = ref(false);
 const movingStageId = ref('');
 const statusTarget = ref<Stage | Bug>();
 const planningTarget = ref<Requirement | Stage | Bug>();
+const ownerTarget = ref<Requirement>();
+const ownerForm = ref<string[]>([]);
+const assigningOwners = ref(false);
 const candidateRequirements = ref<
   Array<{ id: string; key: string; title: string; projectId: string }>
 >([]);
@@ -80,7 +85,6 @@ const project = computed(() =>
   workspace.projects.find((item) => item.id === requirement.value?.projectId),
 );
 const stageOptions = computed(() => requirement.value?.stages ?? []);
-
 const events = computed(() => {
   if (!requirement.value) return [];
   const result: Array<{
@@ -173,10 +177,34 @@ async function load() {
   }
 }
 
-function toggleOwner(target: string[], ownerId: string) {
-  const index = target.indexOf(ownerId);
-  if (index >= 0) target.splice(index, 1);
-  else target.push(ownerId);
+function openRequirementOwners(item: Requirement) {
+  ownerForm.value = [...item.ownerIds];
+  ownerTarget.value = item;
+}
+
+async function saveOwners() {
+  if (!ownerTarget.value) return;
+  assigningOwners.value = true;
+  try {
+    const input = { ownerIds: ownerForm.value };
+    await api.updateRequirement(ownerTarget.value.id, input);
+    ownerTarget.value = undefined;
+    toasts.show(
+      '负责人已更新',
+      ownerForm.value.length
+        ? `已分配 ${ownerForm.value.length} 人`
+        : '已设为待分配',
+    );
+    await load();
+  } catch (error) {
+    toasts.show(
+      '分配失败',
+      error instanceof Error ? error.message : undefined,
+      'error',
+    );
+  } finally {
+    assigningOwners.value = false;
+  }
 }
 
 function openStageForm() {
@@ -390,7 +418,18 @@ watch(id, load);
             >
               <CalendarDaysIcon class="h-3.5 w-3.5" />调整计划
             </button>
-            <AvatarStack :owner-ids="requirement.ownerIds" :max="5" />
+            <button
+              class="focus-ring flex min-h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 text-slate-500 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
+              aria-label="分配需求负责人"
+              title="分配需求负责人"
+              @click="openRequirementOwners(requirement)"
+            >
+              <UserPlusIcon class="h-3.5 w-3.5" />
+              <span class="hidden text-[10px] font-semibold sm:inline"
+                >需求负责人</span
+              >
+              <AvatarStack :owner-ids="requirement.ownerIds" :max="5" compact />
+            </button>
           </div>
         </div>
       </div>
@@ -404,7 +443,7 @@ watch(id, load);
               <div class="min-w-0">
                 <h2 class="text-sm font-semibold text-slate-900">实际过程</h2>
                 <p class="mt-0.5 text-[11px] text-slate-400">
-                  点击任一行，就地记录状态与生效时间
+                  点击阶段，可同时更新状态和负责人
                 </p>
               </div>
               <button class="focus-ring section-action" @click="openStageForm">
@@ -458,7 +497,6 @@ watch(id, load);
                         {{ stage.note }}
                       </p>
                     </div>
-                    <AvatarStack :owner-ids="stage.ownerIds" :max="2" compact />
                     <div class="hidden min-w-36 text-right sm:block">
                       <p class="text-[10px] text-slate-400">
                         {{ formatDate(stage.plannedStartAt) }} →
@@ -472,6 +510,17 @@ watch(id, load);
                         {{ formatDate(stage.actualEndAt, '至今') }}
                       </p>
                     </div>
+                    <AvatarStack
+                      v-if="stage.ownerIds.length"
+                      :owner-ids="stage.ownerIds"
+                      :max="2"
+                      compact
+                    />
+                    <span
+                      v-else
+                      class="hidden shrink-0 text-[10px] text-slate-300 sm:inline"
+                      >待分配</span
+                    >
                     <span
                       class="rounded-full px-2.5 py-1 text-[10px] font-semibold ring-1"
                       :class="statusTone[stage.status]"
@@ -560,10 +609,15 @@ watch(id, load);
                     class="min-w-0 flex-1 truncate text-sm text-slate-700"
                     >{{ bug.title }}</span
                   ><AvatarStack
+                    v-if="bug.ownerIds.length"
                     :owner-ids="bug.ownerIds"
                     :max="2"
                     compact
-                  /><span class="text-[10px] font-medium text-slate-500">{{
+                  /><span
+                    v-else
+                    class="hidden shrink-0 text-[10px] text-slate-300 sm:inline"
+                    >待分配</span
+                  ><span class="text-[10px] font-medium text-slate-500">{{
                     statusLabels[bug.status]
                   }}</span>
                 </button>
@@ -746,6 +800,8 @@ watch(id, load);
         'title' in statusTarget ? statusTarget.title : statusTarget.name
       "
       :current-status="statusTarget.status"
+      :owner-ids="statusTarget.ownerIds"
+      :people="workspace.people"
       @close="statusTarget = undefined"
       @saved="load"
     />
@@ -773,6 +829,36 @@ watch(id, load);
       @close="planningTarget = undefined"
       @saved="load"
     />
+
+    <AppModal
+      :open="Boolean(ownerTarget)"
+      title="分配需求负责人"
+      description="这里记录需求的整体协调人；各阶段和 Bug 在各自的状态弹窗中分配。"
+      @close="ownerTarget = undefined"
+    >
+      <form class="space-y-4" @submit.prevent="saveOwners">
+        <OwnerPicker v-model="ownerForm" :people="workspace.people" />
+        <div class="flex items-center justify-between gap-3 pt-2">
+          <p class="text-[10px] text-slate-400">
+            {{ ownerForm.length ? `已选择 ${ownerForm.length} 人` : '待分配' }}
+          </p>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class="rounded-xl px-4 py-2 text-sm text-slate-500"
+              @click="ownerTarget = undefined"
+            >
+              取消</button
+            ><button
+              :disabled="assigningOwners"
+              class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {{ assigningOwners ? '保存中…' : '保存分配' }}
+            </button>
+          </div>
+        </div>
+      </form>
+    </AppModal>
 
     <AppModal
       :open="addStageOpen"
@@ -819,22 +905,10 @@ watch(id, load);
           <legend class="mb-2 text-xs font-medium text-slate-600">
             负责人
           </legend>
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="person in workspace.people"
-              :key="person.id"
-              type="button"
-              class="rounded-full border px-3 py-1.5 text-xs"
-              :class="
-                stageForm.ownerIds.includes(person.id)
-                  ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
-                  : 'border-slate-200 text-slate-500'
-              "
-              @click="toggleOwner(stageForm.ownerIds, person.id)"
-            >
-              {{ person.name }}
-            </button>
-          </div>
+          <OwnerPicker
+            v-model="stageForm.ownerIds"
+            :people="workspace.people"
+          />
         </fieldset>
         <div class="flex justify-end gap-2 pt-2">
           <button
@@ -930,22 +1004,7 @@ watch(id, load);
           <legend class="mb-2 text-xs font-medium text-slate-600">
             负责人
           </legend>
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="person in workspace.people"
-              :key="person.id"
-              type="button"
-              class="rounded-full border px-3 py-1.5 text-xs"
-              :class="
-                bugForm.ownerIds.includes(person.id)
-                  ? 'border-rose-300 bg-rose-50 text-rose-700'
-                  : 'border-slate-200 text-slate-500'
-              "
-              @click="toggleOwner(bugForm.ownerIds, person.id)"
-            >
-              {{ person.name }}
-            </button>
-          </div>
+          <OwnerPicker v-model="bugForm.ownerIds" :people="workspace.people" />
         </fieldset>
         <div class="flex justify-end gap-2 pt-2">
           <button
