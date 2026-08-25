@@ -16,9 +16,18 @@ Use the closest example as a pattern. Names and IDs below are fictional.
 1. Convert “昨天” to an explicit ISO 8601 start in the user's timezone.
 2. If the conversation identifies a Project, resolve it and pass `project_id`;
    otherwise query globally.
-3. Call `get_changes_since`.
-4. Group the returned events by Project or Requirement without dropping event
-   time, reason, source, or warnings.
+3. Call `get_changes_since` once, using the largest limit the Tool permits.
+4. If the result reaches the requested limit, disclose that coverage may be
+   incomplete and ask for a narrower Project, Version, or time range if the
+   user needs an exhaustive report. Do not fan out across every Project or
+   Requirement to reconstruct the missing tail.
+5. Group the returned events by Project or Requirement without dropping event
+   time, reason, source, or warnings. Read Snapshots only when the user also
+   asked for current status or risk, and only for the relevant scopes.
+
+Name work items for the reader. Write `FW-12「离线升级支持断点续传」已完成开发`,
+not `FW-12 已完成开发`; never compress several unnamed Requirements into a
+list such as `FW-12、FW-14、FW-18`.
 
 ## Ambiguous assignment: “把登录需求分给小禾”
 

@@ -10,27 +10,62 @@ write path. Do not access its database, automate its Web UI, or invent IDs.
 If the FlowTrace MCP tools are unavailable, stop and ask the user to configure
 the remote MCP endpoint; do not silently fall back to another write path.
 
-## Fixed operating loop
+## Operating policy
 
-Follow these steps in order:
+Classify the request as read-only, write, or ambiguous, then use the smallest
+read path that can answer it:
 
-1. Classify the request as read-only, write, or ambiguous.
-2. Resolve every named object with `search`. An empty query lists a selected
-   type.
-3. If more than one result could match, show the candidates with Project and
-   Version context and ask the user to choose. Never pick by list order.
-4. Read current facts before reasoning:
-   - Project overview: `get_project_snapshot`
-   - Version overview: `get_version_snapshot`
-   - Requirement or child-item change: `get_requirement`
-   - Time-bounded review: `get_changes_since`
-5. Apply the domain rules below. Ask one concise question if a missing choice
-   would change the result.
-6. Call a write Tool only when the user explicitly requested that change.
-   Reading, summarizing, diagnosing, or proposing does not authorize writing.
-7. Check the returned `entity`, `history`, and `warnings`. Report what changed,
-   the effective time, and every warning. Do not describe a warning as failure
-   when `success` is true.
+- For a time-bounded review, call `get_changes_since` directly with an explicit
+  start time and the narrowest scope already identified by the request or
+  conversation. Do not enumerate Projects or Requirements first when the user
+  asked for a global review.
+- For a current Project or Version overview, resolve the named object with
+  `search`, then call its Snapshot Tool.
+- For a Requirement, Stage, Bug, or write, resolve only the named targets with
+  `search`, then call `get_requirement` to verify the current facts and stable
+  IDs.
+
+If more than one search result could match, show the candidates with Project
+and Version context and ask the user to choose. Never pick by list order. Apply
+the domain rules below and ask one concise question only when a missing choice
+would change the result.
+
+Call a write Tool only when the user explicitly requested that change.
+Reading, summarizing, diagnosing, or proposing does not authorize writing.
+After a write, check the returned `entity`, `history`, and `warnings`. Report
+what changed, the effective time, and every warning. Do not describe a warning
+as failure when `success` is true.
+
+## Bounded reviews
+
+For global daily, weekly, meeting, or other time-bounded summaries, request the
+largest result limit allowed by the Tool unless the user asked for a shorter
+list. If the response reaches that limit, say that the result may be truncated
+and ask the user to narrow the Project, Version, or time range when complete
+coverage matters. Do not try to reconstruct the missing tail by listing every
+Project or Requirement and issuing one query per entity.
+
+Do not query the same scope twice. Add Snapshots only when the user also wants
+current status or risk, or when a change event does not reveal the current
+outcome. Limit those Snapshots to the affected or explicitly requested scopes;
+do not scan every Requirement to enrich a change summary.
+
+## Human-readable reporting
+
+Write for people, not for the database. On first mention, identify work with
+both its stable readable key and its business name:
+
+- Requirement: `FW-12「离线升级支持断点续传」`
+- Stage: `FW-12「离线升级支持断点续传」/ 测试`
+- Bug: `FW-BUG-18「升级后配置丢失」`, together with its parent
+  Requirement when the surrounding context does not already establish it
+- Version: `Arcs 固件 / 2.7` when the Version name is not globally unique
+
+Never expose internal UUIDs as user-facing names. Do not present a comma-
+separated run of bare keys such as `FW-12、FW-14、FW-18`; pair each key with its
+title, or give a count and name the relevant items when the complete list would
+be noisy. After the first fully qualified mention, a key alone is acceptable
+only when its meaning remains obvious in the immediate context.
 
 For multi-step writes, complete only the steps clearly covered by the user's
 request. Stop after any failed step; do not improvise a compensating write.
@@ -80,10 +115,11 @@ request. Stop after any failed step; do not improvise a compensating write.
 
 ## Reference routing
 
-- For classification, status, schedule, dependency, Bug, or rework decisions,
+- For object classification, status, schedule, dependency, Bug, or rework
+  decisions,
   read [references/methodology.md](references/methodology.md).
-- Before performing a non-trivial write or when a request resembles a known
-  ambiguous case, read [references/examples.md](references/examples.md) and
-  follow the closest pattern.
+- When a request resembles a known ambiguous case, read
+  [references/examples.md](references/examples.md) and follow the closest
+  pattern.
 - Tool schemas and parameter details come from the MCP server. Do not copy or
   reconstruct an API catalog in this Skill.

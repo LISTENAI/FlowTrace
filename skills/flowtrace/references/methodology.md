@@ -110,6 +110,12 @@ After a successful write, inspect `warnings`:
 
 ## 7. Read and report facts
 
+Use business-readable identities in every report. On first mention, pair each
+Requirement or Bug key with its title. Qualify a Stage with its parent
+Requirement key and title, and qualify a Version with its Project when names
+can collide. Internal UUIDs are Tool inputs, not user-facing labels. A bare-key
+list such as `FW-12、FW-14、FW-18` is not a meaningful progress summary.
+
 For a Project or Version status report:
 
 1. Use the corresponding Snapshot.
@@ -121,3 +127,9 @@ For a Project or Version status report:
 For a change report, use `get_changes_since` with the narrowest requested scope.
 Report event time, object, before/after when available, reason, and source. A
 current Snapshot can supplement the report but must not replace the event list.
+
+For an unscoped daily or weekly review, query the global change stream directly
+with the largest limit the Tool permits. A full result page is evidence that the
+report may be incomplete, not a reason to enumerate the whole database. State
+the coverage limit and ask for a narrower scope if exhaustive reporting matters.
+Use Snapshots only for affected scopes whose present state or risk is needed.
