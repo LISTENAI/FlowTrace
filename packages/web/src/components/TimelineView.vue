@@ -8,12 +8,14 @@ import type {
   Version,
   VersionStatus,
 } from '@flowtrace/shared';
+import { Popover, PopoverButton, PopoverPanel } from '@headlessui/vue';
 import {
+  ArrowTopRightOnSquareIcon,
   BugAntIcon,
   CalendarDaysIcon,
   ChevronDownIcon,
   CubeIcon,
-  ArrowTopRightOnSquareIcon,
+  InformationCircleIcon,
   UserPlusIcon,
 } from '@heroicons/vue/24/outline';
 import dayjs, { type Dayjs } from 'dayjs';
@@ -30,7 +32,7 @@ import { useRouter } from 'vue-router';
 import { api } from '@/api';
 import AppModal from '@/components/AppModal.vue';
 import OwnerPicker from '@/components/OwnerPicker.vue';
-import { formatDate, statusDot } from '@/lib/presentation';
+import { formatDate, statusDot, statusLabels } from '@/lib/presentation';
 import PlanningDialog from '@/components/PlanningDialog.vue';
 import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
 import TimelineBar from '@/components/TimelineBar.vue';
@@ -773,7 +775,16 @@ function styleFor(value?: DateRange) {
   };
 }
 
-function segments(item: WorkItem) {
+function rangeTooltip(
+  label: string,
+  value: DateRange | undefined,
+  instruction: string,
+) {
+  if (!value) return undefined;
+  return `${label}：${formatDate(value.start)} → ${formatDate(value.end)}；${instruction}`;
+}
+
+function segments(item: WorkItem, interactive = true) {
   if (!item.statusHistory.length) return [];
   return item.statusHistory.map((history, index) => {
     const next = item.statusHistory[index + 1];
@@ -786,27 +797,33 @@ function segments(item: WorkItem) {
       id: history.id,
       status: history.toStatus,
       style: styleFor({ start: history.effectiveAt, end }),
-      title: `${formatDate(history.effectiveAt)} · ${history.reason || ''}`,
+      title: `${statusLabels[history.toStatus]} · ${formatDate(history.effectiveAt)}${history.reason ? ` · ${history.reason}` : ''}；${interactive ? '点击记录实际进展' : '展开需求查看并操作具体过程'}`,
     };
   });
 }
 
 function requirementSegments(requirement: Requirement) {
   const stageSegments = visibleStages(requirement).flatMap((stage) =>
-    segments(stage).map((segment) => ({
+    segments(stage, false).map((segment) => ({
       ...segment,
       id: `stage-${stage.id}-${segment.id}`,
       title: `${stage.name} · ${segment.title}`,
     })),
   );
   const bugSegments = visibleBugs(requirement).flatMap((bug) =>
-    segments(bug).map((segment) => ({
+    segments(bug, false).map((segment) => ({
       ...segment,
       id: `bug-${bug.id}-${segment.id}`,
       title: `${bug.key} · ${segment.title}`,
     })),
   );
   return [...stageSegments, ...bugSegments];
+}
+
+function bugGroupDateRange(requirement: Requirement, mode: TimelineMode) {
+  return mergeRanges(
+    visibleBugs(requirement).map((bug) => itemDateRange(bug, mode)),
+  );
 }
 
 function toggle(set: Set<string>, id: string) {
@@ -860,13 +877,82 @@ watch(
             class="sticky left-0 z-30 flex items-center justify-between border-r border-slate-100 bg-slate-50/95 px-5 py-3 text-[11px] font-semibold tracking-[.08em] text-slate-400 backdrop-blur"
           >
             <span>版本、需求与过程</span>
-            <button
-              type="button"
-              class="focus-ring inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-[10px] tracking-normal text-slate-500 shadow-sm ring-1 ring-slate-200 transition hover:text-indigo-600"
-              @click="scrollToToday"
-            >
-              <CalendarDaysIcon class="h-3.5 w-3.5" />今天
-            </button>
+            <div class="flex items-center gap-1.5 tracking-normal">
+              <Popover class="relative">
+                <PopoverButton
+                  class="focus-ring inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-[10px] text-slate-500 shadow-sm ring-1 ring-slate-200 transition hover:text-indigo-600"
+                >
+                  <InformationCircleIcon class="h-3.5 w-3.5" />说明
+                </PopoverButton>
+                <Transition
+                  enter-active-class="transition duration-150 ease-out"
+                  enter-from-class="translate-y-1 opacity-0 scale-[.98]"
+                  enter-to-class="translate-y-0 opacity-100 scale-100"
+                  leave-active-class="transition duration-100 ease-in"
+                  leave-from-class="translate-y-0 opacity-100 scale-100"
+                  leave-to-class="translate-y-1 opacity-0 scale-[.98]"
+                >
+                  <PopoverPanel
+                    class="absolute left-0 z-50 mt-2 w-72 rounded-2xl border border-slate-200 bg-white/95 p-4 text-left shadow-xl shadow-slate-900/10 backdrop-blur-xl max-sm:-right-10 max-sm:left-auto max-sm:w-56"
+                  >
+                    <p class="text-xs font-semibold text-slate-800">
+                      一条轨道，三种信息
+                    </p>
+                    <div class="mt-3 space-y-3 text-[11px] leading-5">
+                      <div class="flex gap-3">
+                        <i
+                          class="mt-0.5 h-4 w-5 shrink-0 border-x border-slate-400"
+                        />
+                        <p>
+                          <strong class="text-slate-700">初始计划边界</strong
+                          ><br /><span class="text-slate-400"
+                            >只用于比较最初承诺，不可直接拖动。</span
+                          >
+                        </p>
+                      </div>
+                      <div class="flex gap-3">
+                        <i
+                          class="mt-1.5 h-2.5 w-5 shrink-0 rounded-full bg-indigo-200"
+                        />
+                        <p>
+                          <strong class="text-slate-700">当前计划</strong
+                          ><br /><span class="text-slate-400"
+                            >阶段和 Bug
+                            可拖动主条或两端；汇总条会自动计算。</span
+                          >
+                        </p>
+                      </div>
+                      <div class="flex gap-3">
+                        <span class="mt-2 flex w-5 shrink-0 gap-0.5">
+                          <i class="h-1.5 flex-1 rounded-full bg-indigo-500" />
+                          <i class="h-1.5 flex-1 rounded-full bg-emerald-500" />
+                          <i class="h-1.5 flex-1 rounded-full bg-amber-400" />
+                          <i class="h-1.5 flex-1 rounded-full bg-rose-500" />
+                        </span>
+                        <p>
+                          <strong class="text-slate-700">实际进展</strong
+                          ><br /><span class="text-slate-400"
+                            >蓝色推进、绿色完成、黄色等待、红色阻塞；从左侧状态圆点补记。</span
+                          >
+                        </p>
+                      </div>
+                    </div>
+                    <p
+                      class="mt-3 border-t border-slate-100 pt-3 text-[10px] leading-5 text-slate-400"
+                    >
+                      行尾图标依次提供负责人、计划和详情操作；悬停轨道可查看当前事项的具体日期与状态。
+                    </p>
+                  </PopoverPanel>
+                </Transition>
+              </Popover>
+              <button
+                type="button"
+                class="focus-ring inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-[10px] text-slate-500 shadow-sm ring-1 ring-slate-200 transition hover:text-indigo-600"
+                @click="scrollToToday"
+              >
+                <CalendarDaysIcon class="h-3.5 w-3.5" />今天
+              </button>
+            </div>
           </div>
           <div class="relative flex h-14">
             <div
@@ -915,9 +1001,30 @@ watch(
               :days="range.days"
               :bar-style="styleFor(versionDateRange(group, 'current'))"
               bar-class="top-[14px] h-3 bg-indigo-200/90"
+              :bar-title="
+                rangeTooltip(
+                  '当前计划',
+                  versionDateRange(group, 'current'),
+                  '由所属需求和过程自动汇总',
+                )
+              "
               :baseline-style="styleFor(versionDateRange(group, 'baseline'))"
+              :baseline-title="
+                rangeTooltip(
+                  '初始计划边界',
+                  versionDateRange(group, 'baseline'),
+                  '仅作为基准参照',
+                )
+              "
               :actual-style="styleFor(versionDateRange(group, 'actual'))"
               actual-class="bg-emerald-500"
+              :actual-title="
+                rangeTooltip(
+                  '实际进展',
+                  versionDateRange(group, 'actual'),
+                  '由所属需求和过程自动汇总',
+                )
+              "
               @pan-start="startTimelinePan"
             />
           </button>
@@ -1000,13 +1107,34 @@ watch(
                     styleFor(requirementDateRange(requirement, 'current'))
                   "
                   bar-class="top-[14px] h-3 bg-indigo-200/90"
+                  :bar-title="
+                    rangeTooltip(
+                      '当前计划',
+                      requirementDateRange(requirement, 'current'),
+                      '点击左侧日历按钮调整需求计划',
+                    )
+                  "
                   :baseline-style="
                     styleFor(requirementDateRange(requirement, 'baseline'))
+                  "
+                  :baseline-title="
+                    rangeTooltip(
+                      '初始计划边界',
+                      requirementDateRange(requirement, 'baseline'),
+                      '仅作为基准参照',
+                    )
                   "
                   :actual-style="
                     styleFor(requirementDateRange(requirement, 'actual'))
                   "
                   :actual-class="statusDot[requirementStatus(requirement)]"
+                  :actual-title="
+                    rangeTooltip(
+                      `实际进展（${statusLabels[requirementStatus(requirement)]}）`,
+                      requirementDateRange(requirement, 'actual'),
+                      '展开需求后通过阶段状态圆点记录变化',
+                    )
+                  "
                   :actual-segments="requirementSegments(requirement)"
                   @pan-start="startTimelinePan"
                 />
@@ -1076,13 +1204,36 @@ watch(
                     :days="range.days"
                     :bar-style="styleFor(displayedItemRange(stage))"
                     bar-class="top-[14px] h-3 bg-indigo-200/90"
+                    :bar-title="
+                      rangeTooltip(
+                        '当前计划',
+                        itemDateRange(stage, 'current'),
+                        '可拖动主条或两端调整日期',
+                      )
+                    "
                     :baseline-style="styleFor(itemDateRange(stage, 'baseline'))"
+                    :baseline-title="
+                      rangeTooltip(
+                        '初始计划边界',
+                        itemDateRange(stage, 'baseline'),
+                        '仅作为基准参照',
+                      )
+                    "
                     :actual-style="styleFor(itemDateRange(stage, 'actual'))"
                     :actual-class="statusDot[stage.status]"
+                    :actual-title="
+                      rangeTooltip(
+                        `实际进展（${statusLabels[stage.status]}）`,
+                        itemDateRange(stage, 'actual'),
+                        '点击实际进展线或左侧状态圆点记录变化',
+                      )
+                    "
                     :actual-segments="segments(stage)"
+                    actual-interactive
                     :interactive="Boolean(itemDateRange(stage, 'current'))"
                     @pan-start="startTimelinePan"
                     @bar-drag-start="startScheduleDrag(stage, $event)"
+                    @actual-activate="statusTarget = stage"
                   />
                 </div>
 
@@ -1113,34 +1264,37 @@ watch(
                   <TimelineBar
                     :days="range.days"
                     :bar-style="
-                      styleFor(
-                        mergeRanges(
-                          visibleBugs(requirement).map((bug) =>
-                            itemDateRange(bug, 'current'),
-                          ),
-                        ),
-                      )
+                      styleFor(bugGroupDateRange(requirement, 'current'))
                     "
                     bar-class="top-[14px] h-3 bg-rose-200/90"
+                    :bar-title="
+                      rangeTooltip(
+                        '当前计划',
+                        bugGroupDateRange(requirement, 'current'),
+                        '由下方 Bug 自动汇总',
+                      )
+                    "
                     :baseline-style="
-                      styleFor(
-                        mergeRanges(
-                          visibleBugs(requirement).map((bug) =>
-                            itemDateRange(bug, 'baseline'),
-                          ),
-                        ),
+                      styleFor(bugGroupDateRange(requirement, 'baseline'))
+                    "
+                    :baseline-title="
+                      rangeTooltip(
+                        '初始计划边界',
+                        bugGroupDateRange(requirement, 'baseline'),
+                        '仅作为基准参照',
                       )
                     "
                     :actual-style="
-                      styleFor(
-                        mergeRanges(
-                          visibleBugs(requirement).map((bug) =>
-                            itemDateRange(bug, 'actual'),
-                          ),
-                        ),
-                      )
+                      styleFor(bugGroupDateRange(requirement, 'actual'))
                     "
                     actual-class="bg-rose-500"
+                    :actual-title="
+                      rangeTooltip(
+                        '实际进展',
+                        bugGroupDateRange(requirement, 'actual'),
+                        '由下方 Bug 自动汇总',
+                      )
+                    "
                     @pan-start="startTimelinePan"
                   />
                 </button>
@@ -1213,13 +1367,36 @@ watch(
                       :days="range.days"
                       :bar-style="styleFor(displayedItemRange(bug))"
                       bar-class="top-[14px] h-3 bg-rose-200/90"
+                      :bar-title="
+                        rangeTooltip(
+                          '当前计划',
+                          itemDateRange(bug, 'current'),
+                          '可拖动主条或两端调整日期',
+                        )
+                      "
                       :baseline-style="styleFor(itemDateRange(bug, 'baseline'))"
+                      :baseline-title="
+                        rangeTooltip(
+                          '初始计划边界',
+                          itemDateRange(bug, 'baseline'),
+                          '仅作为基准参照',
+                        )
+                      "
                       :actual-style="styleFor(itemDateRange(bug, 'actual'))"
                       :actual-class="statusDot[bug.status]"
+                      :actual-title="
+                        rangeTooltip(
+                          `实际进展（${statusLabels[bug.status]}）`,
+                          itemDateRange(bug, 'actual'),
+                          '点击实际进展线或左侧状态圆点记录变化',
+                        )
+                      "
                       :actual-segments="segments(bug)"
+                      actual-interactive
                       :interactive="Boolean(itemDateRange(bug, 'current'))"
                       @pan-start="startTimelinePan"
                       @bar-drag-start="startScheduleDrag(bug, $event)"
+                      @actual-activate="statusTarget = bug"
                     />
                   </div>
                 </template>

@@ -11,9 +11,13 @@ const props = withDefaults(
     days: number;
     barStyle?: CSSProperties;
     barClass?: string;
+    barTitle?: string;
     baselineStyle?: CSSProperties;
+    baselineTitle?: string;
     actualStyle?: CSSProperties;
     actualClass?: string;
+    actualTitle?: string;
+    actualInteractive?: boolean;
     pannable?: boolean;
     interactive?: boolean;
     actualSegments?: Array<{
@@ -31,11 +35,12 @@ const props = withDefaults(
       title: string;
     }>;
   }>(),
-  { pannable: true, interactive: false },
+  { pannable: true, interactive: false, actualInteractive: false },
 );
 const emit = defineEmits<{
   panStart: [payload: PointerPayload];
   barDragStart: [payload: PointerPayload & { mode: ScheduleDragMode }];
+  actualActivate: [];
 }>();
 const track = ref<HTMLElement>();
 
@@ -71,7 +76,7 @@ function startBarDrag(event: PointerEvent, mode: ScheduleDragMode) {
       v-if="baselineStyle"
       class="pointer-events-none absolute top-[7px] z-[1] h-6 border-x border-slate-400/80"
       :style="baselineStyle"
-      title="初始计划的起止位置"
+      :title="baselineTitle ?? '初始计划的起止位置；仅作为基准参照'"
     />
     <template v-if="segments?.length">
       <div
@@ -97,7 +102,9 @@ function startBarDrag(event: PointerEvent, mode: ScheduleDragMode) {
       ]"
       :style="barStyle"
       :title="
-        interactive ? '拖动调整日期，拖动两端改变开始或结束时间' : undefined
+        interactive
+          ? `${barTitle ? `${barTitle}；` : ''}拖动主条调整日期，拖动两端改变开始或结束时间`
+          : barTitle
       "
       @pointerdown.stop="startBarDrag($event, 'move')"
     >
@@ -118,21 +125,27 @@ function startBarDrag(event: PointerEvent, mode: ScheduleDragMode) {
       <div
         v-for="segment in actualSegments"
         :key="`actual-${segment.id}`"
-        class="pointer-events-none absolute top-[18px] z-10 h-1.5 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,.55)]"
+        class="absolute top-[18px] z-10 h-1.5 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,.55)]"
         :class="[
+          actualInteractive ? 'cursor-pointer' : 'cursor-help',
           segment.status ? statusDot[segment.status] : '',
           segment.class,
         ]"
         :style="segment.style"
         :title="segment.title"
+        @click.stop="actualInteractive && emit('actualActivate')"
       />
     </template>
     <div
       v-else-if="actualStyle"
-      class="pointer-events-none absolute top-[18px] z-10 h-1.5 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,.55)]"
-      :class="actualClass"
+      class="absolute top-[18px] z-10 h-1.5 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,.55)]"
+      :class="[
+        actualInteractive ? 'cursor-pointer' : 'cursor-help',
+        actualClass,
+      ]"
       :style="actualStyle"
-      title="实际过程"
+      :title="actualTitle ?? '实际进展；请通过左侧状态圆点记录变化'"
+      @click.stop="actualInteractive && emit('actualActivate')"
     />
   </div>
 </template>
