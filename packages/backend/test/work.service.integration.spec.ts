@@ -125,12 +125,28 @@ describe.sequential('WorkService business rules', () => {
       status: 'in_progress',
       ownerIds: [designer.id],
     });
+    await work.updateStageStatus(requirement.stages[0]!.id, {
+      status: 'in_progress',
+      ownerIds: [developer.id],
+    });
 
     const updated = await work.getRequirement(requirement.id);
-    expect(updated.stages[0]!.ownerIds).toEqual([coordinator.id, designer.id]);
+    expect(updated.stages[0]!.ownerIds).toEqual([developer.id]);
     expect(updated.stages[0]!.status).toBe('in_progress');
     expect(updated.bugs[0]!.ownerIds).toEqual([designer.id]);
     expect(updated.bugs[0]!.status).toBe('in_progress');
+    const changes = await work.getChanges({
+      since: '2020-01-01T00:00:00.000Z',
+      requirementId: requirement.id,
+    });
+    expect(changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'stage_updated',
+          summary: '需求设计 更新负责人',
+        }),
+      ]),
+    );
   });
 
   it('inserts and reorders actual stages without duplicate positions', async () => {

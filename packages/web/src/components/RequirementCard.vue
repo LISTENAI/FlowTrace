@@ -285,6 +285,9 @@ async function refreshed() {
         'title' in statusTarget ? statusTarget.title : statusTarget.name
       "
       :current-status="statusTarget.status"
+      :actual-start-at="statusTarget.actualStartAt"
+      :status-reason="statusTarget.statusReason"
+      :expected-resume-at="statusTarget.expectedResumeAt"
       :owner-ids="statusTarget.ownerIds"
       :people="workspace.people"
       @close="statusTarget = undefined"

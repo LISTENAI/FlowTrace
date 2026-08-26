@@ -1512,6 +1512,10 @@ export class WorkService {
     if (actualEndAt && input.status !== 'done') {
       throw new BadRequestException('只有已完成事项可以填写实际结束时间');
     }
+    const ownersChanged =
+      input.ownerIds !== undefined &&
+      [...input.ownerIds].sort().join('\0') !==
+        [...entity.ownerIds].sort().join('\0');
     const requirement = await this.findRequirement(entity.requirementId);
     await this.dataSource.transaction(async (manager) => {
       const recordsStatus =
@@ -1558,7 +1562,7 @@ export class WorkService {
       if (recordsStatus || actualStartAt || actualEndAt) {
         await this.recomputeTrackable(manager, kind, entity.id);
       }
-      if (input.ownerIds !== undefined) {
+      if (ownersChanged && input.ownerIds) {
         const repository = manager.getRepository(
           kind === 'stage' ? StageEntity : BugEntity,
         );
@@ -1601,6 +1605,21 @@ export class WorkService {
           details: {
             actualStartAt: iso(actualStartAt),
             actualEndAt: iso(actualEndAt),
+          },
+          ...context(input),
+        });
+      }
+      if (ownersChanged && input.ownerIds) {
+        await this.recordChange(manager, {
+          entityType: kind,
+          entityId: entity.id,
+          projectId: requirement.projectId,
+          requirementId: requirement.id,
+          type: `${kind}_updated`,
+          summary: `${name} 更新负责人`,
+          details: {
+            before: { ownerIds: entity.ownerIds },
+            after: { ownerIds: input.ownerIds },
           },
           ...context(input),
         });

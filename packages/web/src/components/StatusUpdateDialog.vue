@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { ExecutionStatus } from '@flowtrace/shared';
+import type { ExecutionStatus, Person } from '@flowtrace/shared';
 import dayjs from 'dayjs';
 import { computed, reactive, ref, watch } from 'vue';
 import { api } from '@/api';
 import AppDateTimeField from '@/components/AppDateTimeField.vue';
 import AppModal from '@/components/AppModal.vue';
+import OwnerPicker from '@/components/OwnerPicker.vue';
 import { formatDateTime, statusDot, statusLabels } from '@/lib/presentation';
 import { toasts } from '@/state/toasts';
 
@@ -17,6 +18,8 @@ const props = defineProps<{
   actualStartAt?: string;
   statusReason?: string;
   expectedResumeAt?: string;
+  ownerIds?: string[];
+  people?: Person[];
 }>();
 
 const emit = defineEmits<{ close: []; saved: [] }>();
@@ -28,6 +31,7 @@ const form = reactive({
   statusReason: '',
   expectedResumeAt: '',
   note: '',
+  ownerIds: [] as string[],
 });
 
 const statuses: Array<{ id: ExecutionStatus; hint: string }> = [
@@ -68,8 +72,14 @@ const recordsProgressEvent = computed(
 const backfillsStart = computed(
   () => canBackfillStart.value && Boolean(form.startedAt),
 );
+const ownersChanged = computed(() => {
+  const previous = [...(props.ownerIds ?? [])].sort();
+  const next = [...form.ownerIds].sort();
+  return previous.join('\0') !== next.join('\0');
+});
 const hasChanges = computed(
-  () => recordsProgressEvent.value || backfillsStart.value,
+  () =>
+    recordsProgressEvent.value || backfillsStart.value || ownersChanged.value,
 );
 
 function localTime(value?: string) {
@@ -86,6 +96,7 @@ watch(
     form.statusReason = props.statusReason ?? '';
     form.expectedResumeAt = localTime(props.expectedResumeAt);
     form.note = '';
+    form.ownerIds = [...(props.ownerIds ?? [])];
   },
   { immediate: true },
 );
@@ -108,16 +119,21 @@ async function save() {
           ? dayjs(form.expectedResumeAt).toISOString()
           : undefined,
       note: recordsProgressEvent.value ? form.note || undefined : undefined,
+      ownerIds: ownersChanged.value ? form.ownerIds : undefined,
     };
     if (props.itemType === 'stage')
       await api.updateStageStatus(props.itemId, input);
     else await api.updateBugStatus(props.itemId, input);
     toasts.show(
-      !recordsProgressEvent.value && backfillsStart.value
-        ? '开始时间已补记'
-        : isBackfill.value
-          ? '进展已补记'
-          : '进展已记录',
+      !recordsProgressEvent.value &&
+        !backfillsStart.value &&
+        ownersChanged.value
+        ? '负责人已更新'
+        : !recordsProgressEvent.value && backfillsStart.value
+          ? '开始时间已补记'
+          : isBackfill.value
+            ? '进展已补记'
+            : '进展已记录',
       `${props.itemName} · ${statusLabels[form.status]}`,
     );
     emit('saved');
@@ -265,6 +281,11 @@ async function save() {
         />
       </label>
 
+      <div v-if="people?.length" class="border-t border-slate-100 pt-4">
+        <p class="mb-2 text-xs font-medium text-slate-600">负责人</p>
+        <OwnerPicker v-model="form.ownerIds" :people="people" />
+      </div>
+
       <p
         v-else
         class="rounded-xl bg-violet-50/60 px-3 py-2.5 text-[11px] leading-5 text-violet-600"
@@ -293,11 +314,13 @@ async function save() {
             {{
               saving
                 ? '记录中…'
-                : !recordsProgressEvent && backfillsStart
-                  ? '补记开始时间'
-                  : isBackfill
-                    ? '确认补记'
-                    : '记录进展'
+                : !recordsProgressEvent && !backfillsStart && ownersChanged
+                  ? '保存负责人'
+                  : !recordsProgressEvent && backfillsStart
+                    ? '补记开始时间'
+                    : isBackfill
+                      ? '确认补记'
+                      : '记录进展'
             }}
           </button>
         </div>

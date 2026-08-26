@@ -978,6 +978,8 @@ watch(id, load);
       :actual-start-at="statusTarget.actualStartAt"
       :status-reason="statusTarget.statusReason"
       :expected-resume-at="statusTarget.expectedResumeAt"
+      :owner-ids="statusTarget.ownerIds"
+      :people="workspace.people"
       @close="statusTarget = undefined"
       @saved="load"
     />
