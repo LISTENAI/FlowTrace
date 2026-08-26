@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ExecutionStatus, Person } from '@flowtrace/shared';
+import { ChevronDownIcon, UserGroupIcon } from '@heroicons/vue/24/outline';
 import dayjs from 'dayjs';
 import { computed, reactive, ref, watch } from 'vue';
 import { api } from '@/api';
@@ -24,6 +25,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: []; saved: [] }>();
 const saving = ref(false);
+const ownersOpen = ref(false);
 const form = reactive({
   status: props.currentStatus,
   effectiveAt: dayjs().format('YYYY-MM-DDTHH:mm'),
@@ -81,6 +83,14 @@ const hasChanges = computed(
   () =>
     recordsProgressEvent.value || backfillsStart.value || ownersChanged.value,
 );
+const ownerSummary = computed(() => {
+  const names = form.ownerIds
+    .map((id) => props.people?.find((person) => person.id === id)?.name)
+    .filter(Boolean);
+  if (!names.length) return '待分配';
+  if (names.length <= 3) return names.join('、');
+  return `${names.slice(0, 3).join('、')}等 ${names.length} 人`;
+});
 
 function localTime(value?: string) {
   return value ? dayjs(value).format('YYYY-MM-DDTHH:mm') : '';
@@ -97,6 +107,7 @@ watch(
     form.expectedResumeAt = localTime(props.expectedResumeAt);
     form.note = '';
     form.ownerIds = [...(props.ownerIds ?? [])];
+    ownersOpen.value = false;
   },
   { immediate: true },
 );
@@ -281,17 +292,38 @@ async function save() {
         />
       </label>
 
-      <div v-if="people?.length" class="border-t border-slate-100 pt-4">
-        <p class="mb-2 text-xs font-medium text-slate-600">负责人</p>
-        <OwnerPicker v-model="form.ownerIds" :people="people" />
-      </div>
-
       <p
-        v-else
+        v-if="staysTerminal"
         class="rounded-xl bg-violet-50/60 px-3 py-2.5 text-[11px] leading-5 text-violet-600"
       >
         这项工作已经结束。如需修改完成时间、状态或当时的说明，请在「最近历史」中修正对应记录。
       </p>
+
+      <div v-if="people?.length" class="border-t border-slate-100 pt-4">
+        <button
+          type="button"
+          class="focus-ring flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-left transition hover:border-slate-300 hover:bg-white"
+          :aria-expanded="ownersOpen"
+          @click="ownersOpen = !ownersOpen"
+        >
+          <UserGroupIcon class="h-4 w-4 shrink-0 text-slate-400" />
+          <span class="min-w-0 flex-1">
+            <span class="block text-xs font-medium text-slate-600"
+              >同时调整负责人</span
+            >
+            <span class="mt-0.5 block truncate text-[10px] text-slate-400">{{
+              ownerSummary
+            }}</span>
+          </span>
+          <ChevronDownIcon
+            class="h-4 w-4 shrink-0 text-slate-400 transition"
+            :class="ownersOpen ? 'rotate-180' : ''"
+          />
+        </button>
+        <div v-if="ownersOpen" class="mt-3">
+          <OwnerPicker v-model="form.ownerIds" :people="people" />
+        </div>
+      </div>
 
       <div
         class="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between"

@@ -388,6 +388,7 @@ describe.sequential('WorkService business rules', () => {
   });
 
   it('shows the stage needing the most attention as the current stage', async () => {
+    const owner = await work.createPerson({ name: '验证负责人' });
     await work.updateTemplate(appProjectId, {
       stages: [{ name: '准备' }, { name: '开发' }, { name: '验证' }],
     });
@@ -401,12 +402,28 @@ describe.sequential('WorkService business rules', () => {
     await work.updateStageStatus(requirement.stages[2]!.id, {
       status: 'blocked',
       statusReason: '等待样件',
+      ownerIds: [owner.id],
+    });
+    await work.rescheduleStage(requirement.stages[2]!.id, {
+      plannedStartAt: '2026-02-01T00:00:00.000Z',
+      plannedEndAt: '2026-02-05T00:00:00.000Z',
     });
 
     const summary = (
       await work.listRequirements({ projectId: appProjectId })
     ).find((item) => item.id === requirement.id);
-    expect(summary?.currentStage).toBe('验证');
+    expect(summary).toMatchObject({
+      currentStage: '验证',
+      currentStageId: requirement.stages[2]!.id,
+      currentStageStatus: 'blocked',
+      currentStageOwnerIds: [owner.id],
+      currentStagePlannedStartAt: '2026-02-01T00:00:00.000Z',
+      currentStagePlannedEndAt: '2026-02-05T00:00:00.000Z',
+    });
+    expect(summary?.reviewIssues.map((issue) => issue.code)).toEqual([
+      'requirement_owner_missing',
+      'version_missing',
+    ]);
   });
 
   it('retains the initial schedule and every later adjustment', async () => {

@@ -3,6 +3,7 @@ import type {
   ProjectSnapshot,
   Requirement,
   RequirementSummary,
+  SnapshotWorkItem,
 } from '@flowtrace/shared';
 import {
   AdjustmentsHorizontalIcon,
@@ -26,9 +27,11 @@ import AppDateTimeField from '@/components/AppDateTimeField.vue';
 import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
 import OwnerPicker from '@/components/OwnerPicker.vue';
+import PlanningDialog from '@/components/PlanningDialog.vue';
 import RequirementCard from '@/components/RequirementCard.vue';
+import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
 import TimelineView from '@/components/TimelineView.vue';
-import { formatDate } from '@/lib/presentation';
+import { formatDate, versionLabels } from '@/lib/presentation';
 import { toasts } from '@/state/toasts';
 import { loadWorkspace, workspace } from '@/state/workspace';
 
@@ -48,7 +51,9 @@ const timelineRequirements = ref<Requirement[]>([]);
 const createOpen = ref(false);
 const saving = ref(false);
 const filtersOpen = ref(false);
-const filters = reactive({ versionId: 'all', health: 'all', ownerId: 'all' });
+const filters = reactive({ versionId: 'auto', health: 'all', ownerId: 'all' });
+const attentionTarget = ref<SnapshotWorkItem>();
+const scheduleTarget = ref<RequirementSummary>();
 const form = reactive({
   title: '',
   description: '',
@@ -58,7 +63,7 @@ const form = reactive({
   plannedEndAt: dayjs().add(14, 'day').format('YYYY-MM-DD'),
 });
 
-const requirements = computed(() => {
+const versionScopedRequirements = computed(() => {
   const rows = snapshot.value?.requirements ?? [];
   return rows.filter((item) => {
     if (filters.versionId === 'backlog' && item.versionId) return false;
@@ -68,7 +73,26 @@ const requirements = computed(() => {
       item.versionId !== filters.versionId
     )
       return false;
-    if (filters.health !== 'all' && item.health !== filters.health)
+    return true;
+  });
+});
+
+const requirements = computed(() => {
+  return versionScopedRequirements.value.filter((item) => {
+    if (
+      ['waiting', 'blocked', 'normal'].includes(filters.health) &&
+      item.health !== filters.health
+    )
+      return false;
+    if (filters.health === 'in_progress' && item.lifecycle !== 'in_progress')
+      return false;
+    if (filters.health === 'overdue' && !item.overdue) return false;
+    if (
+      filters.health === 'open_bugs' &&
+      item.bugCount === item.completedBugCount
+    )
+      return false;
+    if (filters.health === 'review' && !reviewIssueMap.value.has(item.id))
       return false;
     if (filters.ownerId !== 'all' && !item.ownerIds.includes(filters.ownerId))
       return false;
@@ -77,20 +101,25 @@ const requirements = computed(() => {
 });
 
 const activeFilters = computed(
-  () => Object.values(filters).filter((value) => value !== 'all').length,
+  () =>
+    [filters.health, filters.ownerId].filter((value) => value !== 'all').length,
 );
 const versionFilterOptions = computed(() => [
   { value: 'all', label: '全部版本' },
   { value: 'backlog', label: '未排版本' },
   ...(snapshot.value?.versions ?? []).map((version) => ({
     value: version.id,
-    label: version.name,
+    label: `${version.name} · ${versionLabels[version.status]}`,
   })),
 ]);
 const healthFilterOptions = [
-  { value: 'all', label: '全部状态' },
+  { value: 'all', label: '全部需求' },
+  { value: 'in_progress', label: '正在推进' },
   { value: 'waiting', label: '等待中' },
   { value: 'blocked', label: '阻塞' },
+  { value: 'overdue', label: '已延期' },
+  { value: 'open_bugs', label: '有未完成 Bug' },
+  { value: 'review', label: '计划待 Review' },
   { value: 'normal', label: '正常' },
 ];
 const ownerFilterOptions = computed(() => [
@@ -108,6 +137,66 @@ const createVersionOptions = computed(() => [
     label: version.name,
   })),
 ]);
+const scopedRequirementIds = computed(
+  () => new Set(versionScopedRequirements.value.map((item) => item.id)),
+);
+const scopedMetrics = computed(() => {
+  const rows = versionScopedRequirements.value;
+  return {
+    total: rows.length,
+    completed: rows.filter((item) => item.lifecycle === 'done').length,
+    inProgress: rows.filter((item) => item.lifecycle === 'in_progress').length,
+    waiting: rows.filter((item) => item.health === 'waiting').length,
+    blocked: rows.filter((item) => item.health === 'blocked').length,
+    openBugs: rows.reduce(
+      (sum, item) => sum + item.bugCount - item.completedBugCount,
+      0,
+    ),
+  };
+});
+const reviewIssueMap = computed(() => {
+  const issues = new Map<string, string[]>();
+  for (const item of snapshot.value?.requirements ?? []) {
+    if (item.reviewIssues.length)
+      issues.set(
+        item.id,
+        item.reviewIssues.map((issue) => issue.message),
+      );
+  }
+  return issues;
+});
+const scopedReviewRows = computed(() =>
+  versionScopedRequirements.value.filter((item) =>
+    reviewIssueMap.value.has(item.id),
+  ),
+);
+const scopedBlockedItems = computed(() =>
+  (snapshot.value?.blockedItems ?? []).filter((item) =>
+    scopedRequirementIds.value.has(item.requirementId),
+  ),
+);
+const scopedWaitingItems = computed(() =>
+  (snapshot.value?.waitingItems ?? []).filter((item) =>
+    scopedRequirementIds.value.has(item.requirementId),
+  ),
+);
+const scopedDelayedRows = computed(() =>
+  versionScopedRequirements.value.filter((item) => item.overdue),
+);
+const scopedExternalDependencies = computed(() =>
+  (snapshot.value?.externalDependencies ?? []).filter((item) =>
+    item.successor
+      ? scopedRequirementIds.value.has(item.successor.requirementId)
+      : false,
+  ),
+);
+const timelineVersions = computed(() => {
+  if (filters.versionId === 'all' || filters.versionId === 'backlog')
+    return snapshot.value?.versions ?? [];
+  return (snapshot.value?.versions ?? []).filter(
+    (item) => item.id === filters.versionId,
+  );
+});
 const filteredTimelineRequirements = computed(() => {
   const ids = new Set(requirements.value.map((item) => item.id));
   return timelineRequirements.value.filter((item) => ids.has(item.id));
@@ -199,6 +288,11 @@ async function load() {
   error.value = '';
   try {
     snapshot.value = await api.projectSnapshot(projectId.value);
+    if (filters.versionId === 'auto') {
+      filters.versionId =
+        snapshot.value.versions.find((item) => item.status === 'active')?.id ??
+        'all';
+    }
     await loadWorkspace();
     if (view.value === 'timeline') await loadTimeline();
   } catch (caught) {
@@ -264,7 +358,7 @@ watch(timelineStageOptions, (options) => {
   );
 });
 watch(projectId, () => {
-  filters.versionId = 'all';
+  filters.versionId = 'auto';
   clearTimelineFocus();
   timelineRequirements.value = [];
   void load();
@@ -310,8 +404,9 @@ watch(projectId, () => {
               >{{ snapshot.project.key }}</span
             >
             <span class="text-xs text-slate-400">{{
-              snapshot.versions.find((item) => item.status === 'active')
-                ?.name || '未设置进行中版本'
+              snapshot.versions.find((item) => item.status === 'active')?.name
+                ? `当前交付 ${snapshot.versions.find((item) => item.status === 'active')?.name}`
+                : '未设置进行中版本'
             }}</span>
           </div>
           <h1
@@ -339,17 +434,20 @@ watch(projectId, () => {
         </div>
       </section>
 
-      <section class="mt-7 grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <div
-          class="surface col-span-2 flex items-center gap-5 p-4 lg:col-span-1"
+      <section class="mt-7 grid grid-cols-2 gap-3 lg:grid-cols-6">
+        <button
+          type="button"
+          class="surface col-span-2 flex items-center gap-5 p-4 text-left transition hover:border-indigo-200 lg:col-span-1"
+          :class="filters.health === 'all' ? 'ring-2 ring-indigo-100' : ''"
+          @click="filters.health = 'all'"
         >
           <div
             class="relative grid h-12 w-12 place-items-center rounded-full bg-indigo-50 text-sm font-bold text-indigo-700"
           >
             {{
-              snapshot.metrics.total
+              scopedMetrics.total
                 ? Math.round(
-                    (snapshot.metrics.completed / snapshot.metrics.total) * 100,
+                    (scopedMetrics.completed / scopedMetrics.total) * 100,
                   )
                 : 0
             }}%
@@ -359,46 +457,88 @@ watch(projectId, () => {
           </div>
           <div>
             <div class="text-xl font-semibold text-slate-900">
-              {{ snapshot.metrics.completed }}/{{ snapshot.metrics.total }}
+              {{ scopedMetrics.completed }}/{{ scopedMetrics.total }}
             </div>
             <div class="text-[11px] text-slate-400">需求已完成</div>
           </div>
-        </div>
-        <div class="surface p-4">
+        </button>
+        <button
+          type="button"
+          class="surface p-4 text-left transition hover:border-indigo-200"
+          :class="
+            filters.health === 'in_progress' ? 'ring-2 ring-indigo-100' : ''
+          "
+          @click="filters.health = 'in_progress'"
+        >
           <div class="text-2xl font-semibold text-slate-900">
-            {{ snapshot.metrics.inProgress }}
+            {{ scopedMetrics.inProgress }}
           </div>
           <div class="mt-1 text-[11px] text-slate-400">正在推进</div>
-        </div>
-        <div class="surface p-4">
+        </button>
+        <button
+          type="button"
+          class="surface p-4 text-left transition hover:border-amber-200"
+          :class="filters.health === 'waiting' ? 'ring-2 ring-amber-100' : ''"
+          @click="filters.health = 'waiting'"
+        >
           <div class="text-2xl font-semibold text-amber-600">
-            {{ snapshot.metrics.waiting }}
+            {{ scopedMetrics.waiting }}
           </div>
           <div class="mt-1 text-[11px] text-slate-400">正在等待</div>
-        </div>
-        <div class="surface p-4">
+        </button>
+        <button
+          type="button"
+          class="surface p-4 text-left transition hover:border-rose-200"
+          :class="filters.health === 'blocked' ? 'ring-2 ring-rose-100' : ''"
+          @click="filters.health = 'blocked'"
+        >
           <div class="text-2xl font-semibold text-rose-600">
-            {{ snapshot.metrics.blocked }}
+            {{ scopedMetrics.blocked }}
           </div>
           <div class="mt-1 text-[11px] text-slate-400">当前阻塞</div>
-        </div>
-        <div class="surface p-4">
+        </button>
+        <button
+          type="button"
+          class="surface p-4 text-left transition hover:border-violet-200"
+          :class="
+            filters.health === 'open_bugs' ? 'ring-2 ring-violet-100' : ''
+          "
+          @click="filters.health = 'open_bugs'"
+        >
           <div class="text-2xl font-semibold text-violet-600">
-            {{ snapshot.metrics.openBugs }}
+            {{ scopedMetrics.openBugs }}
           </div>
           <div class="mt-1 text-[11px] text-slate-400">未完成 Bug</div>
-        </div>
+        </button>
+        <button
+          type="button"
+          class="surface p-4 text-left transition hover:border-indigo-200"
+          :class="filters.health === 'review' ? 'ring-2 ring-indigo-100' : ''"
+          @click="filters.health = 'review'"
+        >
+          <div class="text-2xl font-semibold text-indigo-600">
+            {{ scopedReviewRows.length }}
+          </div>
+          <div class="mt-1 text-[11px] text-slate-400">计划待 Review</div>
+        </button>
       </section>
 
       <section
         v-if="
-          snapshot.blockedItems.length ||
-          snapshot.waitingItems.length ||
-          snapshot.externalDependencies.length
+          scopedBlockedItems.length ||
+          scopedWaitingItems.length ||
+          scopedDelayedRows.length ||
+          scopedReviewRows.length ||
+          scopedExternalDependencies.length
         "
-        class="mt-4 grid gap-3 lg:grid-cols-[1.35fr_1fr]"
+        class="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
       >
         <div
+          v-if="
+            scopedBlockedItems.length ||
+            scopedWaitingItems.length ||
+            scopedDelayedRows.length
+          "
           class="overflow-hidden rounded-2xl border border-rose-100 bg-gradient-to-r from-rose-50/90 to-amber-50/60 p-4 dark:from-rose-950/35 dark:to-amber-950/25"
         >
           <div class="flex items-start gap-3">
@@ -407,51 +547,110 @@ watch(projectId, () => {
               ><ExclamationTriangleIcon class="h-5 w-5"
             /></span>
             <div class="min-w-0 flex-1">
-              <p class="text-xs font-semibold text-slate-800">需要关注的事项</p>
-              <div class="mt-1.5 space-y-1">
-                <p
+              <p class="text-xs font-semibold text-slate-800">需要决策与跟进</p>
+              <div class="mt-2 space-y-1.5">
+                <div
                   v-for="item in [
-                    ...snapshot.blockedItems,
-                    ...snapshot.waitingItems,
-                  ].slice(0, 2)"
+                    ...scopedBlockedItems,
+                    ...scopedWaitingItems,
+                  ].slice(0, 3)"
                   :key="item.id"
-                  class="truncate text-xs text-slate-600"
+                  class="flex items-center gap-2"
                 >
-                  <span
-                    class="mr-1 font-medium"
-                    :class="
-                      snapshot.blockedItems.some(
-                        (blocked) => blocked.id === item.id,
-                      )
-                        ? 'text-rose-600'
-                        : 'text-amber-600'
-                    "
-                    >{{
-                      snapshot.blockedItems.some(
-                        (blocked) => blocked.id === item.id,
-                      )
-                        ? '阻塞'
-                        : '等待'
-                    }}</span
+                  <RouterLink
+                    :to="`/requirements/${item.requirementId}`"
+                    class="focus-ring min-w-0 flex-1 rounded-lg text-left"
                   >
-                  {{ item.name }} · {{ item.reason }}
-                </p>
+                    <span
+                      class="flex items-center gap-1.5 text-xs font-semibold text-slate-700"
+                    >
+                      <span class="font-mono text-[10px] text-indigo-600">{{
+                        item.requirementKey
+                      }}</span>
+                      <span class="truncate">{{ item.requirementTitle }}</span>
+                    </span>
+                    <span
+                      class="mt-0.5 block truncate text-[11px] text-slate-500"
+                    >
+                      {{ item.name }} · {{ item.reason }}
+                    </span>
+                  </RouterLink>
+                  <button
+                    type="button"
+                    class="focus-ring shrink-0 rounded-lg bg-white/80 px-2 py-1.5 text-[10px] font-semibold text-slate-600 shadow-sm hover:text-indigo-600"
+                    @click="attentionTarget = item"
+                  >
+                    记录进展
+                  </button>
+                </div>
+                <div
+                  v-for="item in scopedDelayedRows.slice(0, 2)"
+                  :key="`delayed-${item.id}`"
+                  class="flex items-center gap-2"
+                >
+                  <RouterLink
+                    :to="`/requirements/${item.id}`"
+                    class="focus-ring min-w-0 flex-1 rounded-lg text-left"
+                  >
+                    <span
+                      class="flex items-center gap-1.5 text-xs font-semibold text-slate-700"
+                    >
+                      <span class="font-mono text-[10px] text-indigo-600">{{
+                        item.key
+                      }}</span>
+                      <span class="truncate">{{ item.title }}</span>
+                    </span>
+                    <span
+                      class="mt-0.5 block truncate text-[11px] text-rose-600"
+                    >
+                      当前计划已到 {{ formatDate(item.plannedEndAt) }}
+                    </span>
+                  </RouterLink>
+                  <button
+                    type="button"
+                    class="focus-ring shrink-0 rounded-lg bg-white/80 px-2 py-1.5 text-[10px] font-semibold text-slate-600 shadow-sm hover:text-violet-600"
+                    @click="scheduleTarget = item"
+                  >
+                    调整计划
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
-        <div class="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
+        <div
+          v-if="scopedReviewRows.length"
+          class="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4"
+        >
+          <p class="text-xs font-semibold text-indigo-800">计划 Review</p>
+          <div class="mt-2 space-y-1.5">
+            <RouterLink
+              v-for="item in scopedReviewRows.slice(0, 3)"
+              :key="item.id"
+              :to="`/requirements/${item.id}`"
+              class="focus-ring block rounded-lg px-1 py-0.5 text-xs text-indigo-700/80 hover:text-indigo-800"
+            >
+              <span class="font-mono text-[10px] font-bold">{{
+                item.key
+              }}</span>
+              {{ item.title }}
+              <span
+                class="mt-0.5 block truncate text-[10px] text-indigo-500/70"
+                >{{ reviewIssueMap.get(item.id)?.join(' · ') }}</span
+              >
+            </RouterLink>
+          </div>
+        </div>
+        <div
+          v-if="scopedExternalDependencies.length"
+          class="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4"
+        >
           <p class="text-xs font-semibold text-indigo-800">跨项目协作</p>
-          <p
-            v-if="snapshot.externalDependencies.length"
-            class="mt-1.5 truncate text-xs text-indigo-600/80"
-          >
-            {{ snapshot.externalDependencies[0]?.successor?.name }} 正在等待
-            {{ snapshot.externalDependencies[0]?.predecessor?.projectName }} /
-            {{ snapshot.externalDependencies[0]?.predecessor?.name }}
-          </p>
-          <p v-else class="mt-1.5 text-xs text-indigo-600/70">
-            当前依赖都在项目内部，暂无外部等待。
+          <p class="mt-1.5 truncate text-xs text-indigo-600/80">
+            {{ scopedExternalDependencies[0]?.successor?.requirementKey }}
+            {{ scopedExternalDependencies[0]?.successor?.name }} 正在等待
+            {{ scopedExternalDependencies[0]?.predecessor?.projectName }} /
+            {{ scopedExternalDependencies[0]?.predecessor?.name }}
           </p>
         </div>
       </section>
@@ -460,6 +659,17 @@ watch(projectId, () => {
         <div
           class="timeline-toolbar mb-2 flex flex-wrap items-center gap-1.5 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm"
         >
+          <div class="flex min-w-0 items-center gap-2 pl-1 max-sm:w-full">
+            <span class="shrink-0 text-[10px] font-semibold text-slate-400"
+              >交付范围</span
+            >
+            <AppSelect
+              v-model="filters.versionId"
+              class="w-44 min-w-0 max-sm:flex-1"
+              :options="versionFilterOptions"
+            />
+          </div>
+          <span class="mx-1 hidden h-5 w-px bg-slate-200 sm:block" />
           <div class="flex shrink-0 items-center gap-1">
             <div class="flex items-center gap-1">
               <button
@@ -512,17 +722,7 @@ watch(projectId, () => {
                 class="absolute left-0 top-11 z-30 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-900/10"
               >
                 <label class="block text-[11px] font-medium text-slate-500">
-                  目标版本
-                  <AppSelect
-                    v-model="filters.versionId"
-                    class="mt-1.5"
-                    :options="versionFilterOptions"
-                  />
-                </label>
-                <label
-                  class="mt-3 block text-[11px] font-medium text-slate-500"
-                >
-                  健康状态
+                  Review 视角
                   <AppSelect
                     v-model="filters.health"
                     class="mt-1.5"
@@ -761,9 +961,7 @@ watch(projectId, () => {
             </p>
             <button
               class="mt-3 text-xs font-medium text-indigo-600"
-              @click="
-                filters.versionId = filters.health = filters.ownerId = 'all'
-              "
+              @click="filters.health = filters.ownerId = 'all'"
             >
               清除筛选
             </button>
@@ -774,7 +972,7 @@ watch(projectId, () => {
             v-model:expansion-depth="timelineExpansionDepth"
             v-model:expansion-mode="timelineExpansionMode"
             :requirements="filteredTimelineRequirements"
-            :versions="snapshot.versions"
+            :versions="timelineVersions"
             :people="workspace.people"
             :focused-stage-names="timelineFocusedStages"
             :include-bugs="timelineIncludeBugs"
@@ -880,6 +1078,36 @@ watch(projectId, () => {
           </div>
         </form>
       </AppModal>
+
+      <StatusUpdateDialog
+        v-if="attentionTarget"
+        :open="Boolean(attentionTarget)"
+        :item-id="attentionTarget.id"
+        :item-type="attentionTarget.type"
+        :item-name="attentionTarget.name"
+        :current-status="attentionTarget.status"
+        :actual-start-at="attentionTarget.actualStartAt"
+        :status-reason="attentionTarget.reason"
+        :expected-resume-at="attentionTarget.expectedResumeAt"
+        :owner-ids="attentionTarget.ownerIds"
+        :people="workspace.people"
+        @close="attentionTarget = undefined"
+        @saved="load"
+      />
+
+      <PlanningDialog
+        v-if="scheduleTarget"
+        :open="Boolean(scheduleTarget)"
+        :item-id="scheduleTarget.id"
+        item-type="requirement"
+        :item-name="scheduleTarget.title"
+        :planned-start-at="scheduleTarget.plannedStartAt"
+        :planned-end-at="scheduleTarget.plannedEndAt"
+        :current-version-id="scheduleTarget.versionId"
+        :versions="snapshot.versions"
+        @close="scheduleTarget = undefined"
+        @saved="load"
+      />
     </template>
   </div>
 </template>

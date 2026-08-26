@@ -34,7 +34,11 @@ import type {
   VersionHistory,
   VersionSnapshot,
 } from '@flowtrace/shared';
-import { searchEntityTypes } from '@flowtrace/shared';
+import {
+  reviewRequirement,
+  searchEntityTypes,
+  selectCurrentStage,
+} from '@flowtrace/shared';
 import { randomUUID } from 'node:crypto';
 import {
   DataSource,
@@ -1958,13 +1962,7 @@ export class WorkService {
     row: RequirementEntity,
   ): Promise<RequirementSummary> {
     const requirement = await this.hydrateRequirement(row);
-    const current =
-      requirement.stages.find((stage) => stage.status === 'blocked') ??
-      requirement.stages.find((stage) => stage.status === 'waiting') ??
-      requirement.stages.find((stage) => stage.status === 'in_progress') ??
-      requirement.stages.find(
-        (stage) => !['done', 'canceled'].includes(stage.status),
-      );
+    const current = selectCurrentStage(requirement.stages);
     return {
       id: requirement.id,
       key: requirement.key,
@@ -1983,6 +1981,12 @@ export class WorkService {
       completedBugCount: requirement.bugs.filter((bug) => bug.status === 'done')
         .length,
       currentStage: current?.name,
+      currentStageId: current?.id,
+      currentStageStatus: current?.status,
+      currentStageOwnerIds: current?.ownerIds ?? [],
+      currentStagePlannedStartAt: current?.plannedStartAt,
+      currentStagePlannedEndAt: current?.plannedEndAt,
+      reviewIssues: reviewRequirement(requirement),
       overdue: this.isOverdue(row),
     };
   }

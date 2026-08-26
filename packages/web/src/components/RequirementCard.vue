@@ -131,7 +131,12 @@ async function refreshed() {
             </p>
           </div>
           <div class="flex w-10 justify-start">
-            <AvatarStack :owner-ids="summary.ownerIds" compact />
+            <AvatarStack
+              v-if="summary.currentStageOwnerIds.length"
+              :owner-ids="summary.currentStageOwnerIds"
+              compact
+            />
+            <span v-else class="text-[10px] text-slate-300">待分配</span>
           </div>
           <div class="text-right">
             <p class="text-[10px] text-slate-400">当前计划</p>

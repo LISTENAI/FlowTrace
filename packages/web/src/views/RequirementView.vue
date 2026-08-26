@@ -7,6 +7,7 @@ import type {
   StatusHistory,
   Version,
 } from '@flowtrace/shared';
+import { reviewRequirement } from '@flowtrace/shared';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/vue';
 import {
   ArrowLeftIcon,
@@ -215,6 +216,29 @@ const events = computed(() => {
   return result.sort(
     (a, b) => dayjs(b.time).valueOf() - dayjs(a.time).valueOf(),
   );
+});
+
+const currentWork = computed<Array<Stage | Bug>>(() => {
+  if (!requirement.value) return [];
+  const priority = { blocked: 0, waiting: 1, in_progress: 2 } as const;
+  return [...requirement.value.stages, ...requirement.value.bugs]
+    .filter((item) =>
+      ['blocked', 'waiting', 'in_progress'].includes(item.status),
+    )
+    .sort(
+      (left, right) =>
+        priority[left.status as keyof typeof priority] -
+        priority[right.status as keyof typeof priority],
+    );
+});
+const nextStage = computed(() =>
+  requirement.value?.stages.find((item) => item.status === 'not_started'),
+);
+
+const reviewNotes = computed(() => {
+  return requirement.value
+    ? reviewRequirement(requirement.value).map((issue) => issue.message)
+    : [];
 });
 
 const incomingDependencies = computed(() =>
@@ -569,14 +593,97 @@ watch(id, load);
 
       <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_21rem]">
         <div class="min-w-0 space-y-5">
-          <section class="surface overflow-hidden">
+          <section class="surface p-4 sm:p-5">
+            <div
+              class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+            >
+              <div>
+                <h2 class="text-sm font-semibold text-slate-900">当前工作</h2>
+                <p class="mt-0.5 text-[11px] text-slate-400">
+                  先处理正在推进、等待和阻塞的事项
+                </p>
+              </div>
+              <button
+                v-if="!currentWork.length && nextStage"
+                type="button"
+                class="focus-ring section-action"
+                @click="statusTarget = nextStage"
+              >
+                开始「{{ nextStage.name }}」
+              </button>
+            </div>
+            <div
+              v-if="currentWork.length"
+              class="mt-3 grid gap-2 sm:grid-cols-2"
+            >
+              <button
+                v-for="item in currentWork"
+                :key="item.id"
+                type="button"
+                class="focus-ring flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 text-left transition hover:border-indigo-200 hover:bg-white"
+                @click="statusTarget = item"
+              >
+                <span
+                  class="h-2.5 w-2.5 shrink-0 rounded-full"
+                  :class="statusDot[item.status]"
+                />
+                <span class="min-w-0 flex-1">
+                  <span
+                    class="block truncate text-xs font-semibold text-slate-700"
+                    >{{
+                      'key' in item ? `${item.key} ${item.title}` : item.name
+                    }}</span
+                  >
+                  <span
+                    class="mt-0.5 block truncate text-[10px] text-slate-400"
+                    >{{ item.statusReason || statusLabels[item.status] }}</span
+                  >
+                </span>
+                <AvatarStack :owner-ids="item.ownerIds" :max="2" compact />
+                <span
+                  class="text-[10px] font-semibold"
+                  :class="
+                    item.status === 'blocked'
+                      ? 'text-rose-600'
+                      : item.status === 'waiting'
+                        ? 'text-amber-600'
+                        : 'text-indigo-600'
+                  "
+                  >{{ statusLabels[item.status] }}</span
+                >
+              </button>
+            </div>
+            <p
+              v-else
+              class="mt-3 rounded-xl bg-slate-50 px-3 py-3 text-xs text-slate-500"
+            >
+              {{
+                nextStage
+                  ? `下一步是「${nextStage.name}」`
+                  : '当前没有需要推进的事项'
+              }}
+            </p>
+            <div
+              v-if="reviewNotes.length"
+              class="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/50 px-3 py-2.5"
+            >
+              <p class="text-[10px] font-semibold text-indigo-700">
+                本次 Review 还需确认
+              </p>
+              <p class="mt-1 text-[11px] leading-5 text-indigo-600/80">
+                {{ reviewNotes.join(' · ') }}
+              </p>
+            </div>
+          </section>
+
+          <section class="surface relative z-20">
             <div
               class="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:items-center"
             >
               <div class="min-w-0">
                 <h2 class="text-sm font-semibold text-slate-900">实际过程</h2>
                 <p class="mt-0.5 text-[11px] text-slate-400">
-                  点击阶段记录进展；负责人和计划使用独立入口
+                  点击阶段记录进展；分配、排期与流程维护在更多操作中
                 </p>
               </div>
               <button class="focus-ring section-action" @click="openStageForm">
@@ -660,54 +767,79 @@ watch(id, load);
                       >{{ statusLabels[stage.status] }}</span
                     >
                   </button>
-                  <div class="mr-1 flex shrink-0 flex-col gap-0.5">
-                    <button
-                      class="focus-ring rounded-md p-1 text-slate-300 transition hover:bg-white hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-20"
-                      :disabled="index === 0 || movingStageId === stage.id"
-                      :aria-label="`上移${stage.name}`"
-                      @click="moveStage(stage, index, -1)"
+                  <Menu as="div" class="relative mr-1 shrink-0">
+                    <MenuButton
+                      class="focus-ring grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-white hover:text-slate-700"
+                      :aria-label="`${stage.name}的更多操作`"
                     >
-                      <ChevronUpIcon class="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      class="focus-ring rounded-md p-1 text-slate-300 transition hover:bg-white hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-20"
-                      :disabled="
-                        index === requirement.stages.length - 1 ||
-                        movingStageId === stage.id
-                      "
-                      :aria-label="`下移${stage.name}`"
-                      @click="moveStage(stage, index, 1)"
+                      <EllipsisHorizontalIcon class="h-5 w-5" />
+                    </MenuButton>
+                    <MenuItems
+                      class="absolute right-0 top-9 z-40 w-44 rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl outline-none"
                     >
-                      <ChevronDownIcon class="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <button
-                    class="focus-ring mr-1 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-white hover:text-indigo-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                    :aria-label="`分配「${stage.name}」的负责人`"
-                    @click="openOwners(stage)"
-                  >
-                    <UserPlusIcon class="h-4 w-4" />
-                  </button>
-                  <button
-                    class="focus-ring mr-2 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-white hover:text-indigo-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                    :aria-label="`调整「${stage.name}」的计划`"
-                    @click="planningTarget = stage"
-                  >
-                    <CalendarDaysIcon class="h-4 w-4" />
-                  </button>
-                  <button
-                    class="focus-ring mr-2 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-rose-50 hover:text-rose-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                    :aria-label="`删除阶段「${stage.name}」`"
-                    @click="deleteTarget = stage"
-                  >
-                    <TrashIcon class="h-4 w-4" />
-                  </button>
+                      <MenuItem v-slot="{ active }">
+                        <button
+                          class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600"
+                          :class="active ? 'bg-slate-50 text-indigo-600' : ''"
+                          @click="openOwners(stage)"
+                        >
+                          <UserPlusIcon class="h-4 w-4" />分配负责人
+                        </button>
+                      </MenuItem>
+                      <MenuItem v-slot="{ active }">
+                        <button
+                          class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600"
+                          :class="active ? 'bg-slate-50 text-indigo-600' : ''"
+                          @click="planningTarget = stage"
+                        >
+                          <CalendarDaysIcon class="h-4 w-4" />调整计划
+                        </button>
+                      </MenuItem>
+                      <div class="my-1 h-px bg-slate-100" />
+                      <MenuItem
+                        v-slot="{ active, disabled }"
+                        :disabled="index === 0"
+                      >
+                        <button
+                          :disabled="disabled || movingStageId === stage.id"
+                          class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600 disabled:opacity-30"
+                          :class="active ? 'bg-slate-50 text-indigo-600' : ''"
+                          @click="moveStage(stage, index, -1)"
+                        >
+                          <ChevronUpIcon class="h-4 w-4" />上移阶段
+                        </button>
+                      </MenuItem>
+                      <MenuItem
+                        v-slot="{ active, disabled }"
+                        :disabled="index === requirement.stages.length - 1"
+                      >
+                        <button
+                          :disabled="disabled || movingStageId === stage.id"
+                          class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600 disabled:opacity-30"
+                          :class="active ? 'bg-slate-50 text-indigo-600' : ''"
+                          @click="moveStage(stage, index, 1)"
+                        >
+                          <ChevronDownIcon class="h-4 w-4" />下移阶段
+                        </button>
+                      </MenuItem>
+                      <div class="my-1 h-px bg-slate-100" />
+                      <MenuItem v-slot="{ active }">
+                        <button
+                          class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-rose-600"
+                          :class="active ? 'bg-rose-50' : ''"
+                          @click="deleteTarget = stage"
+                        >
+                          <TrashIcon class="h-4 w-4" />删除阶段
+                        </button>
+                      </MenuItem>
+                    </MenuItems>
+                  </Menu>
                 </div>
               </div>
             </div>
           </section>
 
-          <section class="surface overflow-hidden">
+          <section class="surface relative z-10">
             <div
               class="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4"
             >
@@ -768,27 +900,46 @@ watch(id, load);
                     statusLabels[bug.status]
                   }}</span>
                 </button>
-                <button
-                  class="focus-ring ml-2 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-slate-50 hover:text-indigo-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                  :aria-label="`分配 ${bug.key} 的负责人`"
-                  @click="openOwners(bug)"
-                >
-                  <UserPlusIcon class="h-4 w-4" />
-                </button>
-                <button
-                  class="focus-ring ml-2 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-slate-50 hover:text-indigo-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                  :aria-label="`调整「${bug.title}」的计划`"
-                  @click="planningTarget = bug"
-                >
-                  <CalendarDaysIcon class="h-4 w-4" />
-                </button>
-                <button
-                  class="focus-ring ml-1 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-rose-50 hover:text-rose-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                  :aria-label="`删除 ${bug.key}`"
-                  @click="deleteTarget = bug"
-                >
-                  <TrashIcon class="h-4 w-4" />
-                </button>
+                <Menu as="div" class="relative ml-2 shrink-0">
+                  <MenuButton
+                    class="focus-ring grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-50 hover:text-slate-700"
+                    :aria-label="`${bug.key}的更多操作`"
+                  >
+                    <EllipsisHorizontalIcon class="h-5 w-5" />
+                  </MenuButton>
+                  <MenuItems
+                    class="absolute right-0 top-9 z-40 w-44 rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl outline-none"
+                  >
+                    <MenuItem v-slot="{ active }">
+                      <button
+                        class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600"
+                        :class="active ? 'bg-slate-50 text-indigo-600' : ''"
+                        @click="openOwners(bug)"
+                      >
+                        <UserPlusIcon class="h-4 w-4" />分配负责人
+                      </button>
+                    </MenuItem>
+                    <MenuItem v-slot="{ active }">
+                      <button
+                        class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600"
+                        :class="active ? 'bg-slate-50 text-indigo-600' : ''"
+                        @click="planningTarget = bug"
+                      >
+                        <CalendarDaysIcon class="h-4 w-4" />调整计划
+                      </button>
+                    </MenuItem>
+                    <div class="my-1 h-px bg-slate-100" />
+                    <MenuItem v-slot="{ active }">
+                      <button
+                        class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-rose-600"
+                        :class="active ? 'bg-rose-50' : ''"
+                        @click="deleteTarget = bug"
+                      >
+                        <TrashIcon class="h-4 w-4" />删除 Bug
+                      </button>
+                    </MenuItem>
+                  </MenuItems>
+                </Menu>
               </div>
             </div>
             <div v-else class="px-5 py-10 text-center text-xs text-slate-400">

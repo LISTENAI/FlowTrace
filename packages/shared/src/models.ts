@@ -255,6 +255,12 @@ export interface RequirementSummary extends Omit<
   bugCount: number;
   completedBugCount: number;
   currentStage?: string;
+  currentStageId?: string;
+  currentStageStatus?: ExecutionStatus;
+  currentStageOwnerIds: string[];
+  currentStagePlannedStartAt?: string;
+  currentStagePlannedEndAt?: string;
+  reviewIssues: import('./review.js').RequirementReviewIssue[];
   overdue: boolean;
 }
 

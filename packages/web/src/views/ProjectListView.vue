@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import type { ProjectRhythm } from '@flowtrace/shared';
+import type {
+  ChangeEvent,
+  ExecutionStatus,
+  ProjectRhythm,
+  ProjectSnapshot,
+  Version,
+} from '@flowtrace/shared';
 import {
   ArrowUpRightIcon,
   ClockIcon,
@@ -11,7 +17,10 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@/api';
 import AppModal from '@/components/AppModal.vue';
-import { relativeDate } from '@/lib/presentation';
+import AvatarStack from '@/components/AvatarStack.vue';
+import PlanningDialog from '@/components/PlanningDialog.vue';
+import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
+import { formatDate, formatDateTime, relativeDate } from '@/lib/presentation';
 import { toasts } from '@/state/toasts';
 import { loadWorkspace, workspace } from '@/state/workspace';
 
@@ -19,6 +28,11 @@ const router = useRouter();
 const createOpen = ref(false);
 const saving = ref(false);
 const rhythms = ref<ProjectRhythm[]>([]);
+const snapshots = ref<ProjectSnapshot[]>([]);
+const portfolioLoading = ref(true);
+const progressTarget = ref<AttentionRow>();
+const planningTarget = ref<AttentionRow>();
+const portfolioLens = ref<'decide' | 'follow_up' | 'review' | 'all'>('decide');
 const form = reactive({
   key: '',
   name: '',
@@ -44,9 +58,228 @@ const totals = computed(() => ({
   ),
 }));
 
+interface AttentionRow {
+  projectId: string;
+  projectName: string;
+  requirementId: string;
+  requirementKey: string;
+  requirementTitle: string;
+  kind: 'blocked' | 'waiting' | 'overdue' | 'review' | 'due_soon';
+  itemName?: string;
+  reason: string;
+  ownerIds: string[];
+  extraCount: number;
+  workItemId?: string;
+  workItemType?: 'stage' | 'bug';
+  currentStatus?: ExecutionStatus;
+  actualStartAt?: string;
+  expectedResumeAt?: string;
+  plannedStartAt?: string;
+  plannedEndAt?: string;
+  versionId?: string;
+  versions: Version[];
+  planningItemId?: string;
+  planningItemType?: 'requirement' | 'stage';
+  planningItemName?: string;
+}
+
+const attentionRows = computed<AttentionRow[]>(() => {
+  const rows: AttentionRow[] = [];
+  for (const snapshot of snapshots.value) {
+    const grouped = new Map<string, AttentionRow>();
+    const addWork = (
+      kind: 'blocked' | 'waiting',
+      item: ProjectSnapshot['blockedItems'][number],
+    ) => {
+      const existing = grouped.get(item.requirementId);
+      if (existing) {
+        if (existing.kind === kind) existing.extraCount += 1;
+        return;
+      }
+      grouped.set(item.requirementId, {
+        projectId: snapshot.project.id,
+        projectName: snapshot.project.name,
+        requirementId: item.requirementId,
+        requirementKey: item.requirementKey,
+        requirementTitle: item.requirementTitle,
+        kind,
+        itemName: item.type === 'bug' ? item.key || item.name : item.name,
+        reason: item.reason || '尚未填写原因',
+        ownerIds: item.ownerIds,
+        extraCount: 0,
+        workItemId: item.id,
+        workItemType: item.type,
+        currentStatus: item.status,
+        actualStartAt: item.actualStartAt,
+        expectedResumeAt: item.expectedResumeAt,
+        plannedStartAt: item.plannedStartAt,
+        plannedEndAt: item.plannedEndAt,
+        versions: snapshot.versions,
+      });
+    };
+
+    snapshot.blockedItems.forEach((item) => addWork('blocked', item));
+    snapshot.waitingItems.forEach((item) => addWork('waiting', item));
+    for (const item of snapshot.delayedItems) {
+      if (grouped.has(item.id)) continue;
+      grouped.set(item.id, {
+        projectId: snapshot.project.id,
+        projectName: snapshot.project.name,
+        requirementId: item.id,
+        requirementKey: item.key,
+        requirementTitle: item.title,
+        kind: 'overdue',
+        reason: `当前计划已到 ${formatDate(item.plannedEndAt, '未排期')}`,
+        ownerIds: item.ownerIds,
+        extraCount: 0,
+        plannedStartAt: item.plannedStartAt,
+        plannedEndAt: item.plannedEndAt,
+        versionId: item.versionId,
+        versions: snapshot.versions,
+      });
+    }
+
+    for (const item of snapshot.requirements) {
+      if (['done', 'canceled'].includes(item.lifecycle)) continue;
+      if (item.reviewIssues.length) {
+        rows.push({
+          projectId: snapshot.project.id,
+          projectName: snapshot.project.name,
+          requirementId: item.id,
+          requirementKey: item.key,
+          requirementTitle: item.title,
+          kind: 'review',
+          itemName: item.reviewIssues[0]?.targetName,
+          reason: item.reviewIssues.map((issue) => issue.message).join('；'),
+          ownerIds: item.currentStageOwnerIds,
+          extraCount: 0,
+          versionId: item.versionId,
+          versions: snapshot.versions,
+        });
+      }
+
+      const daysUntilDue = item.plannedEndAt
+        ? new Date(item.plannedEndAt).getTime() - Date.now()
+        : undefined;
+      if (
+        !item.overdue &&
+        daysUntilDue !== undefined &&
+        daysUntilDue >= 0 &&
+        daysUntilDue <= 7 * 24 * 60 * 60 * 1000
+      ) {
+        rows.push({
+          projectId: snapshot.project.id,
+          projectName: snapshot.project.name,
+          requirementId: item.id,
+          requirementKey: item.key,
+          requirementTitle: item.title,
+          kind: 'due_soon',
+          itemName: item.currentStage,
+          reason: `当前计划将在 ${formatDate(item.plannedEndAt)} 完成`,
+          ownerIds: item.currentStageOwnerIds.length
+            ? item.currentStageOwnerIds
+            : item.ownerIds,
+          extraCount: 0,
+          plannedStartAt: item.plannedStartAt,
+          plannedEndAt: item.plannedEndAt,
+          versionId: item.versionId,
+          versions: snapshot.versions,
+        });
+      }
+    }
+    rows.push(...grouped.values());
+  }
+  const priority = {
+    blocked: 0,
+    waiting: 1,
+    overdue: 2,
+    review: 3,
+    due_soon: 4,
+  } as const;
+  return rows.sort(
+    (left, right) =>
+      priority[left.kind] - priority[right.kind] ||
+      left.projectName.localeCompare(right.projectName, 'zh-CN'),
+  );
+});
+
+const visibleAttentionRows = computed(() =>
+  attentionRows.value.filter((item) => {
+    if (portfolioLens.value === 'all') return true;
+    if (portfolioLens.value === 'decide')
+      return ['blocked', 'overdue'].includes(item.kind);
+    if (portfolioLens.value === 'follow_up') return item.kind === 'waiting';
+    return ['review', 'due_soon'].includes(item.kind);
+  }),
+);
+
+const portfolioLensOptions = computed(() => [
+  {
+    id: 'decide' as const,
+    label: '需要决策',
+    count: attentionRows.value.filter((item) =>
+      ['blocked', 'overdue'].includes(item.kind),
+    ).length,
+  },
+  {
+    id: 'follow_up' as const,
+    label: '等待跟进',
+    count: attentionRows.value.filter((item) => item.kind === 'waiting').length,
+  },
+  {
+    id: 'review' as const,
+    label: '计划 Review',
+    count: attentionRows.value.filter((item) =>
+      ['review', 'due_soon'].includes(item.kind),
+    ).length,
+  },
+  { id: 'all' as const, label: '全部', count: attentionRows.value.length },
+]);
+
+const recentChanges = computed<ChangeEvent[]>(() => {
+  const unique = new Map<string, ChangeEvent>();
+  snapshots.value
+    .flatMap((snapshot) => snapshot.recentChanges)
+    .forEach((event) => unique.set(event.id, event));
+  return [...unique.values()]
+    .sort(
+      (left, right) =>
+        new Date(right.occurredAt).getTime() -
+        new Date(left.occurredAt).getTime(),
+    )
+    .slice(0, 8);
+});
+
+const attentionLabels = {
+  blocked: '阻塞',
+  waiting: '等待',
+  overdue: '延期',
+  review: '待补全',
+  due_soon: '即将到期',
+} as const;
+
 onMounted(async () => {
   await Promise.all([loadWorkspace(), loadRhythms()]);
+  await loadPortfolio();
 });
+
+async function loadPortfolio() {
+  portfolioLoading.value = true;
+  const results = await Promise.allSettled(
+    workspace.projects.map((project) => api.projectSnapshot(project.id)),
+  );
+  snapshots.value = results.flatMap((result) =>
+    result.status === 'fulfilled' ? [result.value] : [],
+  );
+  portfolioLoading.value = false;
+}
+
+async function refreshPortfolio() {
+  progressTarget.value = undefined;
+  planningTarget.value = undefined;
+  await loadWorkspace(true);
+  await loadPortfolio();
+}
 
 async function loadRhythms() {
   rhythms.value = await api.projectRhythms();
@@ -145,6 +378,251 @@ async function createProject() {
             </div>
             <div class="mt-0.5 text-[11px] text-slate-400">当前阻塞</div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-7">
+      <div class="mb-4 flex items-end justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-semibold tracking-tight text-slate-900">
+            管理工作台
+          </h2>
+          <p class="mt-1 text-sm text-slate-500">
+            先处理阻塞、等待与延期，再回到项目查看完整过程。
+          </p>
+        </div>
+        <span
+          v-if="attentionRows.length"
+          class="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-600 ring-1 ring-rose-100"
+          >{{ attentionRows.length }} 项需要关注</span
+        >
+      </div>
+
+      <div class="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+        <div class="surface overflow-hidden">
+          <div
+            class="flex items-center justify-between border-b border-slate-100 px-5 py-4"
+          >
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">Review 队列</h3>
+              <p class="mt-0.5 text-[11px] text-slate-400">
+                从事实风险、跟进事项和计划完整性三个角度检查
+              </p>
+            </div>
+          </div>
+          <div
+            class="flex gap-1 overflow-x-auto border-b border-slate-100 px-4 py-2"
+            role="tablist"
+            aria-label="管理 Review 视角"
+          >
+            <button
+              v-for="lens in portfolioLensOptions"
+              :key="lens.id"
+              type="button"
+              role="tab"
+              :aria-selected="portfolioLens === lens.id"
+              class="focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition"
+              :class="
+                portfolioLens === lens.id
+                  ? 'bg-slate-900 text-white dark:bg-indigo-500'
+                  : 'text-slate-500 hover:bg-slate-50'
+              "
+              @click="portfolioLens = lens.id"
+            >
+              {{ lens.label }}
+              <span
+                class="rounded-full px-1.5 py-0.5 text-[9px] tabular-nums"
+                :class="
+                  portfolioLens === lens.id
+                    ? 'bg-white/15 text-white'
+                    : 'bg-slate-100 text-slate-500'
+                "
+                >{{ lens.count }}</span
+              >
+            </button>
+          </div>
+          <div v-if="portfolioLoading" class="space-y-2 p-4">
+            <div
+              v-for="i in 3"
+              :key="i"
+              class="h-20 animate-pulse rounded-2xl bg-slate-100"
+            />
+          </div>
+          <div
+            v-else-if="visibleAttentionRows.length"
+            class="divide-y divide-slate-100"
+          >
+            <div
+              v-for="item in visibleAttentionRows"
+              :key="`${item.kind}-${item.requirementId}`"
+              class="group flex flex-col gap-3 px-5 py-4 transition hover:bg-slate-50/70 sm:flex-row sm:items-center"
+            >
+              <button
+                type="button"
+                class="focus-ring flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left"
+                @click="router.push(`/requirements/${item.requirementId}`)"
+              >
+                <span
+                  class="mt-0.5 shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ring-1"
+                  :class="
+                    item.kind === 'blocked'
+                      ? 'bg-rose-50 text-rose-700 ring-rose-100'
+                      : item.kind === 'waiting'
+                        ? 'bg-amber-50 text-amber-700 ring-amber-100'
+                        : item.kind === 'overdue'
+                          ? 'bg-violet-50 text-violet-700 ring-violet-100'
+                          : 'bg-indigo-50 text-indigo-700 ring-indigo-100'
+                  "
+                  >{{ attentionLabels[item.kind] }}</span
+                >
+                <span class="min-w-0 flex-1">
+                  <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span
+                      class="font-mono text-[10px] font-bold text-indigo-600"
+                      >{{ item.requirementKey }}</span
+                    >
+                    <span
+                      class="truncate text-sm font-semibold text-slate-800"
+                      >{{ item.requirementTitle }}</span
+                    >
+                  </span>
+                  <span class="mt-1 block truncate text-xs text-slate-500">
+                    {{ item.projectName }}
+                    <template v-if="item.itemName">
+                      · {{ item.itemName }}</template
+                    >
+                    · {{ item.reason }}
+                    <template v-if="item.extraCount">
+                      · 另有 {{ item.extraCount }} 项
+                    </template>
+                  </span>
+                </span>
+              </button>
+              <div
+                class="flex shrink-0 items-center justify-between gap-3 sm:justify-end"
+              >
+                <AvatarStack :owner-ids="item.ownerIds" :max="3" compact />
+                <button
+                  v-if="
+                    ['blocked', 'waiting'].includes(item.kind) &&
+                    item.workItemId &&
+                    item.currentStatus
+                  "
+                  type="button"
+                  class="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
+                  @click="progressTarget = item"
+                >
+                  记录进展
+                </button>
+                <button
+                  v-else-if="item.kind === 'overdue'"
+                  type="button"
+                  class="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-violet-200 hover:text-violet-600"
+                  @click="planningTarget = item"
+                >
+                  调整计划
+                </button>
+                <button
+                  v-else-if="
+                    item.kind === 'review' &&
+                    item.planningItemId &&
+                    !item.plannedEndAt
+                  "
+                  type="button"
+                  class="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
+                  @click="planningTarget = item"
+                >
+                  补排计划
+                </button>
+                <button
+                  v-else-if="
+                    item.kind === 'review' &&
+                    item.workItemId &&
+                    item.currentStatus &&
+                    !item.ownerIds.length
+                  "
+                  type="button"
+                  class="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
+                  @click="progressTarget = item"
+                >
+                  补负责人
+                </button>
+                <button
+                  v-else
+                  type="button"
+                  class="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
+                  @click="router.push(`/requirements/${item.requirementId}`)"
+                >
+                  进入补全
+                </button>
+              </div>
+            </div>
+          </div>
+          <div v-else class="px-5 py-12 text-center">
+            <p class="text-sm font-semibold text-emerald-700">
+              当前视角没有待处理项
+            </p>
+            <p class="mt-1 text-xs text-slate-400">
+              切换 Review 视角可检查其他管理维度。
+            </p>
+          </div>
+        </div>
+
+        <div class="surface overflow-hidden">
+          <div class="border-b border-slate-100 px-5 py-4">
+            <h3 class="text-sm font-semibold text-slate-900">最近变化</h3>
+            <p class="mt-0.5 text-[11px] text-slate-400">
+              按实际发生时间汇总全部项目
+            </p>
+          </div>
+          <div v-if="portfolioLoading" class="space-y-3 p-5">
+            <div
+              v-for="i in 4"
+              :key="i"
+              class="h-12 animate-pulse rounded-xl bg-slate-100"
+            />
+          </div>
+          <div
+            v-else-if="recentChanges.length"
+            class="max-h-[32rem] overflow-y-auto px-5 py-2"
+          >
+            <button
+              v-for="event in recentChanges"
+              :key="event.id"
+              type="button"
+              class="focus-ring block w-full border-l border-slate-200 px-4 py-2.5 text-left transition hover:bg-slate-50"
+              :class="event.requirementId ? 'cursor-pointer' : 'cursor-default'"
+              @click="
+                event.requirementId &&
+                router.push(`/requirements/${event.requirementId}`)
+              "
+            >
+              <span class="flex items-center gap-2 text-[10px] text-slate-400">
+                <span>{{ event.project?.name || '项目' }}</span>
+                <span
+                  v-if="event.requirement"
+                  class="font-mono text-indigo-500"
+                  >{{ event.requirement.key }}</span
+                >
+                <span class="ml-auto">{{
+                  formatDateTime(event.occurredAt)
+                }}</span>
+              </span>
+              <span
+                class="mt-1 block text-xs font-medium leading-5 text-slate-700"
+                >{{ event.summary }}</span
+              >
+              <span
+                v-if="event.reason"
+                class="mt-0.5 block text-[10px] text-slate-400"
+                >{{ event.reason }}</span
+              >
+            </button>
+          </div>
+          <p v-else class="px-5 py-12 text-center text-xs text-slate-400">
+            暂时没有变化记录
+          </p>
         </div>
       </div>
     </section>
@@ -369,5 +847,37 @@ async function createProject() {
         </div>
       </form>
     </AppModal>
+
+    <StatusUpdateDialog
+      v-if="progressTarget?.workItemId && progressTarget.currentStatus"
+      :open="Boolean(progressTarget)"
+      :item-id="progressTarget.workItemId"
+      :item-type="progressTarget.workItemType || 'stage'"
+      :item-name="progressTarget.itemName || progressTarget.requirementTitle"
+      :current-status="progressTarget.currentStatus"
+      :actual-start-at="progressTarget.actualStartAt"
+      :status-reason="progressTarget.reason"
+      :expected-resume-at="progressTarget.expectedResumeAt"
+      :owner-ids="progressTarget.ownerIds"
+      :people="workspace.people"
+      @close="progressTarget = undefined"
+      @saved="refreshPortfolio"
+    />
+
+    <PlanningDialog
+      v-if="planningTarget"
+      :open="Boolean(planningTarget)"
+      :item-id="planningTarget.planningItemId || planningTarget.requirementId"
+      :item-type="planningTarget.planningItemType || 'requirement'"
+      :item-name="
+        planningTarget.planningItemName || planningTarget.requirementTitle
+      "
+      :planned-start-at="planningTarget.plannedStartAt"
+      :planned-end-at="planningTarget.plannedEndAt"
+      :current-version-id="planningTarget.versionId"
+      :versions="planningTarget.versions"
+      @close="planningTarget = undefined"
+      @saved="refreshPortfolio"
+    />
   </div>
 </template>
