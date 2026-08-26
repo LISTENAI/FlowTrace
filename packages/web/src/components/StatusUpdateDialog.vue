@@ -3,6 +3,7 @@ import type { ExecutionStatus } from '@flowtrace/shared';
 import dayjs from 'dayjs';
 import { computed, reactive, ref, watch } from 'vue';
 import { api } from '@/api';
+import AppDateTimeField from '@/components/AppDateTimeField.vue';
 import AppModal from '@/components/AppModal.vue';
 import { formatDateTime, statusDot, statusLabels } from '@/lib/presentation';
 import { toasts } from '@/state/toasts';
@@ -182,11 +183,10 @@ async function save() {
               >补记</span
             >
           </span>
-          <input
+          <AppDateTimeField
             v-model="form.effectiveAt"
             required
-            type="datetime-local"
-            class="focus-ring w-full rounded-xl border border-white bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-indigo-300"
+            mode="datetime"
           />
         </label>
         <p v-if="isBackfill" class="mt-2 text-[11px] leading-5 text-amber-700">
@@ -200,11 +200,10 @@ async function save() {
         <span class="mb-1.5 block text-xs font-medium text-slate-600"
           >开始时间（可选）</span
         >
-        <input
+        <AppDateTimeField
           v-model="form.startedAt"
-          type="datetime-local"
+          mode="datetime"
           :max="form.effectiveAt"
-          class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700"
         />
         <p class="mt-1.5 text-[10px] leading-4 text-slate-400">
           当前还没有开始记录。如果已知道开始时间，可在完成的同时一并补记。
@@ -247,10 +246,10 @@ async function save() {
           <span class="mb-1.5 block text-xs font-medium text-amber-700"
             >预计恢复时间（可选）</span
           >
-          <input
+          <AppDateTimeField
             v-model="form.expectedResumeAt"
-            type="datetime-local"
-            class="focus-ring rounded-xl border border-white bg-white/80 px-3 py-2 text-sm text-slate-700"
+            mode="datetime"
+            :min="form.effectiveAt"
           />
         </label>
       </div>

@@ -3,7 +3,9 @@ import type { Version } from '@flowtrace/shared';
 import dayjs from 'dayjs';
 import { computed, reactive, ref, watch } from 'vue';
 import { api } from '@/api';
+import AppDateTimeField from '@/components/AppDateTimeField.vue';
 import AppModal from '@/components/AppModal.vue';
+import AppSelect from '@/components/AppSelect.vue';
 import { toasts } from '@/state/toasts';
 
 type PlanningItemType = 'requirement' | 'stage' | 'bug';
@@ -35,6 +37,13 @@ const form = reactive({
 });
 
 const supportsVersion = computed(() => props.itemType === 'requirement');
+const versionOptions = computed(() => [
+  { value: '', label: '未排版本' },
+  ...props.versions.map((version) => ({
+    value: version.id,
+    label: version.name,
+  })),
+]);
 const hasScheduleChanges = computed(
   () =>
     form.plannedStartAt !==
@@ -139,39 +148,22 @@ async function save() {
         <span class="mb-1.5 block text-xs font-medium text-slate-600"
           >目标版本</span
         >
-        <select
-          v-model="form.versionId"
-          class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
-        >
-          <option value="">未排版本</option>
-          <option
-            v-for="version in versions"
-            :key="version.id"
-            :value="version.id"
-          >
-            {{ version.name }}
-          </option>
-        </select>
+        <AppSelect v-model="form.versionId" :options="versionOptions" />
       </label>
       <div class="grid grid-cols-2 gap-3">
         <label>
           <span class="mb-1.5 block text-xs font-medium text-slate-600"
             >计划开始</span
           >
-          <input
-            v-model="form.plannedStartAt"
-            type="date"
-            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
-          />
+          <AppDateTimeField v-model="form.plannedStartAt" />
         </label>
         <label>
           <span class="mb-1.5 block text-xs font-medium text-slate-600"
             >计划结束</span
           >
-          <input
+          <AppDateTimeField
             v-model="form.plannedEndAt"
-            type="date"
-            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
+            :min="form.plannedStartAt"
           />
         </label>
       </div>

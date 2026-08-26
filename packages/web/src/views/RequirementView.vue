@@ -28,7 +28,9 @@ import dayjs from 'dayjs';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { api } from '@/api';
+import AppDateTimeField from '@/components/AppDateTimeField.vue';
 import AppModal from '@/components/AppModal.vue';
+import AppSelect from '@/components/AppSelect.vue';
 import AvatarStack from '@/components/AvatarStack.vue';
 import DeleteWorkItemDialog from '@/components/DeleteWorkItemDialog.vue';
 import OwnerPicker from '@/components/OwnerPicker.vue';
@@ -99,6 +101,45 @@ const project = computed(() =>
   workspace.projects.find((item) => item.id === requirement.value?.projectId),
 );
 const stageOptions = computed(() => requirement.value?.stages ?? []);
+const stageInsertOptions = computed(() => [
+  { value: 0, label: '放在最前面' },
+  ...stageOptions.value.map((stage, index) => ({
+    value: index + 1,
+    label: `在「${stage.name}」之后`,
+  })),
+]);
+const discoveredStageOptions = computed(() => [
+  { value: '', label: '未指定阶段' },
+  ...stageOptions.value.map((stage) => ({
+    value: stage.id,
+    label: stage.name,
+  })),
+]);
+const targetVersionOptions = computed(() => [
+  { value: '', label: '未排版本' },
+  ...versions.value.map((version) => ({
+    value: version.id,
+    label: version.name,
+  })),
+]);
+const predecessorRequirementOptions = computed(() => [
+  { value: '', label: '选择另一个需求' },
+  ...candidateRequirements.value.map((item) => ({
+    value: item.id,
+    label: `${
+      workspace.projects.find((project) => project.id === item.projectId)
+        ?.name ?? '未知项目'
+    } / ${item.key} ${item.title}`,
+  })),
+]);
+const predecessorStageOptions = computed(() => [
+  { value: '', label: '依赖整个需求完成' },
+  ...(selectedPredecessor.value?.stages ?? []).map((stage) => ({
+    value: stage.id,
+    label: stage.name,
+    description: statusLabels[stage.status],
+  })),
+]);
 const deleteConfirmation = computed(() => {
   const target = deleteTarget.value;
   if (!target) return '';
@@ -1048,19 +1089,7 @@ watch(id, load);
           <span class="mb-1.5 block text-xs font-medium text-slate-600"
             >插入位置</span
           >
-          <select
-            v-model.number="stageForm.order"
-            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
-          >
-            <option :value="0">放在最前面</option>
-            <option
-              v-for="(stage, index) in stageOptions"
-              :key="stage.id"
-              :value="index + 1"
-            >
-              在「{{ stage.name }}」之后
-            </option>
-          </select>
+          <AppSelect v-model="stageForm.order" :options="stageInsertOptions" />
         </label>
         <fieldset>
           <legend class="mb-2 text-xs font-medium text-slate-600">
@@ -1113,53 +1142,29 @@ watch(id, load);
         ><label class="block"
           ><span class="mb-1.5 block text-xs font-medium text-slate-600"
             >发现于</span
-          ><select
+          ><AppSelect
             v-model="bugForm.discoveredStageId"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
-          >
-            <option value="">未指定阶段</option>
-            <option
-              v-for="stage in requirement?.stages"
-              :key="stage.id"
-              :value="stage.id"
-            >
-              {{ stage.name }}
-            </option>
-          </select></label
-        >
+            :options="discoveredStageOptions"
+        /></label>
         <div class="grid grid-cols-2 gap-3">
           <label
             ><span class="mb-1.5 block text-xs font-medium text-slate-600"
               >目标版本</span
-            ><select
+            ><AppSelect
               v-model="bugForm.targetVersionId"
-              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
-            >
-              <option value="">未排版本</option>
-              <option
-                v-for="version in versions"
-                :key="version.id"
-                :value="version.id"
-              >
-                {{ version.name }}
-              </option>
-            </select></label
+              :options="targetVersionOptions" /></label
           ><label
             ><span class="mb-1.5 block text-xs font-medium text-slate-600"
               >计划开始</span
-            ><input
-              v-model="bugForm.plannedStartAt"
-              type="date"
-              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
+            ><AppDateTimeField v-model="bugForm.plannedStartAt"
           /></label>
         </div>
         <label class="block"
           ><span class="mb-1.5 block text-xs font-medium text-slate-600"
             >计划结束</span
-          ><input
+          ><AppDateTimeField
             v-model="bugForm.plannedEndAt"
-            type="date"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
+            :min="bugForm.plannedStartAt"
         /></label>
         <fieldset>
           <legend class="mb-2 text-xs font-medium text-slate-600">
@@ -1193,42 +1198,16 @@ watch(id, load);
         <label class="block"
           ><span class="mb-1.5 block text-xs font-medium text-slate-600"
             >前置需求</span
-          ><select
+          ><AppSelect
             v-model="dependencyForm.predecessorRequirementId"
-            required
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
-            @change="selectPredecessor"
-          >
-            <option value="">选择另一个需求</option>
-            <option
-              v-for="item in candidateRequirements"
-              :key="item.id"
-              :value="item.id"
-            >
-              {{
-                workspace.projects.find(
-                  (project) => project.id === item.projectId,
-                )?.name
-              }}
-              / {{ item.key }} {{ item.title }}
-            </option>
-          </select></label
+            :options="predecessorRequirementOptions"
+            @update:model-value="selectPredecessor" /></label
         ><label v-if="selectedPredecessor" class="block"
           ><span class="mb-1.5 block text-xs font-medium text-slate-600"
             >具体前置阶段（推荐）</span
-          ><select
+          ><AppSelect
             v-model="dependencyForm.predecessorStageId"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
-          >
-            <option value="">依赖整个需求完成</option>
-            <option
-              v-for="stage in selectedPredecessor.stages"
-              :key="stage.id"
-              :value="stage.id"
-            >
-              {{ stage.name }} · {{ statusLabels[stage.status] }}
-            </option>
-          </select></label
+            :options="predecessorStageOptions" /></label
         ><label class="block"
           ><span class="mb-1.5 block text-xs font-medium text-slate-600"
             >关系说明</span

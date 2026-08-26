@@ -12,7 +12,9 @@ import {
 import { computed, onMounted, reactive, ref } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import { api } from '@/api';
+import AppDateTimeField from '@/components/AppDateTimeField.vue';
 import AppModal from '@/components/AppModal.vue';
+import AppSelect from '@/components/AppSelect.vue';
 import { createLocalId } from '@/lib/local-id';
 import { formatDate, versionLabels } from '@/lib/presentation';
 import { toasts } from '@/state/toasts';
@@ -33,6 +35,10 @@ const versionForm = reactive({
   plannedReleaseAt: '',
   description: '',
 });
+const versionStatusOptions = [
+  { value: 'planning', label: '规划中' },
+  { value: 'active', label: '进行中' },
+];
 
 async function load() {
   const [projectResult, versionResult] = await Promise.all([
@@ -355,20 +361,13 @@ onMounted(async () => {
           <label
             ><span class="mb-1.5 block text-xs font-medium text-slate-600"
               >状态</span
-            ><select
+            ><AppSelect
               v-model="versionForm.status"
-              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
-            >
-              <option value="planning">规划中</option>
-              <option value="active">进行中</option>
-            </select></label
+              :options="versionStatusOptions" /></label
           ><label
             ><span class="mb-1.5 block text-xs font-medium text-slate-600"
               >计划发布</span
-            ><input
-              v-model="versionForm.plannedReleaseAt"
-              type="date"
-              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
+            ><AppDateTimeField v-model="versionForm.plannedReleaseAt"
           /></label>
         </div>
         <label class="block"

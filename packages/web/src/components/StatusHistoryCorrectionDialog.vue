@@ -3,7 +3,9 @@ import type { ExecutionStatus, StatusHistory } from '@flowtrace/shared';
 import dayjs from 'dayjs';
 import { computed, reactive, ref, watch } from 'vue';
 import { api } from '@/api';
+import AppDateTimeField from '@/components/AppDateTimeField.vue';
 import AppModal from '@/components/AppModal.vue';
+import AppSelect from '@/components/AppSelect.vue';
 import { formatDateTime, statusLabels } from '@/lib/presentation';
 import { toasts } from '@/state/toasts';
 
@@ -30,6 +32,10 @@ const statuses: ExecutionStatus[] = [
   'done',
   'canceled',
 ];
+const statusOptions = statuses.map((status) => ({
+  value: status,
+  label: statusLabels[status],
+}));
 const needsReason = computed(() =>
   ['waiting', 'blocked'].includes(form.status),
 );
@@ -103,24 +109,16 @@ async function save() {
           <span class="mb-1.5 block text-xs font-medium text-slate-600"
             >状态</span
           >
-          <select
-            v-model="form.status"
-            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
-          >
-            <option v-for="status in statuses" :key="status" :value="status">
-              {{ statusLabels[status] }}
-            </option>
-          </select>
+          <AppSelect v-model="form.status" :options="statusOptions" />
         </label>
         <label>
           <span class="mb-1.5 block text-xs font-medium text-slate-600"
             >发生时间</span
           >
-          <input
+          <AppDateTimeField
             v-model="form.effectiveAt"
             required
-            type="datetime-local"
-            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
+            mode="datetime"
           />
         </label>
       </div>
@@ -143,10 +141,10 @@ async function save() {
           <span class="mb-1.5 block text-xs font-medium text-amber-700"
             >预计恢复时间（可选）</span
           >
-          <input
+          <AppDateTimeField
             v-model="form.expectedResumeAt"
-            type="datetime-local"
-            class="focus-ring w-full rounded-xl border border-white bg-white/80 px-3 py-2.5 text-sm"
+            mode="datetime"
+            :min="form.effectiveAt"
           />
         </label>
       </div>

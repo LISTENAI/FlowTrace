@@ -22,7 +22,9 @@ import dayjs from 'dayjs';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import { api } from '@/api';
+import AppDateTimeField from '@/components/AppDateTimeField.vue';
 import AppModal from '@/components/AppModal.vue';
+import AppSelect from '@/components/AppSelect.vue';
 import OwnerPicker from '@/components/OwnerPicker.vue';
 import RequirementCard from '@/components/RequirementCard.vue';
 import TimelineView from '@/components/TimelineView.vue';
@@ -78,6 +80,35 @@ const requirements = computed(() => {
 const activeFilters = computed(
   () => Object.values(filters).filter((value) => value !== 'all').length,
 );
+const versionFilterOptions = computed(() => [
+  { value: 'all', label: '全部版本' },
+  { value: 'backlog', label: '未排版本' },
+  ...(snapshot.value?.versions ?? []).map((version) => ({
+    value: version.id,
+    label: version.name,
+  })),
+]);
+const healthFilterOptions = [
+  { value: 'all', label: '全部状态' },
+  { value: 'waiting', label: '等待中' },
+  { value: 'blocked', label: '阻塞' },
+  { value: 'normal', label: '正常' },
+];
+const ownerFilterOptions = computed(() => [
+  { value: 'all', label: '所有人员' },
+  ...workspace.people.map((person) => ({
+    value: person.id,
+    label: person.name,
+    description: person.note,
+  })),
+]);
+const createVersionOptions = computed(() => [
+  { value: '', label: '未排版本' },
+  ...(snapshot.value?.versions ?? []).map((version) => ({
+    value: version.id,
+    label: version.name,
+  })),
+]);
 const filteredTimelineRequirements = computed(() => {
   const ids = new Set(requirements.value.map((item) => item.id));
   return timelineRequirements.value.filter((item) => ids.has(item.id));
@@ -481,48 +512,34 @@ watch(projectId, () => {
                 v-if="filtersOpen"
                 class="absolute left-0 top-11 z-30 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-900/10"
               >
-                <label class="block text-[11px] font-medium text-slate-500"
-                  >目标版本<select
+                <label class="block text-[11px] font-medium text-slate-500">
+                  目标版本
+                  <AppSelect
                     v-model="filters.versionId"
-                    class="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
-                  >
-                    <option value="all">全部版本</option>
-                    <option value="backlog">未排版本</option>
-                    <option
-                      v-for="version in snapshot.versions"
-                      :key="version.id"
-                      :value="version.id"
-                    >
-                      {{ version.name }}
-                    </option>
-                  </select></label
+                    class="mt-1.5"
+                    :options="versionFilterOptions"
+                  />
+                </label>
+                <label
+                  class="mt-3 block text-[11px] font-medium text-slate-500"
                 >
-                <label class="mt-3 block text-[11px] font-medium text-slate-500"
-                  >健康状态<select
+                  健康状态
+                  <AppSelect
                     v-model="filters.health"
-                    class="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
-                  >
-                    <option value="all">全部状态</option>
-                    <option value="waiting">等待中</option>
-                    <option value="blocked">阻塞</option>
-                    <option value="normal">正常</option>
-                  </select></label
+                    class="mt-1.5"
+                    :options="healthFilterOptions"
+                  />
+                </label>
+                <label
+                  class="mt-3 block text-[11px] font-medium text-slate-500"
                 >
-                <label class="mt-3 block text-[11px] font-medium text-slate-500"
-                  >负责人<select
+                  负责人
+                  <AppSelect
                     v-model="filters.ownerId"
-                    class="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
-                  >
-                    <option value="all">所有人员</option>
-                    <option
-                      v-for="person in workspace.people"
-                      :key="person.id"
-                      :value="person.id"
-                    >
-                      {{ person.name }}
-                    </option>
-                  </select></label
-                >
+                    class="mt-1.5"
+                    :options="ownerFilterOptions"
+                  />
+                </label>
               </div>
             </div>
             <span
@@ -819,39 +836,31 @@ watch(projectId, () => {
             />
           </label>
           <div class="grid gap-4 sm:grid-cols-3">
-            <label
-              ><span class="mb-1.5 block text-xs font-medium text-slate-600"
+            <label>
+              <span class="mb-1.5 block text-xs font-medium text-slate-600"
                 >目标版本</span
-              ><select
-                v-model="form.versionId"
-                class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700"
               >
-                <option value="">未排版本</option>
-                <option
-                  v-for="version in snapshot.versions"
-                  :key="version.id"
-                  :value="version.id"
-                >
-                  {{ version.name }}
-                </option>
-              </select></label
-            >
-            <label
-              ><span class="mb-1.5 block text-xs font-medium text-slate-600"
+              <AppSelect
+                v-model="form.versionId"
+                :options="createVersionOptions"
+              />
+            </label>
+            <label>
+              <span class="mb-1.5 block text-xs font-medium text-slate-600"
                 >计划开始</span
-              ><input
-                v-model="form.plannedStartAt"
-                type="date"
-                class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700"
-            /></label>
-            <label
-              ><span class="mb-1.5 block text-xs font-medium text-slate-600"
+              >
+              <AppDateTimeField v-model="form.plannedStartAt" required />
+            </label>
+            <label>
+              <span class="mb-1.5 block text-xs font-medium text-slate-600"
                 >计划完成</span
-              ><input
+              >
+              <AppDateTimeField
                 v-model="form.plannedEndAt"
-                type="date"
-                class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700"
-            /></label>
+                required
+                :min="form.plannedStartAt"
+              />
+            </label>
           </div>
           <fieldset>
             <legend class="mb-2 text-xs font-medium text-slate-600">
