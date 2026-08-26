@@ -11,8 +11,18 @@ const props = withDefaults(
     days: number;
     barStyle?: CSSProperties;
     barClass?: string;
+    baselineStyle?: CSSProperties;
+    actualStyle?: CSSProperties;
+    actualClass?: string;
     pannable?: boolean;
     interactive?: boolean;
+    actualSegments?: Array<{
+      id: string;
+      status?: ExecutionStatus;
+      class?: string;
+      style?: CSSProperties;
+      title: string;
+    }>;
     segments?: Array<{
       id: string;
       status?: ExecutionStatus;
@@ -57,6 +67,12 @@ function startBarDrag(event: PointerEvent, mode: ScheduleDragMode) {
     @click.stop
     @pointerdown.self="startPan"
   >
+    <div
+      v-if="baselineStyle"
+      class="pointer-events-none absolute top-[7px] z-[1] h-6 border-x border-slate-400/80"
+      :style="baselineStyle"
+      title="初始计划的起止位置"
+    />
     <template v-if="segments?.length">
       <div
         v-for="segment in segments"
@@ -98,5 +114,25 @@ function startBarDrag(event: PointerEvent, mode: ScheduleDragMode) {
         />
       </template>
     </div>
+    <template v-if="actualSegments?.length">
+      <div
+        v-for="segment in actualSegments"
+        :key="`actual-${segment.id}`"
+        class="pointer-events-none absolute top-[18px] z-10 h-1.5 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,.55)]"
+        :class="[
+          segment.status ? statusDot[segment.status] : '',
+          segment.class,
+        ]"
+        :style="segment.style"
+        :title="segment.title"
+      />
+    </template>
+    <div
+      v-else-if="actualStyle"
+      class="pointer-events-none absolute top-[18px] z-10 h-1.5 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,.55)]"
+      :class="actualClass"
+      :style="actualStyle"
+      title="实际过程"
+    />
   </div>
 </template>

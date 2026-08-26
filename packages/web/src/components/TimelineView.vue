@@ -2,6 +2,7 @@
 import type {
   Bug,
   ExecutionStatus,
+  Person,
   Requirement,
   Stage,
   Version,
@@ -12,6 +13,8 @@ import {
   CalendarDaysIcon,
   ChevronDownIcon,
   CubeIcon,
+  ArrowTopRightOnSquareIcon,
+  UserPlusIcon,
 } from '@heroicons/vue/24/outline';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
@@ -23,9 +26,15 @@ import {
   ref,
   watch,
 } from 'vue';
+import { useRouter } from 'vue-router';
+import { api } from '@/api';
+import AppModal from '@/components/AppModal.vue';
+import OwnerPicker from '@/components/OwnerPicker.vue';
 import { formatDate, statusDot } from '@/lib/presentation';
 import PlanningDialog from '@/components/PlanningDialog.vue';
+import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
 import TimelineBar from '@/components/TimelineBar.vue';
+import { toasts } from '@/state/toasts';
 
 type TimelineMode = 'baseline' | 'current' | 'actual';
 type ExpansionMode = 'smart' | 'depth' | 'custom';
@@ -52,11 +61,12 @@ type VersionGroup = {
 const props = defineProps<{
   requirements: Requirement[];
   versions: Version[];
-  mode: TimelineMode;
+  people: Person[];
   focusedStageNames?: string[];
   includeBugs?: boolean;
 }>();
 const emit = defineEmits<{ scheduleSaved: [] }>();
+const router = useRouter();
 const expansionMode = defineModel<ExpansionMode>('expansionMode', {
   default: 'smart',
 });
@@ -69,6 +79,10 @@ const timelineSurface = ref<HTMLElement>();
 const scrollContainer = ref<HTMLElement>();
 const labelColumn = ref<HTMLElement>();
 const planningTarget = ref<PlanningTarget>();
+const statusTarget = ref<WorkItem>();
+const ownerTarget = ref<SchedulableItem>();
+const ownerForm = ref<string[]>([]);
+const assigningOwners = ref(false);
 const dragPreview = ref<{
   itemId: string;
   start: string;
@@ -119,12 +133,14 @@ const attentionRank = (item: Requirement | WorkItem) => {
   }[item.status];
 };
 
-function itemDateRange(item: WorkItem): DateRange | undefined {
-  if (props.mode !== 'actual') {
+function itemDateRange(
+  item: WorkItem,
+  mode: TimelineMode = 'current',
+): DateRange | undefined {
+  if (mode !== 'actual') {
     const start =
-      props.mode === 'baseline' ? item.baselineStartAt : item.plannedStartAt;
-    const end =
-      props.mode === 'baseline' ? item.baselineEndAt : item.plannedEndAt;
+      mode === 'baseline' ? item.baselineStartAt : item.plannedStartAt;
+    const end = mode === 'baseline' ? item.baselineEndAt : item.plannedEndAt;
     const point = start ?? end;
     return point ? { start: start ?? point, end: end ?? point } : undefined;
   }
@@ -148,7 +164,7 @@ function displayedItemRange(item: WorkItem) {
       end: dragPreview.value.end,
     };
   }
-  return itemDateRange(item);
+  return itemDateRange(item, 'current');
 }
 
 function currentScheduleRange(item: SchedulableItem) {
@@ -172,6 +188,41 @@ function planningItemName(item: SchedulableItem) {
 
 function openPlanning(item: SchedulableItem, proposal?: PlanningTarget) {
   planningTarget.value = proposal ?? { item };
+}
+
+function openOwners(item: SchedulableItem) {
+  ownerForm.value = [...item.ownerIds];
+  ownerTarget.value = item;
+}
+
+async function saveOwners() {
+  if (!ownerTarget.value) return;
+  assigningOwners.value = true;
+  try {
+    const input = { ownerIds: ownerForm.value };
+    if ('stages' in ownerTarget.value)
+      await api.updateRequirement(ownerTarget.value.id, input);
+    else if ('key' in ownerTarget.value)
+      await api.updateBug(ownerTarget.value.id, input);
+    else await api.updateStage(ownerTarget.value.id, input);
+    const itemName = planningItemName(ownerTarget.value);
+    ownerTarget.value = undefined;
+    toasts.show(
+      '负责人已更新',
+      ownerForm.value.length
+        ? `${itemName} · 已分配 ${ownerForm.value.length} 人`
+        : `${itemName} · 已设为待分配`,
+    );
+    emit('scheduleSaved');
+  } catch (error) {
+    toasts.show(
+      '分配失败',
+      error instanceof Error ? error.message : undefined,
+      'error',
+    );
+  } finally {
+    assigningOwners.value = false;
+  }
 }
 
 function scheduleChangeSummary(
@@ -224,24 +275,24 @@ function matchesFocus(requirement: Requirement) {
   );
 }
 
-function requirementDateRange(requirement: Requirement) {
+function requirementDateRange(requirement: Requirement, mode: TimelineMode) {
   const ownStart =
-    props.mode === 'baseline'
+    mode === 'baseline'
       ? requirement.baselineStartAt
-      : props.mode === 'current'
+      : mode === 'current'
         ? requirement.plannedStartAt
         : requirement.actualStartAt;
   const ownEnd =
-    props.mode === 'baseline'
+    mode === 'baseline'
       ? requirement.baselineEndAt
-      : props.mode === 'current'
+      : mode === 'current'
         ? requirement.plannedEndAt
         : requirement.actualEndAt;
   const ownPoint = ownStart ?? ownEnd;
   const childRanges = [
     ...visibleStages(requirement),
     ...visibleBugs(requirement),
-  ].map(itemDateRange);
+  ].map((item) => itemDateRange(item, mode));
   const childRange = mergeRanges(childRanges);
   if (childRange) return childRange;
   return mergeRanges([
@@ -257,18 +308,11 @@ function requirementStatus(requirement: Requirement): ExecutionStatus {
   return requirement.lifecycle;
 }
 
-function requirementBarClass(requirement: Requirement) {
-  if (props.mode === 'baseline') {
-    return 'top-[18px] h-2 border border-dashed border-slate-400 bg-slate-100';
-  }
-  return `top-[18px] h-2 ${statusDot[requirementStatus(requirement)]}`;
-}
-
-function versionDateRange(group: VersionGroup) {
+function versionDateRange(group: VersionGroup, mode: TimelineMode) {
   const versionStart =
-    props.mode === 'actual' ? undefined : group.version?.plannedStartAt;
+    mode === 'actual' ? undefined : group.version?.plannedStartAt;
   const versionEnd =
-    props.mode === 'actual'
+    mode === 'actual'
       ? group.version?.actualReleaseAt
       : group.version?.plannedReleaseAt;
   const versionPoint = hasStageFocus.value
@@ -281,7 +325,9 @@ function versionDateRange(group: VersionGroup) {
           end: versionEnd ?? versionPoint,
         }
       : undefined,
-    ...group.requirements.map(requirementDateRange),
+    ...group.requirements.map((requirement) =>
+      requirementDateRange(requirement, mode),
+    ),
   ]);
 }
 
@@ -289,8 +335,8 @@ function sortRequirements(items: Requirement[]) {
   return [...items].sort((left, right) => {
     const attention = attentionRank(left) - attentionRank(right);
     if (attention) return attention;
-    const leftTime = requirementDateRange(left)?.start;
-    const rightTime = requirementDateRange(right)?.start;
+    const leftTime = requirementDateRange(left, 'current')?.start;
+    const rightTime = requirementDateRange(right, 'current')?.start;
     const time =
       (leftTime ? dayjs(leftTime).valueOf() : Number.MAX_SAFE_INTEGER) -
       (rightTime ? dayjs(rightTime).valueOf() : Number.MAX_SAFE_INTEGER);
@@ -302,8 +348,8 @@ function sortBugs(items: Bug[]) {
   return [...items].sort((left, right) => {
     const attention = attentionRank(left) - attentionRank(right);
     if (attention) return attention;
-    const leftTime = itemDateRange(left)?.start;
-    const rightTime = itemDateRange(right)?.start;
+    const leftTime = itemDateRange(left, 'current')?.start;
+    const rightTime = itemDateRange(right, 'current')?.start;
     const time =
       (leftTime ? dayjs(leftTime).valueOf() : Number.MAX_SAFE_INTEGER) -
       (rightTime ? dayjs(rightTime).valueOf() : Number.MAX_SAFE_INTEGER);
@@ -399,8 +445,10 @@ watch([groups, expansionMode, expansionDepth], syncExpansion, {
 
 const range = computed(() => {
   const values = groups.value.flatMap((group) => {
-    const groupRange = versionDateRange(group);
-    return groupRange ? [groupRange.start, groupRange.end] : [];
+    return (['baseline', 'current', 'actual'] as const).flatMap((mode) => {
+      const groupRange = versionDateRange(group, mode);
+      return groupRange ? [groupRange.start, groupRange.end] : [];
+    });
   });
   const today = dayjs();
   const min = values.length
@@ -461,7 +509,11 @@ function scrollToDate(value?: string) {
 }
 
 function scrollToItem(item: WorkItem) {
-  scrollToDate(itemDateRange(item)?.start);
+  scrollToDate(
+    itemDateRange(item, 'current')?.start ??
+      itemDateRange(item, 'actual')?.start ??
+      itemDateRange(item, 'baseline')?.start,
+  );
 }
 
 function wheelDeltaInPixels(event: WheelEvent) {
@@ -533,7 +585,6 @@ function startScheduleDrag(
   item: WorkItem,
   { event, track, mode }: ScheduleDragPayload,
 ) {
-  if (props.mode !== 'current') return;
   const schedule = currentScheduleRange(item);
   if (!schedule || !preparePointerGesture(event, track)) return;
   activeScheduleDrag = {
@@ -723,7 +774,7 @@ function styleFor(value?: DateRange) {
 }
 
 function segments(item: WorkItem) {
-  if (props.mode !== 'actual' || !item.statusHistory.length) return [];
+  if (!item.statusHistory.length) return [];
   return item.statusHistory.map((history, index) => {
     const next = item.statusHistory[index + 1];
     const remainsOpen = ['in_progress', 'waiting', 'blocked'].includes(
@@ -740,65 +791,22 @@ function segments(item: WorkItem) {
   });
 }
 
-const phaseClasses = [
-  'bg-indigo-400/85',
-  'bg-violet-400/85',
-  'bg-cyan-400/85',
-  'bg-emerald-400/85',
-  'bg-amber-400/85',
-];
-
 function requirementSegments(requirement: Requirement) {
-  if (props.mode === 'actual') {
-    const stageSegments = visibleStages(requirement).flatMap((stage) =>
-      segments(stage).map((segment) => ({
-        ...segment,
-        id: `stage-${stage.id}-${segment.id}`,
-        title: `${stage.name} · ${segment.title}`,
-      })),
-    );
-    const bugSegments = visibleBugs(requirement).flatMap((bug) =>
-      segments(bug).map((segment) => ({
-        ...segment,
-        id: `bug-${bug.id}-${segment.id}`,
-        title: `${bug.key} · ${segment.title}`,
-      })),
-    );
-    return [...stageSegments, ...bugSegments];
-  }
-  const stages = visibleStages(requirement).flatMap((stage, index) => {
-    const value = itemDateRange(stage);
-    if (!value) return [];
-    return [
-      {
-        id: `stage-${stage.id}`,
-        class: [
-          phaseClasses[index % phaseClasses.length],
-          props.mode === 'baseline'
-            ? 'border border-dashed border-slate-400'
-            : '',
-        ].join(' '),
-        style: styleFor(value),
-        title: `${stage.name} · ${formatDate(value.start)} → ${formatDate(value.end)}`,
-      },
-    ];
-  });
-  const bugs = visibleBugs(requirement).flatMap((bug) => {
-    const value = itemDateRange(bug);
-    if (!value) return [];
-    return [
-      {
-        id: `bug-${bug.id}`,
-        class:
-          props.mode === 'baseline'
-            ? 'border border-dashed border-rose-400 bg-rose-50/70'
-            : 'bg-rose-400/80',
-        style: styleFor(value),
-        title: `${bug.key} · ${formatDate(value.start)} → ${formatDate(value.end)}`,
-      },
-    ];
-  });
-  return [...stages, ...bugs];
+  const stageSegments = visibleStages(requirement).flatMap((stage) =>
+    segments(stage).map((segment) => ({
+      ...segment,
+      id: `stage-${stage.id}-${segment.id}`,
+      title: `${stage.name} · ${segment.title}`,
+    })),
+  );
+  const bugSegments = visibleBugs(requirement).flatMap((bug) =>
+    segments(bug).map((segment) => ({
+      ...segment,
+      id: `bug-${bug.id}-${segment.id}`,
+      title: `${bug.key} · ${segment.title}`,
+    })),
+  );
+  return [...stageSegments, ...bugSegments];
 }
 
 function toggle(set: Set<string>, id: string) {
@@ -905,8 +913,11 @@ watch(
             </div>
             <TimelineBar
               :days="range.days"
-              :bar-style="styleFor(versionDateRange(group))"
-              bar-class="top-[18px] h-2 bg-indigo-400/75"
+              :bar-style="styleFor(versionDateRange(group, 'current'))"
+              bar-class="top-[14px] h-3 bg-indigo-200/90"
+              :baseline-style="styleFor(versionDateRange(group, 'baseline'))"
+              :actual-style="styleFor(versionDateRange(group, 'actual'))"
+              actual-class="bg-emerald-500"
               @pan-start="startTimelinePan"
             />
           </button>
@@ -948,22 +959,55 @@ watch(
                   <button
                     type="button"
                     class="timeline-row-action focus-ring"
+                    :aria-label="`分配「${requirement.title}」的负责人`"
+                    :title="`负责人：${
+                      requirement.ownerIds.length
+                        ? requirement.ownerIds
+                            .map(
+                              (id) =>
+                                people.find((person) => person.id === id)?.name,
+                            )
+                            .filter(Boolean)
+                            .join('、')
+                        : '待分配'
+                    }`"
+                    @click="openOwners(requirement)"
+                  >
+                    <UserPlusIcon class="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    class="timeline-row-action focus-ring"
                     :aria-label="`调整「${requirement.title}」的计划`"
                     :title="`调整「${requirement.title}」的计划`"
                     @click="openPlanning(requirement)"
                   >
                     <CalendarDaysIcon class="h-3.5 w-3.5" />
                   </button>
+                  <button
+                    type="button"
+                    class="timeline-row-action focus-ring"
+                    :aria-label="`打开「${requirement.title}」的完整详情`"
+                    title="打开完整详情"
+                    @click="router.push(`/requirements/${requirement.id}`)"
+                  >
+                    <ArrowTopRightOnSquareIcon class="h-3.5 w-3.5" />
+                  </button>
                 </div>
                 <TimelineBar
                   :days="range.days"
-                  :bar-style="styleFor(requirementDateRange(requirement))"
-                  :bar-class="requirementBarClass(requirement)"
-                  :segments="
-                    expandedRequirements.has(requirement.id)
-                      ? []
-                      : requirementSegments(requirement)
+                  :bar-style="
+                    styleFor(requirementDateRange(requirement, 'current'))
                   "
+                  bar-class="top-[14px] h-3 bg-indigo-200/90"
+                  :baseline-style="
+                    styleFor(requirementDateRange(requirement, 'baseline'))
+                  "
+                  :actual-style="
+                    styleFor(requirementDateRange(requirement, 'actual'))
+                  "
+                  :actual-class="statusDot[requirementStatus(requirement)]"
+                  :actual-segments="requirementSegments(requirement)"
                   @pan-start="startTimelinePan"
                 />
               </div>
@@ -977,6 +1021,18 @@ watch(
                   <div
                     class="sticky left-0 z-20 flex h-10 items-center gap-1 border-r border-slate-100 bg-white pl-12 pr-3 transition hover:bg-slate-50"
                   >
+                    <button
+                      type="button"
+                      class="focus-ring grid h-6 w-6 shrink-0 place-items-center rounded-lg hover:bg-slate-100"
+                      :aria-label="`记录「${stage.name}」的进展`"
+                      :title="`记录「${stage.name}」的进展`"
+                      @click="statusTarget = stage"
+                    >
+                      <span
+                        class="h-2 w-2 rounded-full"
+                        :class="statusDot[stage.status]"
+                      />
+                    </button>
                     <button
                       type="button"
                       class="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
@@ -993,13 +1049,18 @@ watch(
                       @click="scrollToItem(stage)"
                     >
                       <span
-                        class="h-2 w-2 rounded-full"
-                        :class="statusDot[stage.status]"
-                      />
-                      <span
                         class="min-w-0 flex-1 truncate text-[11px] text-slate-600"
                         >{{ stage.name }}</span
                       >
+                    </button>
+                    <button
+                      type="button"
+                      class="timeline-row-action focus-ring"
+                      :aria-label="`分配「${stage.name}」的负责人`"
+                      title="分配负责人"
+                      @click="openOwners(stage)"
+                    >
+                      <UserPlusIcon class="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
@@ -1014,17 +1075,12 @@ watch(
                   <TimelineBar
                     :days="range.days"
                     :bar-style="styleFor(displayedItemRange(stage))"
-                    :bar-class="
-                      mode === 'baseline'
-                        ? 'top-[14px] h-3 border border-dashed border-slate-400 bg-slate-100'
-                        : stage.status === 'done'
-                          ? 'top-[14px] h-3 bg-emerald-400'
-                          : 'top-[14px] h-3 bg-indigo-400'
-                    "
-                    :segments="mode === 'actual' ? segments(stage) : []"
-                    :interactive="
-                      mode === 'current' && Boolean(itemDateRange(stage))
-                    "
+                    bar-class="top-[14px] h-3 bg-indigo-200/90"
+                    :baseline-style="styleFor(itemDateRange(stage, 'baseline'))"
+                    :actual-style="styleFor(itemDateRange(stage, 'actual'))"
+                    :actual-class="statusDot[stage.status]"
+                    :actual-segments="segments(stage)"
+                    :interactive="Boolean(itemDateRange(stage, 'current'))"
                     @pan-start="startTimelinePan"
                     @bar-drag-start="startScheduleDrag(stage, $event)"
                   />
@@ -1059,11 +1115,32 @@ watch(
                     :bar-style="
                       styleFor(
                         mergeRanges(
-                          visibleBugs(requirement).map(itemDateRange),
+                          visibleBugs(requirement).map((bug) =>
+                            itemDateRange(bug, 'current'),
+                          ),
                         ),
                       )
                     "
-                    bar-class="top-[16px] h-2 bg-rose-300/80"
+                    bar-class="top-[14px] h-3 bg-rose-200/90"
+                    :baseline-style="
+                      styleFor(
+                        mergeRanges(
+                          visibleBugs(requirement).map((bug) =>
+                            itemDateRange(bug, 'baseline'),
+                          ),
+                        ),
+                      )
+                    "
+                    :actual-style="
+                      styleFor(
+                        mergeRanges(
+                          visibleBugs(requirement).map((bug) =>
+                            itemDateRange(bug, 'actual'),
+                          ),
+                        ),
+                      )
+                    "
+                    actual-class="bg-rose-500"
                     @pan-start="startTimelinePan"
                   />
                 </button>
@@ -1077,6 +1154,18 @@ watch(
                     <div
                       class="sticky left-0 z-20 flex h-10 items-center gap-1 border-r border-slate-100 bg-white pl-16 pr-3 transition hover:bg-slate-50"
                     >
+                      <button
+                        type="button"
+                        class="focus-ring grid h-6 w-6 shrink-0 place-items-center rounded-lg hover:bg-slate-100"
+                        :aria-label="`记录「${bug.title}」的进展`"
+                        :title="`记录「${bug.title}」的进展`"
+                        @click="statusTarget = bug"
+                      >
+                        <span
+                          class="h-2 w-2 rounded-full"
+                          :class="statusDot[bug.status]"
+                        />
+                      </button>
                       <button
                         type="button"
                         class="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
@@ -1093,10 +1182,6 @@ watch(
                         @click="scrollToItem(bug)"
                       >
                         <span
-                          class="h-2 w-2 rounded-full"
-                          :class="statusDot[bug.status]"
-                        />
-                        <span
                           class="w-20 shrink-0 font-mono text-[9px] font-semibold text-rose-500"
                           >{{ bug.key }}</span
                         >
@@ -1104,6 +1189,15 @@ watch(
                           class="min-w-0 flex-1 truncate text-[11px] text-slate-600"
                           >{{ bug.title }}</span
                         >
+                      </button>
+                      <button
+                        type="button"
+                        class="timeline-row-action focus-ring"
+                        :aria-label="`分配「${bug.title}」的负责人`"
+                        title="分配负责人"
+                        @click="openOwners(bug)"
+                      >
+                        <UserPlusIcon class="h-3.5 w-3.5" />
                       </button>
                       <button
                         type="button"
@@ -1118,11 +1212,12 @@ watch(
                     <TimelineBar
                       :days="range.days"
                       :bar-style="styleFor(displayedItemRange(bug))"
-                      bar-class="top-[14px] h-3 bg-rose-400"
-                      :segments="mode === 'actual' ? segments(bug) : []"
-                      :interactive="
-                        mode === 'current' && Boolean(itemDateRange(bug))
-                      "
+                      bar-class="top-[14px] h-3 bg-rose-200/90"
+                      :baseline-style="styleFor(itemDateRange(bug, 'baseline'))"
+                      :actual-style="styleFor(itemDateRange(bug, 'actual'))"
+                      :actual-class="statusDot[bug.status]"
+                      :actual-segments="segments(bug)"
+                      :interactive="Boolean(itemDateRange(bug, 'current'))"
                       @pan-start="startTimelinePan"
                       @bar-drag-start="startScheduleDrag(bug, $event)"
                     />
@@ -1137,26 +1232,22 @@ watch(
     <div
       class="flex flex-wrap items-center gap-4 border-t border-slate-100 bg-white px-5 py-3 text-[10px] text-slate-400"
     >
-      <template v-if="mode === 'actual'">
-        <span class="flex items-center gap-1.5">
-          <i class="h-2 w-4 rounded-sm bg-indigo-500" />实际工作
-        </span>
-        <span class="flex items-center gap-1.5">
-          <i class="h-2 w-4 rounded-sm bg-amber-400" />等待中
-        </span>
-        <span class="flex items-center gap-1.5">
-          <i class="h-2 w-4 rounded-sm bg-rose-500" />阻塞
-        </span>
-        <span class="flex items-center gap-1.5">
-          <i class="h-2 w-4 rounded-sm bg-emerald-500" />已完成
-        </span>
-        <span>只有一个时间点的事项按当天显示</span>
-      </template>
-      <span v-else-if="mode === 'baseline'">虚线代表初始基准计划</span>
-      <template v-else>
-        <span>拖动空白处可平移日期</span>
-        <span>拖动阶段或 Bug 条可调整当前计划，汇总条由下级自动计算</span>
-      </template>
+      <span class="flex items-center gap-1.5">
+        <i class="h-4 w-4 border-x border-slate-400" />初始计划边界
+      </span>
+      <span class="flex items-center gap-1.5">
+        <i class="h-2.5 w-4 rounded-full bg-indigo-200" />当前计划
+      </span>
+      <span class="flex items-center gap-1.5">
+        <i class="h-1.5 w-4 rounded-full bg-emerald-500" />实际进展
+      </span>
+      <span class="flex items-center gap-1.5">
+        <i class="h-1.5 w-4 rounded-full bg-amber-400" />等待中
+      </span>
+      <span class="flex items-center gap-1.5">
+        <i class="h-1.5 w-4 rounded-full bg-rose-500" />阻塞
+      </span>
+      <span>拖动主条调整当前计划；初始计划只保留起止参照</span>
     </div>
 
     <PlanningDialog
@@ -1179,5 +1270,58 @@ watch(
       @close="planningTarget = undefined"
       @saved="emit('scheduleSaved')"
     />
+
+    <StatusUpdateDialog
+      v-if="statusTarget"
+      :open="Boolean(statusTarget)"
+      :item-id="statusTarget.id"
+      :item-type="'key' in statusTarget ? 'bug' : 'stage'"
+      :item-name="
+        'key' in statusTarget ? statusTarget.title : statusTarget.name
+      "
+      :current-status="statusTarget.status"
+      :actual-start-at="statusTarget.actualStartAt"
+      :status-reason="statusTarget.statusReason"
+      :expected-resume-at="statusTarget.expectedResumeAt"
+      :owner-ids="statusTarget.ownerIds"
+      :people="people"
+      @close="statusTarget = undefined"
+      @saved="emit('scheduleSaved')"
+    />
+
+    <AppModal
+      v-if="ownerTarget"
+      :open="Boolean(ownerTarget)"
+      :title="`分配「${planningItemName(ownerTarget)}」的负责人`"
+      description="负责人可随实际分工调整，既有分配关系会保留在变更历史中。"
+      width="lg"
+      @close="ownerTarget = undefined"
+    >
+      <form class="space-y-5" @submit.prevent="saveOwners">
+        <OwnerPicker v-model="ownerForm" :people="people" />
+        <div
+          class="flex items-center justify-between border-t border-slate-100 pt-4"
+        >
+          <p class="text-[11px] text-slate-400">
+            可分配多人，也可以暂时设为待分配。
+          </p>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-100"
+              @click="ownerTarget = undefined"
+            >
+              取消
+            </button>
+            <button
+              :disabled="assigningOwners"
+              class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {{ assigningOwners ? '保存中…' : '保存负责人' }}
+            </button>
+          </div>
+        </div>
+      </form>
+    </AppModal>
   </div>
 </template>

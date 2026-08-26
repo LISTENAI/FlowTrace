@@ -38,7 +38,6 @@ const snapshot = ref<ProjectSnapshot>();
 const loading = ref(true);
 const error = ref('');
 const view = ref<'list' | 'timeline'>('list');
-const timelineMode = ref<'baseline' | 'current' | 'actual'>('current');
 const timelineExpansionMode = ref<'smart' | 'depth' | 'custom'>('smart');
 const timelineExpansionDepth = ref(1);
 const timelineExpansionOpen = ref(false);
@@ -745,29 +744,6 @@ watch(projectId, () => {
                 </button>
               </div>
             </div>
-
-            <span class="mx-1 h-5 w-px bg-slate-200 max-sm:hidden" />
-            <div
-              class="flex items-center gap-0.5 max-sm:w-full max-sm:justify-end"
-            >
-              <button
-                v-for="item in [
-                  { id: 'baseline', label: '初始计划' },
-                  { id: 'current', label: '当前计划' },
-                  { id: 'actual', label: '实际过程' },
-                ]"
-                :key="item.id"
-                class="h-9 rounded-xl px-2.5 text-[11px] font-semibold transition"
-                :class="
-                  timelineMode === item.id
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'
-                "
-                @click="timelineMode = item.id as typeof timelineMode"
-              >
-                {{ item.label }}
-              </button>
-            </div>
           </div>
         </div>
 
@@ -799,7 +775,7 @@ watch(projectId, () => {
             v-model:expansion-mode="timelineExpansionMode"
             :requirements="filteredTimelineRequirements"
             :versions="snapshot.versions"
-            :mode="timelineMode"
+            :people="workspace.people"
             :focused-stage-names="timelineFocusedStages"
             :include-bugs="timelineIncludeBugs"
             @schedule-saved="load"
