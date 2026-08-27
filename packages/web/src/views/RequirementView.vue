@@ -38,6 +38,7 @@ import OwnerPicker from '@/components/OwnerPicker.vue';
 import PlanningDialog from '@/components/PlanningDialog.vue';
 import StatusHistoryCorrectionDialog from '@/components/StatusHistoryCorrectionDialog.vue';
 import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
+import StagePlanEditor from '@/components/StagePlanEditor.vue';
 import {
   formatDate,
   formatDateTime,
@@ -47,6 +48,7 @@ import {
   statusLabels,
   statusTone,
 } from '@/lib/presentation';
+import { newStagePlanDraft, type StagePlanDraft } from '@/lib/stage-plan';
 import { toasts } from '@/state/toasts';
 import { loadWorkspace, workspace } from '@/state/workspace';
 
@@ -73,7 +75,6 @@ const requirement = ref<Requirement>();
 const dependencies = ref<Dependency[]>([]);
 const versions = ref<Version[]>([]);
 const loading = ref(true);
-const addStageOpen = ref(false);
 const addBugOpen = ref(false);
 const addDependencyOpen = ref(false);
 const saving = ref(false);
@@ -89,16 +90,14 @@ const deleteTarget = ref<Requirement | Stage | Bug>();
 const deleting = ref(false);
 const ownerForm = ref<string[]>([]);
 const assigningOwners = ref(false);
+const stageMaintenanceOpen = ref(false);
+const savingStages = ref(false);
+const stageMaintenanceReason = ref('');
+const stageDrafts = ref<StagePlanDraft[]>([]);
 const candidateRequirements = ref<
   Array<{ id: string; key: string; title: string; projectId: string }>
 >([]);
 const selectedPredecessor = ref<Requirement>();
-const stageForm = reactive({
-  name: '',
-  note: '',
-  ownerIds: [] as string[],
-  order: 0,
-});
 const bugForm = reactive({
   title: '',
   description: '',
@@ -118,13 +117,6 @@ const project = computed(() =>
   workspace.projects.find((item) => item.id === requirement.value?.projectId),
 );
 const stageOptions = computed(() => requirement.value?.stages ?? []);
-const stageInsertOptions = computed(() => [
-  { value: 0, label: '放在最前面' },
-  ...stageOptions.value.map((stage, index) => ({
-    value: index + 1,
-    label: `在「${stage.name}」之后`,
-  })),
-]);
 const discoveredStageOptions = computed(() => [
   { value: '', label: '未指定阶段' },
   ...stageOptions.value.map((stage) => ({
@@ -322,36 +314,114 @@ async function saveOwners() {
   }
 }
 
-function openStageForm() {
-  stageForm.order = requirement.value?.stages.length ?? 0;
-  addStageOpen.value = true;
+function stageDate(value?: string) {
+  return value ? dayjs(value).format('YYYY-MM-DD') : '';
 }
 
-async function addStage() {
+function openStageMaintenance() {
   if (!requirement.value) return;
-  saving.value = true;
+  stageDrafts.value = requirement.value.stages.map((stage) =>
+    newStagePlanDraft({
+      id: stage.id,
+      name: stage.name,
+      note: stage.note ?? '',
+      ownerIds: [...stage.ownerIds],
+      plannedStartAt: stageDate(stage.plannedStartAt),
+      plannedEndAt: stageDate(stage.plannedEndAt),
+    }),
+  );
+  stageMaintenanceReason.value = '';
+  stageMaintenanceOpen.value = true;
+}
+
+function sameOwners(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+  const sortedLeft = [...left].sort();
+  const sortedRight = [...right].sort();
+  return sortedLeft.every((id, index) => id === sortedRight[index]);
+}
+
+const stageMaintenanceValid = computed(() =>
+  stageDrafts.value.every(
+    (stage) =>
+      Boolean(stage.name.trim()) &&
+      (!stage.plannedStartAt ||
+        !stage.plannedEndAt ||
+        !dayjs(stage.plannedEndAt).isBefore(dayjs(stage.plannedStartAt))),
+  ),
+);
+
+async function saveStageMaintenance() {
+  if (!requirement.value || !stageMaintenanceValid.value) return;
+  savingStages.value = true;
+  const originals = new Map(
+    requirement.value.stages.map((stage) => [stage.id, stage]),
+  );
+  const reason =
+    stageMaintenanceReason.value.trim() || '在需求详情批量维护阶段';
   try {
-    await api.addStage(requirement.value.id, {
-      name: stageForm.name,
-      note: stageForm.note,
-      ownerIds: stageForm.ownerIds,
-      order: stageForm.order,
-    });
-    addStageOpen.value = false;
-    toasts.show('阶段已加入过程', stageForm.name);
-    stageForm.name = '';
-    stageForm.note = '';
-    stageForm.ownerIds = [];
-    stageForm.order = 0;
+    for (const [order, draft] of stageDrafts.value.entries()) {
+      const plannedStartAt = draft.plannedStartAt
+        ? dayjs(draft.plannedStartAt).startOf('day').toISOString()
+        : null;
+      const plannedEndAt = draft.plannedEndAt
+        ? dayjs(draft.plannedEndAt).endOf('day').toISOString()
+        : null;
+      if (!draft.id) {
+        await api.addStage(requirement.value.id, {
+          name: draft.name.trim(),
+          note: draft.note.trim(),
+          ownerIds: draft.ownerIds,
+          order,
+          plannedStartAt: plannedStartAt ?? undefined,
+          plannedEndAt: plannedEndAt ?? undefined,
+          reason,
+        });
+        continue;
+      }
+
+      const original = originals.get(draft.id);
+      if (!original) continue;
+      if (
+        draft.name.trim() !== original.name ||
+        draft.note.trim() !== (original.note ?? '') ||
+        !sameOwners(draft.ownerIds, original.ownerIds) ||
+        order !== original.order
+      ) {
+        await api.updateStage(draft.id, {
+          name: draft.name.trim(),
+          note: draft.note.trim(),
+          ownerIds: draft.ownerIds,
+          order,
+          reason,
+        });
+      }
+      if (
+        draft.plannedStartAt !== stageDate(original.plannedStartAt) ||
+        draft.plannedEndAt !== stageDate(original.plannedEndAt)
+      ) {
+        await api.rescheduleStage(draft.id, {
+          plannedStartAt,
+          plannedEndAt,
+          reason,
+        });
+      }
+    }
     await load();
-  } catch (error) {
+    stageMaintenanceOpen.value = false;
     toasts.show(
-      '新增失败',
+      '阶段已统一保存',
+      `${stageDrafts.value.length} 个阶段的资料与计划已核对`,
+    );
+  } catch (error) {
+    await load();
+    toasts.show(
+      '保存未全部完成',
       error instanceof Error ? error.message : undefined,
       'error',
     );
   } finally {
-    saving.value = false;
+    savingStages.value = false;
   }
 }
 
@@ -700,14 +770,82 @@ watch(id, load);
               <div class="min-w-0">
                 <h2 class="text-sm font-semibold text-slate-900">实际过程</h2>
                 <p class="mt-0.5 text-[11px] text-slate-400">
-                  点击阶段记录进展；分配、排期与流程维护在更多操作中
+                  推进时点击阶段记录状态；整理资料时可一次维护整组阶段
                 </p>
               </div>
-              <button class="focus-ring section-action" @click="openStageForm">
-                <PlusIcon class="h-3.5 w-3.5" />新增阶段
+              <button
+                type="button"
+                class="focus-ring section-action"
+                @click="
+                  stageMaintenanceOpen
+                    ? (stageMaintenanceOpen = false)
+                    : openStageMaintenance()
+                "
+              >
+                <PencilSquareIcon
+                  v-if="!stageMaintenanceOpen"
+                  class="h-3.5 w-3.5"
+                />
+                {{ stageMaintenanceOpen ? '退出编辑' : '维护阶段' }}
               </button>
             </div>
-            <div class="px-4 py-3 sm:px-5">
+            <form
+              v-if="stageMaintenanceOpen"
+              class="space-y-4 p-4 sm:p-5"
+              @submit.prevent="saveStageMaintenance"
+            >
+              <StagePlanEditor
+                v-model="stageDrafts"
+                :people="workspace.people"
+                :default-start-at="stageDate(requirement.plannedStartAt)"
+                :default-end-at="stageDate(requirement.plannedEndAt)"
+              />
+              <div
+                class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 sm:flex-row sm:items-end sm:justify-between"
+              >
+                <div class="min-w-0">
+                  <p class="text-[11px] font-semibold text-slate-600">
+                    本次维护会统一保存名称、顺序、负责人和计划
+                  </p>
+                  <p class="mt-1 text-[10px] leading-4 text-slate-400">
+                    已有阶段的删除仍从更多操作单独确认，避免误删历史记录。
+                  </p>
+                </div>
+                <label class="block min-w-0 sm:w-80">
+                  <span
+                    class="mb-1.5 block text-[10px] font-medium text-slate-500"
+                    >维护说明（可选）</span
+                  >
+                  <input
+                    v-model="stageMaintenanceReason"
+                    placeholder="例如：按评审结论补齐负责人和排期"
+                    class="focus-ring w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none placeholder:text-slate-300"
+                  />
+                </label>
+              </div>
+              <p
+                v-if="!stageMaintenanceValid"
+                class="text-right text-[11px] font-medium text-rose-500"
+              >
+                请填写阶段名称，并确保结束日期不早于开始日期。
+              </p>
+              <div class="flex justify-end gap-2">
+                <button
+                  type="button"
+                  class="focus-ring rounded-xl px-4 py-2.5 text-sm text-slate-500 transition hover:bg-slate-100"
+                  @click="stageMaintenanceOpen = false"
+                >
+                  取消
+                </button>
+                <button
+                  :disabled="savingStages || !stageMaintenanceValid"
+                  class="focus-ring rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {{ savingStages ? '保存中…' : '保存全部阶段' }}
+                </button>
+              </div>
+            </form>
+            <div v-else class="px-4 py-3 sm:px-5">
               <div
                 class="relative space-y-1 before:absolute before:bottom-6 before:left-[14px] before:top-6 before:w-px before:bg-slate-200"
               >
@@ -1231,61 +1369,6 @@ watch(id, load);
         </div>
       </form>
     </AppModal>
-
-    <AppModal
-      :open="addStageOpen"
-      title="新增阶段"
-      description="用于记录返工、再次打样或回归验证等实际过程。"
-      @close="addStageOpen = false"
-      ><form class="space-y-4" @submit.prevent="addStage">
-        <label class="block"
-          ><span class="mb-1.5 block text-xs font-medium text-slate-600"
-            >阶段名称</span
-          ><input
-            v-model="stageForm.name"
-            required
-            placeholder="例如：修复 #1 / 二次打样"
-            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm" /></label
-        ><label class="block"
-          ><span class="mb-1.5 block text-xs font-medium text-slate-600"
-            >备注</span
-          ><textarea
-            v-model="stageForm.note"
-            rows="2"
-            class="focus-ring w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
-          />
-        </label>
-        <label class="block">
-          <span class="mb-1.5 block text-xs font-medium text-slate-600"
-            >插入位置</span
-          >
-          <AppSelect v-model="stageForm.order" :options="stageInsertOptions" />
-        </label>
-        <fieldset>
-          <legend class="mb-2 text-xs font-medium text-slate-600">
-            负责人
-          </legend>
-          <OwnerPicker
-            v-model="stageForm.ownerIds"
-            :people="workspace.people"
-          />
-        </fieldset>
-        <div class="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            class="rounded-xl px-4 py-2 text-sm text-slate-500"
-            @click="addStageOpen = false"
-          >
-            取消</button
-          ><button
-            :disabled="saving"
-            class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white"
-          >
-            加入过程
-          </button>
-        </div>
-      </form></AppModal
-    >
 
     <AppModal
       :open="addBugOpen"
