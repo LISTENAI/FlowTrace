@@ -120,6 +120,56 @@ describe.sequential('WorkService business rules', () => {
     ]);
   });
 
+  it('keeps valid template dependencies when stages are edited during creation', async () => {
+    const project = await work.createProject({
+      key: 'INLINE',
+      name: '创建时维护流程',
+      templateStages: [
+        { id: 'design', name: '方案设计' },
+        {
+          id: 'develop',
+          name: '开发',
+          dependsOnTemplateStageIds: ['design'],
+        },
+      ],
+    });
+
+    const requirement = await work.createRequirement({
+      projectId: project.id,
+      title: '直接编辑默认流程',
+      stages: [
+        {
+          templateStageId: 'design',
+          name: '技术方案',
+          ownerIds: ['architect'],
+        },
+        {
+          templateStageId: 'develop',
+          name: '研发实现',
+          plannedStartAt: '2026-09-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    expect(requirement.stages).toEqual([
+      expect.objectContaining({
+        name: '技术方案',
+        ownerIds: ['architect'],
+      }),
+      expect.objectContaining({
+        name: '研发实现',
+        plannedStartAt: '2026-09-01T00:00:00.000Z',
+      }),
+    ]);
+    expect(await work.listDependencies(requirement.id)).toEqual([
+      expect.objectContaining({
+        predecessorId: requirement.stages[0]!.id,
+        successorId: requirement.stages[1]!.id,
+        active: true,
+      }),
+    ]);
+  });
+
   it('assigns requirement, stage and bug owners independently after creation', async () => {
     const [coordinator, designer, developer] = await Promise.all([
       work.createPerson({ name: '协调人' }),

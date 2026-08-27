@@ -681,6 +681,21 @@ export class WorkService {
       if (!project) throw new NotFoundException('未找到项目');
       if (input.versionId)
         await this.assertVersionInProject(manager, input.versionId, project.id);
+      const templateStageIds = new Set(
+        project.templateStages.map((stage) => stage.id),
+      );
+      const referencedTemplateStageIds = (input.stages ?? [])
+        .map((stage) => stage.templateStageId)
+        .filter(Boolean) as string[];
+      if (
+        new Set(referencedTemplateStageIds).size !==
+        referencedTemplateStageIds.length
+      ) {
+        throw new BadRequestException('同一个默认阶段不能重复用于需求流程');
+      }
+      if (referencedTemplateStageIds.some((id) => !templateStageIds.has(id))) {
+        throw new BadRequestException('需求流程引用了不属于当前项目的默认阶段');
+      }
 
       project.requirementSequence += 1;
       await projectRepository.save(project);
@@ -701,9 +716,8 @@ export class WorkService {
         actualEndAt: null,
       });
       await manager.save(requirement);
-      const usesTemplate = input.stages === undefined;
       const sourceStages: Array<{
-        id?: string;
+        templateStageId?: string;
         name: string;
         order: number;
         ownerIds?: string[];
@@ -713,26 +727,30 @@ export class WorkService {
       }> =
         input.stages === undefined
           ? project.templateStages.map((template) => ({
-              ...template,
+              templateStageId: template.id,
+              name: template.name,
+              order: template.order,
+              ownerIds: [],
               note: undefined,
               plannedStartAt: undefined,
               plannedEndAt: undefined,
             }))
           : input.stages.map((stage, order) => ({ ...stage, order }));
       const templateIdMap = new Map<string, string>();
-      if (usesTemplate) {
-        for (const stage of project.templateStages)
-          templateIdMap.set(stage.id, randomUUID());
+      for (const stage of sourceStages) {
+        if (stage.templateStageId)
+          templateIdMap.set(stage.templateStageId, randomUUID());
       }
       const stages = sourceStages.map((sourceStage) =>
         manager.getRepository(StageEntity).create({
           id:
-            (sourceStage.id && templateIdMap.get(sourceStage.id)) ||
+            (sourceStage.templateStageId &&
+              templateIdMap.get(sourceStage.templateStageId)) ||
             randomUUID(),
           requirementId: requirement.id,
           name: sourceStage.name.trim(),
           order: sourceStage.order,
-          ownerIds: usesTemplate ? [] : (sourceStage.ownerIds ?? []),
+          ownerIds: sourceStage.ownerIds ?? [],
           status: 'not_started',
           note: sourceStage.note ?? null,
           statusReason: null,
@@ -746,27 +764,25 @@ export class WorkService {
         }),
       );
       await manager.save(stages);
-      if (usesTemplate) {
-        for (const template of project.templateStages) {
-          for (const predecessorTemplateId of template.dependsOnTemplateStageIds) {
-            const successorId = templateIdMap.get(template.id);
-            const predecessorId = templateIdMap.get(predecessorTemplateId);
-            if (!successorId || !predecessorId) continue;
-            await manager.save(
-              manager.getRepository(DependencyEntity).create({
-                id: randomUUID(),
-                successorType: 'stage',
-                successorId,
-                predecessorType: 'stage',
-                predecessorId,
-                note: '由项目模板复制',
-                active: true,
-                source: context(input).source,
-                agentName: input.agentName ?? null,
-                resolvedAt: null,
-              }),
-            );
-          }
+      for (const template of project.templateStages) {
+        for (const predecessorTemplateId of template.dependsOnTemplateStageIds) {
+          const successorId = templateIdMap.get(template.id);
+          const predecessorId = templateIdMap.get(predecessorTemplateId);
+          if (!successorId || !predecessorId) continue;
+          await manager.save(
+            manager.getRepository(DependencyEntity).create({
+              id: randomUUID(),
+              successorType: 'stage',
+              successorId,
+              predecessorType: 'stage',
+              predecessorId,
+              note: '由项目模板复制',
+              active: true,
+              source: context(input).source,
+              agentName: input.agentName ?? null,
+              resolvedAt: null,
+            }),
+          );
         }
       }
       await this.recordChange(manager, {

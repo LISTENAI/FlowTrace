@@ -86,6 +86,7 @@ export const api = {
     plannedStartAt?: string;
     plannedEndAt?: string;
     stages?: Array<{
+      templateStageId?: string;
       name: string;
       ownerIds?: string[];
       note?: string;

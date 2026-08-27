@@ -247,6 +247,13 @@ export class UpdateVersionDto extends ChangeContextDto {
 }
 
 export class CreateRequirementStageDto {
+  @ApiPropertyOptional({
+    description: '来源项目模板阶段；提供时保留仍然有效的模板依赖',
+  })
+  @IsOptional()
+  @IsString()
+  templateStageId?: string;
+
   @ApiProperty({ example: '板上验证' })
   @IsString()
   @IsNotEmpty()
