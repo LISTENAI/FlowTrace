@@ -64,6 +64,7 @@ const form = reactive({
   description: '',
   versionId: '',
   ownerIds: [] as string[],
+  withPlan: true,
   plannedStartAt: dayjs().format('YYYY-MM-DD'),
   plannedEndAt: dayjs().add(14, 'day').format('YYYY-MM-DD'),
   stages: [] as StagePlanDraft[],
@@ -327,6 +328,9 @@ function openCreate() {
   form.versionId =
     snapshot.value?.versions.find((item) => item.status === 'active')?.id ?? '';
   form.ownerIds = [];
+  form.withPlan = true;
+  form.plannedStartAt = dayjs().format('YYYY-MM-DD');
+  form.plannedEndAt = dayjs().add(14, 'day').format('YYYY-MM-DD');
   form.stages = (snapshot.value?.project.templateStages ?? []).map((stage) =>
     newStagePlanDraft({
       templateStageId: stage.id,
@@ -338,6 +342,22 @@ function openCreate() {
   createOpen.value = true;
 }
 
+function setCreatePlanning(enabled: boolean) {
+  form.withPlan = enabled;
+  if (enabled) {
+    form.plannedStartAt = dayjs().format('YYYY-MM-DD');
+    form.plannedEndAt = dayjs().add(14, 'day').format('YYYY-MM-DD');
+    return;
+  }
+  form.plannedStartAt = '';
+  form.plannedEndAt = '';
+  form.stages = form.stages.map((stage) => ({
+    ...stage,
+    plannedStartAt: '',
+    plannedEndAt: '',
+  }));
+}
+
 async function createRequirement() {
   saving.value = true;
   try {
@@ -347,19 +367,25 @@ async function createRequirement() {
       title: form.title,
       description: form.description,
       ownerIds: form.ownerIds,
-      plannedStartAt: dayjs(form.plannedStartAt).startOf('day').toISOString(),
-      plannedEndAt: dayjs(form.plannedEndAt).endOf('day').toISOString(),
+      plannedStartAt: form.withPlan
+        ? dayjs(form.plannedStartAt).startOf('day').toISOString()
+        : undefined,
+      plannedEndAt: form.withPlan
+        ? dayjs(form.plannedEndAt).endOf('day').toISOString()
+        : undefined,
       stages: form.stages.map((stage) => ({
         templateStageId: stage.templateStageId,
         name: stage.name.trim(),
         note: stage.note.trim() || undefined,
         ownerIds: stage.ownerIds,
-        plannedStartAt: stage.plannedStartAt
-          ? dayjs(stage.plannedStartAt).startOf('day').toISOString()
-          : undefined,
-        plannedEndAt: stage.plannedEndAt
-          ? dayjs(stage.plannedEndAt).endOf('day').toISOString()
-          : undefined,
+        plannedStartAt:
+          form.withPlan && stage.plannedStartAt
+            ? dayjs(stage.plannedStartAt).startOf('day').toISOString()
+            : undefined,
+        plannedEndAt:
+          form.withPlan && stage.plannedEndAt
+            ? dayjs(stage.plannedEndAt).endOf('day').toISOString()
+            : undefined,
       })),
     });
     createOpen.value = false;
@@ -1094,22 +1120,43 @@ watch(timelineStageOptions, (options) => {
                 :options="createVersionOptions"
               />
             </label>
-            <label>
-              <span class="mb-1.5 block text-xs font-medium text-slate-600"
-                >计划开始</span
+            <div class="sm:col-span-2">
+              <div class="mb-1.5 flex items-center justify-between gap-3">
+                <span class="text-xs font-medium text-slate-600">需求计划</span>
+                <button
+                  type="button"
+                  class="focus-ring rounded-lg px-2 py-1 text-[10px] font-semibold text-indigo-600 transition hover:bg-indigo-50"
+                  @click="setCreatePlanning(!form.withPlan)"
+                >
+                  {{ form.withPlan ? '暂不排期' : '添加计划' }}
+                </button>
+              </div>
+              <div v-if="form.withPlan" class="grid gap-3 sm:grid-cols-2">
+                <label>
+                  <span class="sr-only">计划开始</span>
+                  <AppDateTimeField
+                    v-model="form.plannedStartAt"
+                    placeholder="计划开始"
+                    required
+                  />
+                </label>
+                <label>
+                  <span class="sr-only">计划完成</span>
+                  <AppDateTimeField
+                    v-model="form.plannedEndAt"
+                    placeholder="计划完成"
+                    required
+                    :min="form.plannedStartAt"
+                  />
+                </label>
+              </div>
+              <div
+                v-else
+                class="flex min-h-10 items-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 text-[11px] text-slate-500"
               >
-              <AppDateTimeField v-model="form.plannedStartAt" required />
-            </label>
-            <label>
-              <span class="mb-1.5 block text-xs font-medium text-slate-600"
-                >计划完成</span
-              >
-              <AppDateTimeField
-                v-model="form.plannedEndAt"
-                required
-                :min="form.plannedStartAt"
-              />
-            </label>
+                暂不设置计划，只建立流程并记录实际发生的状态事件。
+              </div>
+            </div>
           </div>
           <fieldset>
             <legend class="mb-2 text-xs font-medium text-slate-600">
@@ -1120,6 +1167,7 @@ watch(timelineStageOptions, (options) => {
               :people="workspace.people"
               :default-start-at="form.plannedStartAt"
               :default-end-at="form.plannedEndAt"
+              :show-schedule="form.withPlan"
               allow-remove-existing
             />
             <div class="mt-2 flex items-center justify-between gap-3">

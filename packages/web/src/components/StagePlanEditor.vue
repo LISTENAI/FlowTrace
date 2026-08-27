@@ -21,8 +21,9 @@ const props = withDefaults(
     defaultStartAt?: string;
     defaultEndAt?: string;
     allowRemoveExisting?: boolean;
+    showSchedule?: boolean;
   }>(),
-  { allowRemoveExisting: false },
+  { allowRemoveExisting: false, showSchedule: true },
 );
 const emit = defineEmits<{
   'update:modelValue': [value: StagePlanDraft[]];
@@ -120,12 +121,18 @@ function ownerLabel(row: StagePlanDraft) {
           {{ modelValue.length }} 个阶段
         </p>
         <p class="mt-0.5 text-[10px] text-slate-400">
-          名称、负责人和计划可以在这里一次维护
+          {{
+            showSchedule
+              ? '名称、负责人和计划可以在这里一次维护'
+              : '名称和负责人可以在这里一次维护'
+          }}
         </p>
       </div>
       <div class="flex items-center gap-1.5">
         <button
-          v-if="defaultStartAt && defaultEndAt && modelValue.length"
+          v-if="
+            showSchedule && defaultStartAt && defaultEndAt && modelValue.length
+          "
           type="button"
           class="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold text-slate-500 transition hover:bg-white hover:text-indigo-600"
           @click="distributeSchedule"
@@ -144,10 +151,17 @@ function ownerLabel(row: StagePlanDraft) {
 
     <div
       v-if="modelValue.length"
-      class="hidden grid-cols-[2.5rem_minmax(10rem,1fr)_8.5rem_9.25rem_9.25rem_2rem] gap-2 px-3 pb-1 pt-2 text-[10px] font-medium text-slate-400 lg:grid"
+      class="hidden gap-2 px-3 pb-1 pt-2 text-[10px] font-medium text-slate-400 lg:grid"
+      :class="
+        showSchedule
+          ? 'grid-cols-[2.5rem_minmax(10rem,1fr)_8.5rem_9.25rem_9.25rem_2rem]'
+          : 'grid-cols-[2.5rem_minmax(10rem,1fr)_8.5rem_2rem]'
+      "
     >
       <span>顺序</span><span>阶段名称与说明</span><span>负责人</span
-      ><span>计划开始</span><span>计划结束</span><span />
+      ><template v-if="showSchedule"
+        ><span>计划开始</span><span>计划结束</span></template
+      ><span />
     </div>
 
     <div v-if="modelValue.length" class="space-y-2 p-2 pt-1">
@@ -157,7 +171,12 @@ function ownerLabel(row: StagePlanDraft) {
         class="rounded-xl border border-slate-200 bg-white shadow-sm shadow-slate-900/[.025]"
       >
         <div
-          class="grid gap-2 p-2.5 lg:grid-cols-[2.5rem_minmax(10rem,1fr)_8.5rem_9.25rem_9.25rem_2rem] lg:items-center"
+          class="grid gap-2 p-2.5 lg:items-center"
+          :class="
+            showSchedule
+              ? 'lg:grid-cols-[2.5rem_minmax(10rem,1fr)_8.5rem_9.25rem_9.25rem_2rem]'
+              : 'lg:grid-cols-[2.5rem_minmax(10rem,1fr)_8.5rem_2rem]'
+          "
         >
           <div class="flex items-center gap-0.5 max-lg:justify-between">
             <span
@@ -220,7 +239,7 @@ function ownerLabel(row: StagePlanDraft) {
             <span class="min-w-0 flex-1 truncate">{{ ownerLabel(row) }}</span>
           </button>
 
-          <label class="min-w-0">
+          <label v-if="showSchedule" class="min-w-0">
             <span class="mb-1 block text-[10px] text-slate-400 lg:hidden"
               >计划开始</span
             >
@@ -229,7 +248,7 @@ function ownerLabel(row: StagePlanDraft) {
               @update:model-value="updateRow(index, { plannedStartAt: $event })"
             />
           </label>
-          <label class="min-w-0">
+          <label v-if="showSchedule" class="min-w-0">
             <span class="mb-1 block text-[10px] text-slate-400 lg:hidden"
               >计划结束</span
             >
