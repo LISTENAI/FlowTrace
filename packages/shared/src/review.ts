@@ -46,6 +46,14 @@ export function reviewRequirement(
   if (['done', 'canceled'].includes(requirement.lifecycle)) return [];
 
   const issues: RequirementReviewIssue[] = [];
+  const hasAnyPlan = Boolean(
+    requirement.plannedStartAt ||
+    requirement.plannedEndAt ||
+    requirement.stages.some(
+      (stage) => stage.plannedStartAt || stage.plannedEndAt,
+    ) ||
+    requirement.bugs.some((bug) => bug.plannedStartAt || bug.plannedEndAt),
+  );
   const addWorkIssues = (item: Stage | Bug, targetType: 'stage' | 'bug') => {
     const name = 'key' in item ? item.key : item.name;
     if (!item.ownerIds.length) {
@@ -57,7 +65,7 @@ export function reviewRequirement(
         targetName: name,
       });
     }
-    if (!item.plannedEndAt) {
+    if (hasAnyPlan && !item.plannedEndAt) {
       issues.push({
         code: 'work_plan_missing',
         message: `${name} 未排完成时间`,

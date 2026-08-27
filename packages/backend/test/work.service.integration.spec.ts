@@ -534,6 +534,37 @@ describe.sequential('WorkService business rules', () => {
     ]);
   });
 
+  it('accepts a process-only requirement until scheduling actually begins', async () => {
+    const owner = await work.createPerson({ name: '过程负责人' });
+    const requirement = await work.createRequirement({
+      projectId: appProjectId,
+      title: '仅记录实际过程',
+      ownerIds: [owner.id],
+    });
+    await work.updateStageStatus(requirement.stages[0]!.id, {
+      status: 'in_progress',
+      ownerIds: [owner.id],
+    });
+
+    const beforePlanning = (
+      await work.listRequirements({ projectId: appProjectId })
+    ).find((item) => item.id === requirement.id);
+    expect(
+      beforePlanning?.reviewIssues.map((issue) => issue.code),
+    ).not.toContain('work_plan_missing');
+
+    await work.rescheduleRequirement(requirement.id, {
+      plannedEndAt: '2026-02-08T00:00:00.000Z',
+      reason: '开始安排整体交付时间',
+    });
+    const afterPlanning = (
+      await work.listRequirements({ projectId: appProjectId })
+    ).find((item) => item.id === requirement.id);
+    expect(afterPlanning?.reviewIssues.map((issue) => issue.code)).toContain(
+      'work_plan_missing',
+    );
+  });
+
   it('retains the initial schedule and every later adjustment', async () => {
     const requirement = (
       await work.listRequirements({ projectId: appProjectId })
