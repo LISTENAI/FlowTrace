@@ -553,7 +553,7 @@ watch(projectId, () => {
           scopedReviewItems.length ||
           scopedExternalDependencies.length
         "
-        class="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
+        class="mt-4 grid items-start gap-3 lg:grid-cols-2"
       >
         <div
           v-if="
@@ -561,103 +561,136 @@ watch(projectId, () => {
             scopedWaitingItems.length ||
             scopedDelayedRows.length
           "
-          class="overflow-hidden rounded-2xl border border-rose-100 bg-gradient-to-r from-rose-50/90 to-amber-50/60 p-4 dark:from-rose-950/35 dark:to-amber-950/25"
+          class="surface overflow-hidden"
         >
-          <div class="flex items-start gap-3">
+          <div
+            class="flex items-center gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800"
+          >
             <span
-              class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-rose-500 shadow-sm dark:bg-rose-950/60"
-              ><ExclamationTriangleIcon class="h-5 w-5"
+              class="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-rose-50 text-rose-500 dark:bg-rose-950/60"
+              ><ExclamationTriangleIcon class="h-4 w-4"
             /></span>
-            <div class="min-w-0 flex-1">
-              <p class="text-xs font-semibold text-slate-800">需要决策与跟进</p>
-              <div class="mt-2 space-y-1.5">
-                <div
-                  v-for="item in [
-                    ...scopedBlockedItems,
-                    ...scopedWaitingItems,
-                  ].slice(0, 3)"
-                  :key="item.id"
-                  class="flex items-center gap-2"
+            <p class="min-w-0 flex-1 text-xs font-semibold text-slate-800">
+              需要决策与跟进
+            </p>
+            <span
+              class="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-rose-600 dark:bg-rose-950/60"
+            >
+              {{
+                scopedBlockedItems.length +
+                scopedWaitingItems.length +
+                scopedDelayedRows.length
+              }}
+            </span>
+          </div>
+          <div class="divide-y divide-slate-100 dark:divide-slate-800">
+            <div
+              v-for="item in [
+                ...scopedBlockedItems,
+                ...scopedWaitingItems,
+              ].slice(0, 3)"
+              :key="item.id"
+              class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3"
+            >
+              <RouterLink
+                :to="`/requirements/${item.requirementId}`"
+                class="focus-ring min-w-0 rounded-lg text-left"
+              >
+                <span class="flex min-w-0 items-baseline gap-2">
+                  <span
+                    class="shrink-0 font-mono text-[10px] font-bold text-indigo-600"
+                    >{{ item.requirementKey }}</span
+                  >
+                  <span
+                    class="min-w-0 truncate text-xs font-semibold text-slate-700"
+                    >{{ item.requirementTitle }}</span
+                  >
+                </span>
+                <span
+                  class="mt-0.5 line-clamp-2 text-[11px] leading-4 text-slate-500"
                 >
-                  <RouterLink
-                    :to="`/requirements/${item.requirementId}`"
-                    class="focus-ring min-w-0 flex-1 rounded-lg text-left"
+                  {{ item.name }} · {{ item.reason }}
+                </span>
+              </RouterLink>
+              <button
+                type="button"
+                class="focus-ring inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2 text-[10px] font-semibold text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 dark:border-slate-700 dark:hover:bg-indigo-950/50"
+                @click="attentionTarget = item"
+              >
+                <ArrowPathIcon class="h-3.5 w-3.5" />
+                记录进展
+              </button>
+            </div>
+            <div
+              v-for="item in scopedDelayedRows.slice(0, 2)"
+              :key="`delayed-${item.id}`"
+              class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3"
+            >
+              <RouterLink
+                :to="`/requirements/${item.id}`"
+                class="focus-ring min-w-0 rounded-lg text-left"
+              >
+                <span class="flex min-w-0 items-baseline gap-2">
+                  <span
+                    class="shrink-0 font-mono text-[10px] font-bold text-indigo-600"
+                    >{{ item.key }}</span
                   >
-                    <span
-                      class="flex items-center gap-1.5 text-xs font-semibold text-slate-700"
-                    >
-                      <span class="font-mono text-[10px] text-indigo-600">{{
-                        item.requirementKey
-                      }}</span>
-                      <span class="truncate">{{ item.requirementTitle }}</span>
-                    </span>
-                    <span
-                      class="mt-0.5 block truncate text-[11px] text-slate-500"
-                    >
-                      {{ item.name }} · {{ item.reason }}
-                    </span>
-                  </RouterLink>
-                  <button
-                    type="button"
-                    class="focus-ring shrink-0 rounded-lg bg-white/80 px-2 py-1.5 text-[10px] font-semibold text-slate-600 shadow-sm hover:text-indigo-600"
-                    @click="attentionTarget = item"
+                  <span
+                    class="min-w-0 truncate text-xs font-semibold text-slate-700"
+                    >{{ item.title }}</span
                   >
-                    记录进展
-                  </button>
-                </div>
-                <div
-                  v-for="item in scopedDelayedRows.slice(0, 2)"
-                  :key="`delayed-${item.id}`"
-                  class="flex items-center gap-2"
-                >
-                  <RouterLink
-                    :to="`/requirements/${item.id}`"
-                    class="focus-ring min-w-0 flex-1 rounded-lg text-left"
-                  >
-                    <span
-                      class="flex items-center gap-1.5 text-xs font-semibold text-slate-700"
-                    >
-                      <span class="font-mono text-[10px] text-indigo-600">{{
-                        item.key
-                      }}</span>
-                      <span class="truncate">{{ item.title }}</span>
-                    </span>
-                    <span
-                      class="mt-0.5 block truncate text-[11px] text-rose-600"
-                    >
-                      当前计划已到 {{ formatDate(item.plannedEndAt) }}
-                    </span>
-                  </RouterLink>
-                  <button
-                    type="button"
-                    class="focus-ring shrink-0 rounded-lg bg-white/80 px-2 py-1.5 text-[10px] font-semibold text-slate-600 shadow-sm hover:text-violet-600"
-                    @click="scheduleTarget = item"
-                  >
-                    调整计划
-                  </button>
-                </div>
-              </div>
+                </span>
+                <span class="mt-0.5 block text-[11px] leading-4 text-rose-600">
+                  当前计划已到 {{ formatDate(item.plannedEndAt) }}
+                </span>
+              </RouterLink>
+              <button
+                type="button"
+                class="focus-ring inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2 text-[10px] font-semibold text-slate-500 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-600 dark:border-slate-700 dark:hover:bg-violet-950/50"
+                @click="scheduleTarget = item"
+              >
+                <CalendarDaysIcon class="h-3.5 w-3.5" />
+                调整计划
+              </button>
             </div>
           </div>
         </div>
-        <div
-          v-if="scopedReviewItems.length"
-          class="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4"
-        >
-          <p class="text-xs font-semibold text-indigo-800">完整性 Review</p>
-          <div class="mt-2 space-y-1.5">
+        <div v-if="scopedReviewItems.length" class="surface overflow-hidden">
+          <div
+            class="flex items-center gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800"
+          >
+            <span
+              class="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-indigo-50 text-indigo-500 dark:bg-indigo-950/60"
+            >
+              <CheckIcon class="h-4 w-4" />
+            </span>
+            <p class="min-w-0 flex-1 text-xs font-semibold text-slate-800">
+              完整性 Review
+            </p>
+            <span
+              class="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-indigo-600 dark:bg-indigo-950/60"
+              >{{ scopedReviewItems.length }}</span
+            >
+          </div>
+          <div class="divide-y divide-slate-100 dark:divide-slate-800">
             <RouterLink
               v-for="item in scopedReviewItems.slice(0, 5)"
               :key="`${item.requirementId}-${item.targetId}-${item.code}`"
               :to="`/requirements/${item.requirementId}`"
-              class="focus-ring block rounded-lg px-1 py-0.5 text-xs text-indigo-700/80 hover:text-indigo-800"
+              class="focus-ring block px-4 py-3 transition hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20"
             >
-              <span class="font-mono text-[10px] font-bold">{{
-                item.requirementKey
-              }}</span>
-              {{ item.requirementTitle }}
+              <span class="flex min-w-0 items-baseline gap-2">
+                <span
+                  class="shrink-0 font-mono text-[10px] font-bold text-indigo-600"
+                  >{{ item.requirementKey }}</span
+                >
+                <span
+                  class="min-w-0 truncate text-xs font-semibold text-slate-700"
+                  >{{ item.requirementTitle }}</span
+                >
+              </span>
               <span
-                class="mt-0.5 block truncate text-[10px] text-indigo-500/70"
+                class="mt-0.5 block line-clamp-2 text-[11px] leading-4 text-slate-500"
                 >{{ item.message }}</span
               >
             </RouterLink>
@@ -665,14 +698,29 @@ watch(projectId, () => {
         </div>
         <div
           v-if="scopedExternalDependencies.length"
-          class="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4"
+          class="surface overflow-hidden"
         >
-          <p class="text-xs font-semibold text-indigo-800">跨项目协作</p>
-          <p class="mt-1.5 truncate text-xs text-indigo-600/80">
-            {{ scopedExternalDependencies[0]?.successor?.requirementKey }}
+          <div
+            class="flex items-center gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800"
+          >
+            <span
+              class="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-violet-50 text-violet-500 dark:bg-violet-950/60"
+            >
+              <RectangleStackIcon class="h-4 w-4" />
+            </span>
+            <p class="min-w-0 flex-1 text-xs font-semibold text-slate-800">
+              跨项目协作
+            </p>
+          </div>
+          <p class="px-4 py-3 text-xs leading-5 text-slate-500">
+            <span class="font-mono text-[10px] font-bold text-indigo-600">{{
+              scopedExternalDependencies[0]?.successor?.requirementKey
+            }}</span>
             {{ scopedExternalDependencies[0]?.successor?.name }} 正在等待
-            {{ scopedExternalDependencies[0]?.predecessor?.projectName }} /
-            {{ scopedExternalDependencies[0]?.predecessor?.name }}
+            <span class="font-medium text-slate-700">
+              {{ scopedExternalDependencies[0]?.predecessor?.projectName }} /
+              {{ scopedExternalDependencies[0]?.predecessor?.name }}
+            </span>
           </p>
         </div>
       </section>

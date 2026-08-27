@@ -302,6 +302,54 @@ async function refreshPortfolio() {
   await loadPortfolio();
 }
 
+function attentionActionLabel(item: AttentionRow) {
+  if (
+    ['blocked', 'waiting'].includes(item.kind) &&
+    item.workItemId &&
+    item.currentStatus
+  )
+    return '记录进展';
+  if (item.kind === 'overdue') return '调整计划';
+  if (item.kind === 'review' && item.planningItemId && !item.plannedEndAt)
+    return '补排计划';
+  if (
+    item.kind === 'review' &&
+    item.workItemId &&
+    item.currentStatus &&
+    !item.ownerIds.length
+  )
+    return '补负责人';
+  return '查看详情';
+}
+
+function handleAttentionAction(item: AttentionRow) {
+  if (
+    ['blocked', 'waiting'].includes(item.kind) &&
+    item.workItemId &&
+    item.currentStatus
+  ) {
+    progressTarget.value = item;
+    return;
+  }
+  if (
+    item.kind === 'overdue' ||
+    (item.kind === 'review' && item.planningItemId && !item.plannedEndAt)
+  ) {
+    planningTarget.value = item;
+    return;
+  }
+  if (
+    item.kind === 'review' &&
+    item.workItemId &&
+    item.currentStatus &&
+    !item.ownerIds.length
+  ) {
+    progressTarget.value = item;
+    return;
+  }
+  void router.push(`/requirements/${item.requirementId}`);
+}
+
 async function loadRhythms() {
   rhythms.value = await api.projectRhythms();
   if (!rhythms.value.some((item) => item.id === form.rhythmId)) {
@@ -420,10 +468,12 @@ async function createProject() {
         >
       </div>
 
-      <div class="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+      <div
+        class="grid items-start gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(20rem,.75fr)]"
+      >
         <div class="surface overflow-hidden">
           <div
-            class="flex items-center justify-between border-b border-slate-100 px-5 py-4"
+            class="flex items-center justify-between border-b border-slate-100 px-4 py-3"
           >
             <div>
               <h3 class="text-sm font-semibold text-slate-900">Review 队列</h3>
@@ -433,7 +483,7 @@ async function createProject() {
             </div>
           </div>
           <div
-            class="flex gap-1 overflow-x-auto border-b border-slate-100 px-4 py-2"
+            class="flex gap-1 overflow-x-auto border-b border-slate-100 px-3 py-2"
             role="tablist"
             aria-label="管理 Review 视角"
           >
@@ -443,10 +493,10 @@ async function createProject() {
               type="button"
               role="tab"
               :aria-selected="portfolioLens === lens.id"
-              class="focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition"
+              class="focus-ring inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold transition"
               :class="
                 portfolioLens === lens.id
-                  ? 'bg-slate-900 text-white dark:bg-indigo-500'
+                  ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100 dark:bg-indigo-950/60 dark:text-indigo-200 dark:ring-indigo-900'
                   : 'text-slate-500 hover:bg-slate-50'
               "
               @click="portfolioLens = lens.id"
@@ -456,7 +506,7 @@ async function createProject() {
                 class="rounded-full px-1.5 py-0.5 text-[9px] tabular-nums"
                 :class="
                   portfolioLens === lens.id
-                    ? 'bg-white/15 text-white'
+                    ? 'bg-white text-indigo-600 dark:bg-indigo-900/70 dark:text-indigo-200'
                     : 'bg-slate-100 text-slate-500'
                 "
                 >{{ lens.count }}</span
@@ -477,15 +527,15 @@ async function createProject() {
             <div
               v-for="item in visibleAttentionRows"
               :key="`${item.kind}-${item.requirementId}-${item.itemName}-${item.reason}`"
-              class="group flex flex-col gap-3 px-5 py-4 transition hover:bg-slate-50/70 sm:flex-row sm:items-center"
+              class="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 transition hover:bg-slate-50/70"
             >
               <button
                 type="button"
-                class="focus-ring flex min-w-0 flex-1 items-start gap-3 rounded-xl text-left"
+                class="focus-ring grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-2.5 rounded-lg text-left"
                 @click="router.push(`/requirements/${item.requirementId}`)"
               >
                 <span
-                  class="mt-0.5 shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ring-1"
+                  class="mt-px shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-bold ring-1"
                   :class="
                     item.kind === 'blocked'
                       ? 'bg-rose-50 text-rose-700 ring-rose-100'
@@ -498,17 +548,19 @@ async function createProject() {
                   >{{ attentionLabels[item.kind] }}</span
                 >
                 <span class="min-w-0 flex-1">
-                  <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span class="flex min-w-0 items-baseline gap-2">
                     <span
-                      class="font-mono text-[10px] font-bold text-indigo-600"
+                      class="shrink-0 font-mono text-[10px] font-bold text-indigo-600"
                       >{{ item.requirementKey }}</span
                     >
                     <span
-                      class="truncate text-sm font-semibold text-slate-800"
+                      class="min-w-0 truncate text-xs font-semibold text-slate-800"
                       >{{ item.requirementTitle }}</span
                     >
                   </span>
-                  <span class="mt-1 block truncate text-xs text-slate-500">
+                  <span
+                    class="mt-0.5 block truncate text-[11px] leading-4 text-slate-500"
+                  >
                     {{ item.projectName }}
                     <template v-if="item.itemName">
                       · {{ item.itemName }}</template
@@ -520,62 +572,17 @@ async function createProject() {
                   </span>
                 </span>
               </button>
-              <div
-                class="flex shrink-0 items-center justify-between gap-3 sm:justify-end"
-              >
-                <AvatarStack :owner-ids="item.ownerIds" :max="3" compact />
+              <div class="flex shrink-0 items-center justify-end gap-2">
+                <span class="hidden sm:block">
+                  <AvatarStack :owner-ids="item.ownerIds" :max="2" compact />
+                </span>
                 <button
-                  v-if="
-                    ['blocked', 'waiting'].includes(item.kind) &&
-                    item.workItemId &&
-                    item.currentStatus
-                  "
                   type="button"
-                  class="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
-                  @click="progressTarget = item"
+                  class="focus-ring inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[10px] font-semibold text-slate-500 transition hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/50"
+                  @click="handleAttentionAction(item)"
                 >
-                  记录进展
-                </button>
-                <button
-                  v-else-if="item.kind === 'overdue'"
-                  type="button"
-                  class="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-violet-200 hover:text-violet-600"
-                  @click="planningTarget = item"
-                >
-                  调整计划
-                </button>
-                <button
-                  v-else-if="
-                    item.kind === 'review' &&
-                    item.planningItemId &&
-                    !item.plannedEndAt
-                  "
-                  type="button"
-                  class="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
-                  @click="planningTarget = item"
-                >
-                  补排计划
-                </button>
-                <button
-                  v-else-if="
-                    item.kind === 'review' &&
-                    item.workItemId &&
-                    item.currentStatus &&
-                    !item.ownerIds.length
-                  "
-                  type="button"
-                  class="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
-                  @click="progressTarget = item"
-                >
-                  补负责人
-                </button>
-                <button
-                  v-else
-                  type="button"
-                  class="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
-                  @click="router.push(`/requirements/${item.requirementId}`)"
-                >
-                  进入补全
+                  {{ attentionActionLabel(item) }}
+                  <ArrowUpRightIcon class="h-3 w-3" />
                 </button>
               </div>
             </div>
@@ -591,7 +598,7 @@ async function createProject() {
         </div>
 
         <div class="surface overflow-hidden">
-          <div class="border-b border-slate-100 px-5 py-4">
+          <div class="border-b border-slate-100 px-4 py-3">
             <h3 class="text-sm font-semibold text-slate-900">最近变化</h3>
             <p class="mt-0.5 text-[11px] text-slate-400">
               按实际发生时间汇总全部项目
@@ -606,13 +613,13 @@ async function createProject() {
           </div>
           <div
             v-else-if="recentChanges.length"
-            class="max-h-[32rem] overflow-y-auto px-5 py-2"
+            class="max-h-[28rem] overflow-y-auto px-4 py-1.5"
           >
             <button
               v-for="event in recentChanges"
               :key="event.id"
               type="button"
-              class="focus-ring block w-full border-l border-slate-200 px-4 py-2.5 text-left transition hover:bg-slate-50"
+              class="focus-ring block w-full border-l border-slate-200 px-3 py-2 text-left transition hover:bg-slate-50"
               :class="event.requirementId ? 'cursor-pointer' : 'cursor-default'"
               @click="
                 event.requirementId &&
