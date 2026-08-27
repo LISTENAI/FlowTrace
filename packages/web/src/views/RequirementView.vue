@@ -847,7 +847,7 @@ watch(id, load);
             </form>
             <div v-else class="px-4 py-3 sm:px-5">
               <div
-                class="relative space-y-1 before:absolute before:bottom-6 before:left-[14px] before:top-6 before:w-px before:bg-slate-200"
+                class="relative space-y-1 before:absolute before:bottom-6 before:left-[20px] before:top-6 before:w-px before:bg-slate-200"
               >
                 <div
                   v-for="(stage, index) in requirement.stages"
