@@ -756,7 +756,7 @@ watch(id, load);
               class="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/50 px-3 py-2.5"
             >
               <p class="text-[10px] font-semibold text-indigo-700">
-                本次 Review 还需确认
+                本次检查还需确认
               </p>
               <p class="mt-1 text-[11px] leading-5 text-indigo-600/80">
                 {{ reviewNotes.join(' · ') }}

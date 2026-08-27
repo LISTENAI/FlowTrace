@@ -249,7 +249,7 @@ const portfolioLensOptions = computed(() => [
   },
   {
     id: 'review' as const,
-    label: '完整性 Review',
+    label: '完整性检查',
     count: attentionRows.value.filter((item) =>
       ['review', 'due_soon'].includes(item.kind),
     ).length,
@@ -476,7 +476,7 @@ async function createProject() {
             class="flex items-center justify-between border-b border-slate-100 px-4 py-3"
           >
             <div>
-              <h3 class="text-sm font-semibold text-slate-900">Review 队列</h3>
+              <h3 class="text-sm font-semibold text-slate-900">管理检查</h3>
               <p class="mt-0.5 text-[11px] text-slate-400">
                 从事实风险、跟进事项和计划完整性三个角度检查
               </p>
@@ -485,7 +485,7 @@ async function createProject() {
           <div
             class="flex gap-1 overflow-x-auto border-b border-slate-100 px-3 py-2"
             role="tablist"
-            aria-label="管理 Review 视角"
+            aria-label="管理检查视角"
           >
             <button
               v-for="lens in portfolioLensOptions"
@@ -592,7 +592,7 @@ async function createProject() {
               当前视角没有待处理项
             </p>
             <p class="mt-1 text-xs text-slate-400">
-              切换 Review 视角可检查其他管理维度。
+              切换检查视角可查看其他管理维度。
             </p>
           </div>
         </div>

@@ -695,7 +695,7 @@ watch(timelineStageOptions, (options) => {
               <CheckIcon class="h-4 w-4" />
             </span>
             <p class="min-w-0 flex-1 text-xs font-semibold text-slate-800">
-              完整性 Review
+              完整性检查
             </p>
             <span
               class="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-indigo-600 dark:bg-indigo-950/60"
@@ -822,7 +822,7 @@ watch(timelineStageOptions, (options) => {
                 class="absolute left-0 top-11 z-30 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-900/10"
               >
                 <label class="block text-[11px] font-medium text-slate-500">
-                  Review 视角
+                  检查视角
                   <AppSelect
                     v-model="filters.health"
                     class="mt-1.5"
