@@ -13,7 +13,7 @@ import {
   ExclamationTriangleIcon,
   LinkIcon,
 } from '@heroicons/vue/24/outline';
-import { computed, ref } from 'vue';
+import { computed, onActivated, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@/api';
 import AvatarStack from '@/components/AvatarStack.vue';
@@ -84,6 +84,17 @@ async function refreshed() {
   await loadDetail(true);
   emit('refresh');
 }
+
+watch(
+  () => props.summary.updatedAt,
+  () => {
+    if (open.value && detail.value) void loadDetail(true);
+  },
+);
+
+onActivated(() => {
+  if (open.value && detail.value) void loadDetail(true);
+});
 
 function openDetail() {
   void router.push({
