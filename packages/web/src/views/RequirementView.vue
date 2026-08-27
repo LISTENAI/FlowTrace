@@ -775,19 +775,13 @@ watch(id, load);
                 </p>
               </div>
               <button
+                v-if="!stageMaintenanceOpen"
                 type="button"
                 class="focus-ring section-action"
-                @click="
-                  stageMaintenanceOpen
-                    ? (stageMaintenanceOpen = false)
-                    : openStageMaintenance()
-                "
+                @click="openStageMaintenance"
               >
-                <PencilSquareIcon
-                  v-if="!stageMaintenanceOpen"
-                  class="h-3.5 w-3.5"
-                />
-                {{ stageMaintenanceOpen ? '退出编辑' : '维护阶段' }}
+                <PencilSquareIcon class="h-3.5 w-3.5" />
+                维护阶段
               </button>
             </div>
             <form
