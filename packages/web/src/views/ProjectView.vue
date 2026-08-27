@@ -54,6 +54,7 @@ const timelineIncludeBugs = ref(false);
 const timelineRequirements = ref<Requirement[]>([]);
 const timelineRestoreToken = ref(0);
 const createOpen = ref(false);
+const createFlowExpanded = ref(false);
 const saving = ref(false);
 const filtersOpen = ref(false);
 const filters = reactive({ versionId: 'auto', health: 'all', ownerId: 'all' });
@@ -339,6 +340,7 @@ function openCreate() {
     }),
   );
   if (!form.stages.length) form.stages = [newStagePlanDraft()];
+  createFlowExpanded.value = false;
   createOpen.value = true;
 }
 
@@ -1085,7 +1087,6 @@ watch(timelineStageOptions, (options) => {
       <AppModal
         :open="createOpen"
         title="创建需求"
-        description="可使用项目默认流程，也可直接定义这次交付的真实阶段。"
         width="xl"
         @close="createOpen = false"
       >
@@ -1110,73 +1111,71 @@ watch(timelineStageOptions, (options) => {
               class="focus-ring w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm leading-6 text-slate-700 outline-none focus:border-indigo-300 focus:bg-white"
             />
           </label>
-          <div class="grid gap-4 sm:grid-cols-3">
-            <label>
-              <span class="mb-1.5 block text-xs font-medium text-slate-600"
-                >目标版本</span
+          <section>
+            <div class="mb-2 flex items-center justify-between gap-3">
+              <h3 class="text-xs font-medium text-slate-600">版本与计划</h3>
+              <button
+                type="button"
+                class="focus-ring rounded-lg px-2 py-1 text-[10px] font-semibold text-indigo-600 transition hover:bg-indigo-50"
+                @click="setCreatePlanning(!form.withPlan)"
               >
-              <AppSelect
-                v-model="form.versionId"
-                :options="createVersionOptions"
-              />
-            </label>
-            <div class="sm:col-span-2">
-              <div class="mb-1.5 flex items-center justify-between gap-3">
-                <span class="text-xs font-medium text-slate-600">需求计划</span>
-                <button
-                  type="button"
-                  class="focus-ring rounded-lg px-2 py-1 text-[10px] font-semibold text-indigo-600 transition hover:bg-indigo-50"
-                  @click="setCreatePlanning(!form.withPlan)"
+                {{ form.withPlan ? '暂不排期' : '添加计划' }}
+              </button>
+            </div>
+            <div class="grid items-end gap-3 sm:grid-cols-3">
+              <label>
+                <span
+                  class="mb-1.5 block text-[10px] font-medium text-slate-500"
+                  >目标版本</span
                 >
-                  {{ form.withPlan ? '暂不排期' : '添加计划' }}
-                </button>
-              </div>
-              <div v-if="form.withPlan" class="grid gap-3 sm:grid-cols-2">
+                <AppSelect
+                  v-model="form.versionId"
+                  :options="createVersionOptions"
+                />
+              </label>
+              <template v-if="form.withPlan">
                 <label>
-                  <span class="sr-only">计划开始</span>
+                  <span
+                    class="mb-1.5 block text-[10px] font-medium text-slate-500"
+                    >计划开始</span
+                  >
                   <AppDateTimeField
                     v-model="form.plannedStartAt"
-                    placeholder="计划开始"
+                    placeholder="选择开始日期"
                     required
                   />
                 </label>
                 <label>
-                  <span class="sr-only">计划完成</span>
+                  <span
+                    class="mb-1.5 block text-[10px] font-medium text-slate-500"
+                    >计划完成</span
+                  >
                   <AppDateTimeField
                     v-model="form.plannedEndAt"
-                    placeholder="计划完成"
+                    placeholder="选择完成日期"
                     required
                     :min="form.plannedStartAt"
                   />
                 </label>
-              </div>
+              </template>
               <div
                 v-else
-                class="flex min-h-10 items-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 text-[11px] text-slate-500"
+                class="flex min-h-10 items-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 text-xs text-slate-500 sm:col-span-2"
               >
-                暂不设置计划，只建立流程并记录实际发生的状态事件。
+                尚未排期
               </div>
             </div>
-          </div>
-          <fieldset>
-            <legend class="mb-2 text-xs font-medium text-slate-600">
-              此次工作流程
-            </legend>
-            <StagePlanEditor
-              v-model="form.stages"
-              :people="workspace.people"
-              :default-start-at="form.plannedStartAt"
-              :default-end-at="form.plannedEndAt"
-              :show-schedule="form.withPlan"
-              allow-remove-existing
-            />
-            <div class="mt-2 flex items-center justify-between gap-3">
-              <p class="text-[10px] leading-4 text-slate-400">
-                已从项目默认流程生成可编辑副本；修改只影响这个需求。
-              </p>
+          </section>
+          <fieldset aria-labelledby="create-flow-label">
+            <div class="mb-2 flex items-center justify-between gap-3">
+              <span
+                id="create-flow-label"
+                class="text-xs font-medium text-slate-600"
+                >工作流程</span
+              >
               <button
                 type="button"
-                class="shrink-0 text-[10px] font-semibold text-indigo-600 hover:text-indigo-700"
+                class="focus-ring shrink-0 rounded-lg px-2 py-1 text-[10px] font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-indigo-600"
                 @click="
                   form.stages = snapshot.project.templateStages.map((stage) =>
                     newStagePlanDraft({
@@ -1190,22 +1189,25 @@ watch(timelineStageOptions, (options) => {
                 恢复项目默认
               </button>
             </div>
+            <StagePlanEditor
+              v-model="form.stages"
+              :people="workspace.people"
+              :default-start-at="form.plannedStartAt"
+              :default-end-at="form.plannedEndAt"
+              :show-schedule="form.withPlan"
+              :compact="!createFlowExpanded"
+              collapsible
+              allow-remove-existing
+              @request-expand="createFlowExpanded = true"
+              @request-collapse="createFlowExpanded = false"
+            />
           </fieldset>
           <fieldset>
             <legend class="mb-2 text-xs font-medium text-slate-600">
-              需求整体协调人（可选）
+              需求协调人（可选）
             </legend>
             <OwnerPicker v-model="form.ownerIds" :people="workspace.people" />
-            <p class="mt-2 text-[10px] leading-4 text-slate-400">
-              这里只设置需求的整体协调人；各阶段负责人已在上方独立设置。
-            </p>
           </fieldset>
-          <div
-            class="flex items-center justify-between rounded-2xl bg-indigo-50/60 px-4 py-3 text-xs text-indigo-700"
-          >
-            <span>将按上方内容创建真实流程</span>
-            <span class="font-medium">{{ form.stages.length }} 个阶段</span>
-          </div>
           <div class="flex justify-end gap-2 border-t border-slate-100 pt-4">
             <button
               type="button"
