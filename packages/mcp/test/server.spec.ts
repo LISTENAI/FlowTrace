@@ -52,7 +52,7 @@ describe('FlowTrace MCP Server', () => {
     ]);
 
     const tools = await client.listTools();
-    expect(tools.tools).toHaveLength(21);
+    expect(tools.tools).toHaveLength(22);
     expect(tools.tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
         'search',
@@ -67,6 +67,7 @@ describe('FlowTrace MCP Server', () => {
         'assign_owners',
         'move_requirement_to_version',
         'add_stage',
+        'update_stage',
         'update_stage_status',
         'reschedule_stage',
         'report_bug',
@@ -176,6 +177,29 @@ describe('FlowTrace MCP Server', () => {
     expect(request).toHaveBeenCalledWith('/requirements/requirement-1/stages', {
       method: 'POST',
       body: expect.objectContaining({ order: 2, source: 'agent' }),
+    });
+
+    await client.callTool({
+      name: 'update_stage',
+      arguments: {
+        stage_id: 'stage-1',
+        name: '板上联调',
+        note: '覆盖主从机切换场景。',
+        order: 3,
+        reason: '按评审结论细化真实工作',
+        agent_name: '验收调用方',
+      },
+    });
+    expect(request).toHaveBeenCalledWith('/stages/stage-1', {
+      method: 'PATCH',
+      body: expect.objectContaining({
+        name: '板上联调',
+        note: '覆盖主从机切换场景。',
+        order: 3,
+        reason: '按评审结论细化真实工作',
+        source: 'agent',
+        agentName: '验收调用方',
+      }),
     });
 
     await client.callTool({

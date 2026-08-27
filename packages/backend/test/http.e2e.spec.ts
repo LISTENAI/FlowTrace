@@ -137,10 +137,11 @@ describe.sequential('HTTP API', () => {
       .set('accept', 'application/json, text/event-stream')
       .send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
       .expect(200);
-    expect(tools.body.result.tools).toHaveLength(21);
+    expect(tools.body.result.tools).toHaveLength(22);
     expect(tools.body.result.tools).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'search' }),
+        expect.objectContaining({ name: 'update_stage' }),
         expect.objectContaining({ name: 'update_stage_status' }),
       ]),
     );
@@ -336,6 +337,21 @@ describe.sequential('HTTP API', () => {
       agent_name: '端到端验收',
     });
     const validationStageId = addedStage.entity.id as string;
+
+    const updatedStage = await callTool('update_stage', {
+      stage_id: validationStageId,
+      name: '板上联调',
+      note: '覆盖真实板卡上的联调与验证。',
+      order: 1,
+      agent_name: '端到端验收',
+      reason: '按评审结论细化阶段',
+    });
+    expect(updatedStage.entity).toMatchObject({
+      id: validationStageId,
+      name: '板上联调',
+      note: '覆盖真实板卡上的联调与验证。',
+      order: 1,
+    });
 
     const reportedBug = await callTool('report_bug', {
       requirement_id: mcpRequirementId,

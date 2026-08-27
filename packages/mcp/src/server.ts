@@ -520,6 +520,35 @@ export function createFlowTraceMcpServer(
   );
 
   server.registerTool(
+    'update_stage',
+    {
+      description:
+        '修改既有阶段的名称、说明或顺序。只传需要修改的字段；order 从 0 开始。负责人使用 assign_owners，状态使用 update_stage_status，排期使用 reschedule_stage。',
+      inputSchema: {
+        stage_id: z.string(),
+        name: z.string().min(1).optional(),
+        note: z.string().optional(),
+        order: z.number().int().min(0).optional(),
+        ...sourceSchema,
+      },
+      annotations: writeAnnotations,
+    },
+    async (input) =>
+      writeResult(
+        api,
+        await api.request(`/stages/${encodeURIComponent(input.stage_id)}`, {
+          method: 'PATCH',
+          body: {
+            name: input.name,
+            note: input.note,
+            order: input.order,
+            ...writeBody(input),
+          },
+        }),
+      ),
+  );
+
+  server.registerTool(
     'update_stage_status',
     {
       description:
