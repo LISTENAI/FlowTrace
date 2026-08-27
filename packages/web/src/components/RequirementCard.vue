@@ -20,6 +20,7 @@ import AvatarStack from '@/components/AvatarStack.vue';
 import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
 import {
   formatDate,
+  formatDateRange,
   healthLabels,
   lifecycleLabels,
   statusDot,
@@ -178,8 +179,9 @@ function openDetail() {
           <div class="text-right">
             <p class="text-[10px] text-slate-400">当前计划</p>
             <p class="mt-0.5 text-xs font-medium text-slate-700">
-              {{ formatDate(summary.plannedStartAt) }} →
-              {{ formatDate(summary.plannedEndAt, '待定') }}
+              {{
+                formatDateRange(summary.plannedStartAt, summary.plannedEndAt)
+              }}
             </p>
           </div>
           <div>
@@ -303,9 +305,8 @@ function openDetail() {
         >
           <span class="inline-flex items-center gap-1"
             ><ClockIcon class="h-3.5 w-3.5" />{{
-              formatDate(summary.plannedStartAt)
-            }}
-            → {{ formatDate(summary.plannedEndAt, '待定') }}</span
+              formatDateRange(summary.plannedStartAt, summary.plannedEndAt)
+            }}</span
           >
           <span v-if="summary.bugCount" class="inline-flex items-center gap-1"
             ><BugAntIcon class="h-3.5 w-3.5" />Bug

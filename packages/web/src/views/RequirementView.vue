@@ -41,6 +41,7 @@ import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
 import StagePlanEditor from '@/components/StagePlanEditor.vue';
 import {
   formatDate,
+  formatDateRange,
   formatDateTime,
   healthLabels,
   lifecycleLabels,
@@ -894,8 +895,12 @@ watch(id, load);
                     </div>
                     <div class="hidden min-w-36 text-right sm:block">
                       <p class="text-[10px] text-slate-400">
-                        {{ formatDate(stage.plannedStartAt) }} →
-                        {{ formatDate(stage.plannedEndAt, '待定') }}
+                        {{
+                          formatDateRange(
+                            stage.plannedStartAt,
+                            stage.plannedEndAt,
+                          )
+                        }}
                       </p>
                       <p
                         v-if="stage.actualStartAt"
@@ -1197,8 +1202,12 @@ watch(id, load);
                 <div>
                   <p class="text-[10px] text-slate-400">初始计划</p>
                   <p class="mt-0.5 text-xs font-medium text-slate-700">
-                    {{ formatDate(requirement.baselineStartAt) }} →
-                    {{ formatDate(requirement.baselineEndAt, '待定') }}
+                    {{
+                      formatDateRange(
+                        requirement.baselineStartAt,
+                        requirement.baselineEndAt,
+                      )
+                    }}
                   </p>
                 </div>
               </div>
@@ -1207,8 +1216,12 @@ watch(id, load);
                 <div>
                   <p class="text-[10px] text-slate-400">当前计划</p>
                   <p class="mt-0.5 text-xs font-medium text-slate-700">
-                    {{ formatDate(requirement.plannedStartAt) }} →
-                    {{ formatDate(requirement.plannedEndAt, '待定') }}
+                    {{
+                      formatDateRange(
+                        requirement.plannedStartAt,
+                        requirement.plannedEndAt,
+                      )
+                    }}
                   </p>
                 </div>
               </div>
@@ -1217,8 +1230,13 @@ watch(id, load);
                 <div>
                   <p class="text-[10px] text-slate-400">实际跨度</p>
                   <p class="mt-0.5 text-xs font-medium text-slate-700">
-                    {{ formatDate(requirement.actualStartAt, '尚未开始') }} →
-                    {{ formatDate(requirement.actualEndAt, '至今') }}
+                    {{
+                      formatDateRange(
+                        requirement.actualStartAt,
+                        requirement.actualEndAt,
+                        { empty: '尚未开始', openEnd: '至今' },
+                      )
+                    }}
                   </p>
                 </div>
               </div>

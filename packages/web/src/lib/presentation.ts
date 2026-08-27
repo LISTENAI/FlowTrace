@@ -56,6 +56,16 @@ export const statusTone: Record<ExecutionStatus, string> = {
 export const formatDate = (value?: string, fallback = '未排期') =>
   value ? dayjs(value).format('M月D日') : fallback;
 
+export const formatDateRange = (
+  start?: string,
+  end?: string,
+  options: { empty?: string; openEnd?: string } = {},
+) => {
+  if (!start && !end) return options.empty ?? '尚未排期';
+  if (!start) return `截至 ${formatDate(end)}`;
+  return `${formatDate(start)} → ${end ? formatDate(end) : (options.openEnd ?? '待定')}`;
+};
+
 export const formatDateTime = (value?: string) =>
   value ? dayjs(value).format('M月D日 HH:mm') : '—';
 
