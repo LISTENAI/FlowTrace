@@ -56,9 +56,13 @@ const activeStageLabel = computed(() => {
     : names.join('、');
 });
 
-const activeOwnerIds = computed(() => [
-  ...new Set(props.summary.activeStages.flatMap((stage) => stage.ownerIds)),
-]);
+const activeOwnerIds = computed(() => {
+  if (!props.summary.activeStages.length)
+    return props.summary.currentStageOwnerIds;
+  return [
+    ...new Set(props.summary.activeStages.flatMap((stage) => stage.ownerIds)),
+  ];
+});
 
 async function loadDetail(force = false) {
   if (detail.value && !force) return;
