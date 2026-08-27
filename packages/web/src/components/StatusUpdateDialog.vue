@@ -26,6 +26,7 @@ const props = defineProps<{
 const emit = defineEmits<{ close: []; saved: [] }>();
 const saving = ref(false);
 const ownersOpen = ref(false);
+const initialEffectiveAt = ref('');
 const form = reactive({
   status: props.currentStatus,
   effectiveAt: dayjs().format('YYYY-MM-DDTHH:mm'),
@@ -83,6 +84,38 @@ const hasChanges = computed(
   () =>
     recordsProgressEvent.value || backfillsStart.value || ownersChanged.value,
 );
+const validationMessage = computed(() => {
+  if (!form.effectiveAt) return '请选择实际发生时间。';
+  if (needsReason.value && !form.statusReason.trim())
+    return form.status === 'blocked'
+      ? '记录阻塞时需要说明当前卡在哪里。'
+      : '记录等待时需要说明正在等待什么。';
+  if (form.startedAt && dayjs(form.startedAt).isAfter(dayjs(form.effectiveAt)))
+    return '开始时间不能晚于这次进展的发生时间。';
+  if (
+    form.status === 'waiting' &&
+    form.expectedResumeAt &&
+    dayjs(form.expectedResumeAt).isBefore(dayjs(form.effectiveAt))
+  )
+    return '预计恢复时间不能早于等待开始时间。';
+  if (
+    !staysTerminal.value &&
+    form.status === props.currentStatus &&
+    form.effectiveAt !== initialEffectiveAt.value &&
+    !recordsProgressEvent.value &&
+    !backfillsStart.value
+  ) {
+    const recordedStart =
+      form.status === 'in_progress' && props.actualStartAt
+        ? `当前「进行中」开始记录于 ${formatDateTime(props.actualStartAt)}。`
+        : '';
+    return `${recordedStart}这里只追加新变化，不能用新的发生时间覆盖已有记录；如需改正，请在「最近历史」中修正原记录。`;
+  }
+  return '';
+});
+const canSave = computed(
+  () => hasChanges.value && !validationMessage.value && !saving.value,
+);
 const ownerSummary = computed(() => {
   const names = form.ownerIds
     .map((id) => props.people?.find((person) => person.id === id)?.name)
@@ -102,6 +135,7 @@ watch(
     if (!open) return;
     form.status = props.currentStatus;
     form.effectiveAt = dayjs().format('YYYY-MM-DDTHH:mm');
+    initialEffectiveAt.value = form.effectiveAt;
     form.startedAt = '';
     form.statusReason = props.statusReason ?? '';
     form.expectedResumeAt = localTime(props.expectedResumeAt);
@@ -113,6 +147,7 @@ watch(
 );
 
 async function save() {
+  if (!canSave.value) return;
   saving.value = true;
   try {
     const input = {
@@ -299,6 +334,13 @@ async function save() {
         这项工作已经结束。如需修改完成时间、状态或当时的说明，请在「最近历史」中修正对应记录。
       </p>
 
+      <p
+        v-if="validationMessage"
+        class="rounded-xl border border-amber-100 bg-amber-50/70 px-3 py-2.5 text-[11px] leading-5 text-amber-700"
+      >
+        {{ validationMessage }}
+      </p>
+
       <div v-if="people?.length" class="border-t border-slate-100 pt-4">
         <button
           type="button"
@@ -340,7 +382,7 @@ async function save() {
             取消
           </button>
           <button
-            :disabled="saving || !hasChanges"
+            :disabled="!canSave"
             class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
           >
             {{
