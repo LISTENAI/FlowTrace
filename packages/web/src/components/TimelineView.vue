@@ -1110,7 +1110,6 @@ watch(
                     class="timeline-title-trigger focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
                     :aria-label="`${requirement.key} ${requirement.title}，点击展开过程`"
                     :data-tooltip="`${requirement.key} · ${requirement.title}`"
-                    :title="`${requirement.key} · ${requirement.title}`"
                     @click="toggle(expandedRequirements, requirement.id)"
                   >
                     <ChevronDownIcon
