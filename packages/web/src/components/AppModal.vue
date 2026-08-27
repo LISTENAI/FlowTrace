@@ -13,7 +13,7 @@ withDefaults(
     open: boolean;
     title: string;
     description?: string;
-    width?: 'sm' | 'md' | 'lg';
+    width?: 'sm' | 'md' | 'lg' | 'xl';
   }>(),
   { width: 'md' },
 );
@@ -53,6 +53,7 @@ defineEmits<{ close: [] }>();
                 'max-w-md': width === 'sm',
                 'max-w-xl': width === 'md',
                 'max-w-3xl': width === 'lg',
+                'max-w-6xl': width === 'xl',
               }"
             >
               <div

@@ -18,7 +18,6 @@ import {
   PlusIcon,
   RectangleStackIcon,
   SquaresPlusIcon,
-  XMarkIcon,
 } from '@heroicons/vue/24/outline';
 import dayjs from 'dayjs';
 import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue';
@@ -31,8 +30,10 @@ import OwnerPicker from '@/components/OwnerPicker.vue';
 import PlanningDialog from '@/components/PlanningDialog.vue';
 import RequirementCard from '@/components/RequirementCard.vue';
 import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
+import StagePlanEditor from '@/components/StagePlanEditor.vue';
 import TimelineView from '@/components/TimelineView.vue';
 import { formatDate, versionLabels } from '@/lib/presentation';
+import { newStagePlanDraft, type StagePlanDraft } from '@/lib/stage-plan';
 import { toasts } from '@/state/toasts';
 import { loadWorkspace, workspace } from '@/state/workspace';
 
@@ -65,8 +66,7 @@ const form = reactive({
   ownerIds: [] as string[],
   plannedStartAt: dayjs().format('YYYY-MM-DD'),
   plannedEndAt: dayjs().add(14, 'day').format('YYYY-MM-DD'),
-  stageMode: 'template' as 'template' | 'custom',
-  stages: [{ name: '' }],
+  stages: [] as StagePlanDraft[],
 });
 let activationCount = 0;
 
@@ -327,18 +327,15 @@ function openCreate() {
   form.versionId =
     snapshot.value?.versions.find((item) => item.status === 'active')?.id ?? '';
   form.ownerIds = [];
-  form.stageMode = 'template';
-  form.stages = [{ name: '' }];
+  form.stages = (snapshot.value?.project.templateStages ?? []).map((stage) =>
+    newStagePlanDraft({
+      templateStageId: stage.id,
+      name: stage.name,
+      ownerIds: [...stage.ownerIds],
+    }),
+  );
+  if (!form.stages.length) form.stages = [newStagePlanDraft()];
   createOpen.value = true;
-}
-
-function addCreateStage() {
-  form.stages.push({ name: '' });
-}
-
-function removeCreateStage(index: number) {
-  form.stages.splice(index, 1);
-  if (!form.stages.length) form.stages.push({ name: '' });
 }
 
 async function createRequirement() {
@@ -352,18 +349,21 @@ async function createRequirement() {
       ownerIds: form.ownerIds,
       plannedStartAt: dayjs(form.plannedStartAt).startOf('day').toISOString(),
       plannedEndAt: dayjs(form.plannedEndAt).endOf('day').toISOString(),
-      stages:
-        form.stageMode === 'custom'
-          ? form.stages.map((stage) => ({ name: stage.name.trim() }))
+      stages: form.stages.map((stage) => ({
+        templateStageId: stage.templateStageId,
+        name: stage.name.trim(),
+        note: stage.note.trim() || undefined,
+        ownerIds: stage.ownerIds,
+        plannedStartAt: stage.plannedStartAt
+          ? dayjs(stage.plannedStartAt).startOf('day').toISOString()
           : undefined,
+        plannedEndAt: stage.plannedEndAt
+          ? dayjs(stage.plannedEndAt).endOf('day').toISOString()
+          : undefined,
+      })),
     });
     createOpen.value = false;
-    toasts.show(
-      '需求已创建',
-      form.stageMode === 'custom'
-        ? `${requirement.key} 已按本次真实流程创建`
-        : `${requirement.key} 已复制当前项目流程`,
-    );
+    toasts.show('需求已创建', `${requirement.key} 已按本次真实流程创建`);
     await load();
   } catch (caught) {
     toasts.show(
@@ -1060,7 +1060,7 @@ watch(timelineStageOptions, (options) => {
         :open="createOpen"
         title="创建需求"
         description="可使用项目默认流程，也可直接定义这次交付的真实阶段。"
-        width="lg"
+        width="xl"
         @close="createOpen = false"
       >
         <form class="space-y-5" @submit.prevent="createRequirement">
@@ -1115,77 +1115,31 @@ watch(timelineStageOptions, (options) => {
             <legend class="mb-2 text-xs font-medium text-slate-600">
               此次工作流程
             </legend>
-            <div class="grid gap-2 sm:grid-cols-2">
+            <StagePlanEditor
+              v-model="form.stages"
+              :people="workspace.people"
+              :default-start-at="form.plannedStartAt"
+              :default-end-at="form.plannedEndAt"
+              allow-remove-existing
+            />
+            <div class="mt-2 flex items-center justify-between gap-3">
+              <p class="text-[10px] leading-4 text-slate-400">
+                已从项目默认流程生成可编辑副本；修改只影响这个需求。
+              </p>
               <button
                 type="button"
-                class="rounded-xl border p-3 text-left transition"
-                :class="
-                  form.stageMode === 'template'
-                    ? 'border-indigo-300 bg-indigo-50/70 ring-1 ring-indigo-100'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
+                class="shrink-0 text-[10px] font-semibold text-indigo-600 hover:text-indigo-700"
+                @click="
+                  form.stages = snapshot.project.templateStages.map((stage) =>
+                    newStagePlanDraft({
+                      templateStageId: stage.id,
+                      name: stage.name,
+                      ownerIds: [...stage.ownerIds],
+                    }),
+                  )
                 "
-                @click="form.stageMode = 'template'"
               >
-                <span class="block text-xs font-semibold text-slate-700"
-                  >使用项目默认流程</span
-                >
-                <span class="mt-1 block text-[10px] leading-4 text-slate-400">
-                  {{
-                    snapshot.project.templateStages
-                      .map((item) => item.name)
-                      .join(' → ') || '当前项目没有默认阶段'
-                  }}
-                </span>
-              </button>
-              <button
-                type="button"
-                class="rounded-xl border p-3 text-left transition"
-                :class="
-                  form.stageMode === 'custom'
-                    ? 'border-indigo-300 bg-indigo-50/70 ring-1 ring-indigo-100'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
-                "
-                @click="form.stageMode = 'custom'"
-              >
-                <span class="block text-xs font-semibold text-slate-700"
-                  >定义本次真实流程</span
-                >
-                <span class="mt-1 block text-[10px] leading-4 text-slate-400"
-                  >直接创建真实阶段，不产生待取消的模板阶段</span
-                >
-              </button>
-            </div>
-            <div v-if="form.stageMode === 'custom'" class="mt-3 space-y-2">
-              <div
-                v-for="(stage, index) in form.stages"
-                :key="index"
-                class="flex items-center gap-2"
-              >
-                <span
-                  class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-[10px] font-bold text-slate-400"
-                  >{{ index + 1 }}</span
-                >
-                <input
-                  v-model="stage.name"
-                  required
-                  :placeholder="`阶段 ${index + 1}，例如：物料报价`"
-                  class="focus-ring min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-300 focus:bg-white"
-                />
-                <button
-                  type="button"
-                  class="focus-ring grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                  aria-label="移除此阶段"
-                  @click="removeCreateStage(index)"
-                >
-                  <XMarkIcon class="h-4 w-4" />
-                </button>
-              </div>
-              <button
-                type="button"
-                class="focus-ring inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-50"
-                @click="addCreateStage"
-              >
-                <PlusIcon class="h-3.5 w-3.5" />添加阶段
+                恢复项目默认
               </button>
             </div>
           </fieldset>
@@ -1195,31 +1149,14 @@ watch(timelineStageOptions, (options) => {
             </legend>
             <OwnerPicker v-model="form.ownerIds" :people="workspace.people" />
             <p class="mt-2 text-[10px] leading-4 text-slate-400">
-              这里只设置需求的整体协调人；各阶段负责人需要按实际分工独立设置。
+              这里只设置需求的整体协调人；各阶段负责人已在上方独立设置。
             </p>
           </fieldset>
           <div
             class="flex items-center justify-between rounded-2xl bg-indigo-50/60 px-4 py-3 text-xs text-indigo-700"
           >
-            <template v-if="form.stageMode === 'template'">
-              <span
-                >将自动生成
-                {{ snapshot.project.templateStages.length }} 个阶段</span
-              ><span class="font-medium"
-                >{{
-                  snapshot.project.templateStages
-                    .slice(0, 4)
-                    .map((item) => item.name)
-                    .join(' → ')
-                }}{{
-                  snapshot.project.templateStages.length > 4 ? '…' : ''
-                }}</span
-              >
-            </template>
-            <template v-else>
-              <span>将按本次计划创建真实阶段</span>
-              <span class="font-medium">{{ form.stages.length }} 个阶段</span>
-            </template>
+            <span>将按上方内容创建真实流程</span>
+            <span class="font-medium">{{ form.stages.length }} 个阶段</span>
           </div>
           <div class="flex justify-end gap-2 border-t border-slate-100 pt-4">
             <button
