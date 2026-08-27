@@ -21,7 +21,7 @@ import {
   XMarkIcon,
 } from '@heroicons/vue/24/outline';
 import dayjs from 'dayjs';
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import { api } from '@/api';
 import AppDateTimeField from '@/components/AppDateTimeField.vue';
@@ -36,8 +36,10 @@ import { formatDate, versionLabels } from '@/lib/presentation';
 import { toasts } from '@/state/toasts';
 import { loadWorkspace, workspace } from '@/state/workspace';
 
+defineOptions({ name: 'ProjectView' });
+
 const route = useRoute();
-const projectId = computed(() => route.params.projectId as string);
+const projectId = ref(route.params.projectId as string);
 const snapshot = ref<ProjectSnapshot>();
 const loading = ref(true);
 const error = ref('');
@@ -49,6 +51,7 @@ const timelineFocusOpen = ref(false);
 const timelineFocusedStages = ref<string[]>([]);
 const timelineIncludeBugs = ref(false);
 const timelineRequirements = ref<Requirement[]>([]);
+const timelineRestoreToken = ref(0);
 const createOpen = ref(false);
 const saving = ref(false);
 const filtersOpen = ref(false);
@@ -65,6 +68,7 @@ const form = reactive({
   stageMode: 'template' as 'template' | 'custom',
   stages: [{ name: '' }],
 });
+let activationCount = 0;
 
 const versionScopedRequirements = computed(() => {
   const rows = snapshot.value?.requirements ?? [];
@@ -373,17 +377,17 @@ async function createRequirement() {
 }
 
 onMounted(() => void load());
+onActivated(async () => {
+  activationCount += 1;
+  if (activationCount <= 1) return;
+  await load();
+  timelineRestoreToken.value += 1;
+});
 watch(timelineStageOptions, (options) => {
   const available = new Set(options.map((item) => item.name));
   timelineFocusedStages.value = timelineFocusedStages.value.filter((name) =>
     available.has(name),
   );
-});
-watch(projectId, () => {
-  filters.versionId = 'auto';
-  clearTimelineFocus();
-  timelineRequirements.value = [];
-  void load();
 });
 </script>
 
@@ -1046,6 +1050,7 @@ watch(projectId, () => {
             :people="workspace.people"
             :focused-stage-names="timelineFocusedStages"
             :include-bugs="timelineIncludeBugs"
+            :restore-token="timelineRestoreToken"
             @schedule-saved="load"
           />
         </div>

@@ -22,7 +22,9 @@ import dayjs, { type Dayjs } from 'dayjs';
 import {
   computed,
   nextTick,
+  onActivated,
   onBeforeUnmount,
+  onDeactivated,
   onMounted,
   reactive,
   ref,
@@ -66,6 +68,7 @@ const props = defineProps<{
   people: Person[];
   focusedStageNames?: string[];
   includeBugs?: boolean;
+  restoreToken?: number;
 }>();
 const emit = defineEmits<{ scheduleSaved: [] }>();
 const router = useRouter();
@@ -80,6 +83,12 @@ const expandedBugGroups = reactive(new Set<string>());
 const timelineSurface = ref<HTMLElement>();
 const scrollContainer = ref<HTMLElement>();
 const labelColumn = ref<HTMLElement>();
+const savedScrollPosition = ref<{
+  top: number;
+  left: number;
+  pageTop: number;
+}>();
+let capturedBeforeNavigation = false;
 const planningTarget = ref<PlanningTarget>();
 const statusTarget = ref<WorkItem>();
 const ownerTarget = ref<SchedulableItem>();
@@ -190,6 +199,29 @@ function planningItemName(item: SchedulableItem) {
 
 function openPlanning(item: SchedulableItem, proposal?: PlanningTarget) {
   planningTarget.value = proposal ?? { item };
+}
+
+function openRequirementDetail(requirement: Requirement) {
+  captureScrollPosition();
+  capturedBeforeNavigation = true;
+  void router.push({
+    name: 'requirement',
+    params: { requirementId: requirement.id },
+    state: {
+      flowtraceReturnPath: router.currentRoute.value.fullPath,
+      flowtraceReturnProjectId: requirement.projectId,
+    },
+  });
+}
+
+function captureScrollPosition() {
+  const container = scrollContainer.value;
+  if (!container) return;
+  savedScrollPosition.value = {
+    top: container.scrollTop,
+    left: container.scrollLeft,
+    pageTop: window.scrollY,
+  };
 }
 
 function openOwners(item: SchedulableItem) {
@@ -847,6 +879,38 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', keepPageAtTimelineAnchor);
 });
 
+onDeactivated(() => {
+  if (!capturedBeforeNavigation) captureScrollPosition();
+});
+
+function restoreScrollPosition() {
+  const saved = savedScrollPosition.value;
+  if (!saved) return;
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: saved.pageTop });
+    requestAnimationFrame(() => {
+      const container = scrollContainer.value;
+      if (!container) return;
+      container.scrollTop = saved.top;
+      container.scrollLeft = saved.left;
+      capturedBeforeNavigation = false;
+    });
+  });
+}
+
+onActivated(async () => {
+  await nextTick();
+  restoreScrollPosition();
+});
+
+watch(
+  () => props.restoreToken,
+  async () => {
+    await nextTick();
+    restoreScrollPosition();
+  },
+);
+
 watch(
   () => props.requirements.length,
   async () => {
@@ -1043,7 +1107,10 @@ watch(
                 >
                   <button
                     type="button"
-                    class="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
+                    class="timeline-title-trigger focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
+                    :aria-label="`${requirement.key} ${requirement.title}，点击展开过程`"
+                    :data-tooltip="`${requirement.key} · ${requirement.title}`"
+                    :title="`${requirement.key} · ${requirement.title}`"
                     @click="toggle(expandedRequirements, requirement.id)"
                   >
                     <ChevronDownIcon
@@ -1096,7 +1163,7 @@ watch(
                     class="timeline-row-action focus-ring"
                     :aria-label="`打开「${requirement.title}」的完整详情`"
                     title="打开完整详情"
-                    @click="router.push(`/requirements/${requirement.id}`)"
+                    @click="openRequirementDetail(requirement)"
                   >
                     <ArrowTopRightOnSquareIcon class="h-3.5 w-3.5" />
                   </button>
@@ -1330,8 +1397,8 @@ watch(
                         "
                         :title="
                           itemDateRange(bug)
-                            ? `定位到${bug.key}的开始日期`
-                            : '该 Bug 暂无时间记录'
+                            ? `${bug.key} · ${bug.title}；点击定位到开始日期`
+                            : `${bug.key} · ${bug.title}；暂无时间记录`
                         "
                         @click="scrollToItem(bug)"
                       >

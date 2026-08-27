@@ -207,9 +207,18 @@ onMounted(() => loadWorkspace());
         </div>
       </header>
 
-      <RouterView v-slot="{ Component }">
+      <RouterView v-slot="{ Component, route: matchedRoute }">
         <Transition name="page" mode="out-in">
-          <component :is="Component" />
+          <KeepAlive :max="5" include="ProjectView">
+            <component
+              :is="Component"
+              :key="
+                matchedRoute.name === 'project'
+                  ? String(matchedRoute.params.projectId)
+                  : matchedRoute.fullPath
+              "
+            />
+          </KeepAlive>
         </Transition>
       </RouterView>
     </main>

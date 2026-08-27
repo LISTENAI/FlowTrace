@@ -27,7 +27,7 @@ import {
 } from '@heroicons/vue/24/outline';
 import dayjs from 'dayjs';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { RouterLink, useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/api';
 import AppDateTimeField from '@/components/AppDateTimeField.vue';
 import AppModal from '@/components/AppModal.vue';
@@ -53,6 +53,22 @@ import { loadWorkspace, workspace } from '@/state/workspace';
 const route = useRoute();
 const router = useRouter();
 const id = computed(() => route.params.requirementId as string);
+
+function returnToProject() {
+  const state = window.history.state as {
+    flowtraceReturnPath?: unknown;
+    flowtraceReturnProjectId?: unknown;
+  };
+  if (
+    typeof state.flowtraceReturnPath === 'string' &&
+    state.flowtraceReturnProjectId === requirement.value?.projectId
+  ) {
+    router.back();
+    return;
+  }
+  if (requirement.value)
+    void router.push(`/projects/${requirement.value.projectId}`);
+}
 const requirement = ref<Requirement>();
 const dependencies = ref<Dependency[]>([]);
 const versions = ref<Version[]>([]);
@@ -501,12 +517,13 @@ watch(id, load);
     </div>
     <template v-else-if="requirement">
       <div class="mb-6">
-        <RouterLink
-          :to="`/projects/${requirement.projectId}`"
+        <button
+          type="button"
           class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-indigo-600"
-          ><ArrowLeftIcon class="h-3.5 w-3.5" />返回
-          {{ project?.name }}</RouterLink
+          @click="returnToProject"
         >
+          <ArrowLeftIcon class="h-3.5 w-3.5" />返回 {{ project?.name }}
+        </button>
         <div
           class="mt-3 flex flex-col justify-between gap-4 sm:flex-row sm:items-start"
         >

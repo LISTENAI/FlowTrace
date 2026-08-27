@@ -79,6 +79,17 @@ async function refreshed() {
   await loadDetail(true);
   emit('refresh');
 }
+
+function openDetail() {
+  void router.push({
+    name: 'requirement',
+    params: { requirementId: props.summary.id },
+    state: {
+      flowtraceReturnPath: router.currentRoute.value.fullPath,
+      flowtraceReturnProjectId: router.currentRoute.value.params.projectId,
+    },
+  });
+}
 </script>
 
 <template>
@@ -205,7 +216,7 @@ async function refreshed() {
           </p>
           <button
             class="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800"
-            @click.stop="router.push(`/requirements/${summary.id}`)"
+            @click.stop="openDetail"
           >
             查看完整详情 <ArrowRightIcon class="h-3.5 w-3.5" />
           </button>

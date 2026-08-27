@@ -34,5 +34,5 @@ export const router = createRouter({
       component: ProjectRhythmsView,
     },
   ],
-  scrollBehavior: () => ({ top: 0 }),
+  scrollBehavior: (_to, _from, savedPosition) => savedPosition ?? { top: 0 },
 });
