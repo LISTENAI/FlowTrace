@@ -52,7 +52,7 @@ describe('FlowTrace MCP Server', () => {
     ]);
 
     const tools = await client.listTools();
-    expect(tools.tools).toHaveLength(19);
+    expect(tools.tools).toHaveLength(21);
     expect(tools.tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
         'search',
@@ -60,6 +60,8 @@ describe('FlowTrace MCP Server', () => {
         'get_version_snapshot',
         'get_requirement',
         'get_changes_since',
+        'create_version',
+        'update_version',
         'create_requirement',
         'update_requirement',
         'assign_owners',
@@ -174,6 +176,70 @@ describe('FlowTrace MCP Server', () => {
     expect(request).toHaveBeenCalledWith('/requirements/requirement-1/stages', {
       method: 'POST',
       body: expect.objectContaining({ order: 2, source: 'agent' }),
+    });
+
+    await client.callTool({
+      name: 'create_version',
+      arguments: {
+        project_id: 'project-1',
+        name: '第一批 1500 套',
+        status: 'active',
+        agent_name: '验收调用方',
+      },
+    });
+    expect(request).toHaveBeenCalledWith('/projects/project-1/versions', {
+      method: 'POST',
+      body: expect.objectContaining({
+        name: '第一批 1500 套',
+        status: 'active',
+        source: 'agent',
+      }),
+    });
+
+    await client.callTool({
+      name: 'update_version',
+      arguments: {
+        version_id: 'version-1',
+        planned_release_at: '2026-09-01T10:00:00.000Z',
+        reason: '生产计划确认',
+        agent_name: '验收调用方',
+      },
+    });
+    expect(request).toHaveBeenCalledWith('/versions/version-1', {
+      method: 'PATCH',
+      body: expect.objectContaining({
+        plannedReleaseAt: '2026-09-01T10:00:00.000Z',
+        reason: '生产计划确认',
+      }),
+    });
+
+    await client.callTool({
+      name: 'create_requirement',
+      arguments: {
+        project_id: 'project-1',
+        title: '量产物料准备',
+        stages: [
+          {
+            name: '物料报价',
+            owner_ids: ['person-1'],
+            planned_end_at: '2026-08-28T10:00:00.000Z',
+          },
+          { name: '采购下单' },
+        ],
+        agent_name: '验收调用方',
+      },
+    });
+    expect(request).toHaveBeenCalledWith('/requirements', {
+      method: 'POST',
+      body: expect.objectContaining({
+        stages: [
+          expect.objectContaining({
+            name: '物料报价',
+            ownerIds: ['person-1'],
+          }),
+          expect.objectContaining({ name: '采购下单' }),
+        ],
+      }),
     });
 
     const resources = await client.listResources();

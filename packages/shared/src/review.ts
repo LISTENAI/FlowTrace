@@ -23,6 +23,23 @@ export function selectCurrentStage(stages: Stage[]) {
   );
 }
 
+export function selectActiveStages(stages: Stage[]) {
+  return stages.filter((stage) =>
+    ['in_progress', 'waiting', 'blocked'].includes(stage.status),
+  );
+}
+
+export function selectNextStages(stages: Stage[]) {
+  const active = selectActiveStages(stages);
+  const afterOrder = active.length
+    ? Math.max(...active.map((stage) => stage.order))
+    : -1;
+  const next = stages.find(
+    (stage) => stage.status === 'not_started' && stage.order > afterOrder,
+  );
+  return next ? [next] : [];
+}
+
 export function reviewRequirement(
   requirement: Requirement,
 ): RequirementReviewIssue[] {
@@ -72,12 +89,18 @@ export function reviewRequirement(
     }
   }
 
-  const currentStage = selectCurrentStage(requirement.stages);
-  if (
-    currentStage &&
-    ['in_progress', 'waiting', 'blocked'].includes(currentStage.status)
-  )
-    addWorkIssues(currentStage, 'stage');
+  const stagesToReview = [
+    ...selectActiveStages(requirement.stages),
+    ...(requirement.lifecycle === 'in_progress'
+      ? selectNextStages(requirement.stages)
+      : []),
+  ];
+  const reviewedStageIds = new Set<string>();
+  for (const stage of stagesToReview) {
+    if (reviewedStageIds.has(stage.id)) continue;
+    reviewedStageIds.add(stage.id);
+    addWorkIssues(stage, 'stage');
+  }
 
   requirement.bugs
     .filter((bug) => ['in_progress', 'waiting', 'blocked'].includes(bug.status))

@@ -139,25 +139,46 @@ const attentionRows = computed<AttentionRow[]>(() => {
       });
     }
 
+    const requirementsById = new Map(
+      snapshot.requirements.map((item) => [item.id, item]),
+    );
+    for (const issue of snapshot.reviewItems) {
+      const requirement = requirementsById.get(issue.requirementId);
+      if (!requirement) continue;
+      const stage = [
+        ...requirement.activeStages,
+        ...requirement.nextStages,
+      ].find((item) => item.id === issue.targetId);
+      rows.push({
+        projectId: snapshot.project.id,
+        projectName: snapshot.project.name,
+        requirementId: requirement.id,
+        requirementKey: requirement.key,
+        requirementTitle: requirement.title,
+        kind: 'review',
+        itemName: issue.targetName,
+        reason: issue.message,
+        ownerIds: stage?.ownerIds ?? requirement.ownerIds,
+        extraCount: 0,
+        versionId: requirement.versionId,
+        versions: snapshot.versions,
+        workItemId: stage?.id,
+        workItemType: stage ? 'stage' : undefined,
+        currentStatus: stage?.status,
+        actualStartAt: stage?.actualStartAt,
+        expectedResumeAt: stage?.expectedResumeAt,
+        plannedStartAt: stage?.plannedStartAt,
+        plannedEndAt: stage?.plannedEndAt,
+        planningItemId:
+          issue.code === 'work_plan_missing' ? stage?.id : undefined,
+        planningItemType:
+          issue.code === 'work_plan_missing' && stage ? 'stage' : undefined,
+        planningItemName: stage?.name,
+      });
+    }
+
     for (const item of snapshot.requirements) {
       if (['done', 'canceled'].includes(item.lifecycle)) continue;
-      if (item.reviewIssues.length) {
-        rows.push({
-          projectId: snapshot.project.id,
-          projectName: snapshot.project.name,
-          requirementId: item.id,
-          requirementKey: item.key,
-          requirementTitle: item.title,
-          kind: 'review',
-          itemName: item.reviewIssues[0]?.targetName,
-          reason: item.reviewIssues.map((issue) => issue.message).join('；'),
-          ownerIds: item.currentStageOwnerIds,
-          extraCount: 0,
-          versionId: item.versionId,
-          versions: snapshot.versions,
-        });
-      }
-
       const daysUntilDue = item.plannedEndAt
         ? new Date(item.plannedEndAt).getTime() - Date.now()
         : undefined;
@@ -228,7 +249,7 @@ const portfolioLensOptions = computed(() => [
   },
   {
     id: 'review' as const,
-    label: '计划 Review',
+    label: '完整性 Review',
     count: attentionRows.value.filter((item) =>
       ['review', 'due_soon'].includes(item.kind),
     ).length,
@@ -455,7 +476,7 @@ async function createProject() {
           >
             <div
               v-for="item in visibleAttentionRows"
-              :key="`${item.kind}-${item.requirementId}`"
+              :key="`${item.kind}-${item.requirementId}-${item.itemName}-${item.reason}`"
               class="group flex flex-col gap-3 px-5 py-4 transition hover:bg-slate-50/70 sm:flex-row sm:items-center"
             >
               <button

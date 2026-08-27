@@ -12,7 +12,9 @@ import {
   MaxLength,
   MinLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import {
   executionStatuses,
   type ChangeSource,
@@ -244,6 +246,34 @@ export class UpdateVersionDto extends ChangeContextDto {
   description?: string;
 }
 
+export class CreateRequirementStageDto {
+  @ApiProperty({ example: '板上验证' })
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  ownerIds?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsISO8601()
+  plannedStartAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsISO8601()
+  plannedEndAt?: string;
+}
+
 export class CreateRequirementDto extends ChangeContextDto {
   @ApiProperty()
   @IsString()
@@ -279,6 +309,16 @@ export class CreateRequirementDto extends ChangeContextDto {
   @IsOptional()
   @IsISO8601()
   plannedEndAt?: string;
+
+  @ApiPropertyOptional({
+    type: [CreateRequirementStageDto],
+    description: '提供时按数组顺序创建这些真实阶段；省略时复制项目模板',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateRequirementStageDto)
+  stages?: CreateRequirementStageDto[];
 }
 
 export class UpdateRequirementDto extends ChangeContextDto {

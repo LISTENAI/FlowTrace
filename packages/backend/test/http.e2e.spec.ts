@@ -137,7 +137,7 @@ describe.sequential('HTTP API', () => {
       .set('accept', 'application/json, text/event-stream')
       .send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
       .expect(200);
-    expect(tools.body.result.tools).toHaveLength(19);
+    expect(tools.body.result.tools).toHaveLength(21);
     expect(tools.body.result.tools).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'search' }),
@@ -169,6 +169,32 @@ describe.sequential('HTTP API', () => {
 
     expect(requirementResponse.body.key).toBe('WEB-1');
     expect(requirementResponse.body.stages).toHaveLength(2);
+
+    const customResponse = await request(app.getHttpServer())
+      .post('/api/requirements')
+      .send({
+        projectId: projectResponse.body.id,
+        title: '按会议计划推进',
+        stages: [
+          {
+            name: '物料报价',
+            ownerIds: ['owner-a'],
+            plannedEndAt: '2026-08-28T10:00:00.000Z',
+          },
+          { name: '采购下单' },
+        ],
+        source: 'agent',
+        agentName: '验收 Agent',
+      })
+      .expect(201);
+    expect(customResponse.body.stages).toEqual([
+      expect.objectContaining({
+        name: '物料报价',
+        ownerIds: ['owner-a'],
+        plannedEndAt: '2026-08-28T10:00:00.000Z',
+      }),
+      expect.objectContaining({ name: '采购下单' }),
+    ]);
     mcpProjectId = projectResponse.body.id as string;
     mcpRequirementId = requirementResponse.body.id as string;
     mcpStageId = requirementResponse.body.stages[0].id as string;

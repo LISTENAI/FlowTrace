@@ -9,7 +9,34 @@ Use the closest example as a pattern. Names and IDs below are fictional.
    one. Do not select the first.
 3. With one stable Version ID, call `get_version_snapshot`.
 4. Summarize recorded progress, waiting, blocked, delayed, open Bugs, external
-   dependencies, and recent changes. Do not write anything.
+   dependencies, missing Review items, and recent changes. Inspect every
+   `activeStages` entry; do not report only `currentStage`. Do not write
+   anything.
+
+## External source: “把这批固件测试和量产计划录进去”
+
+1. Extract source identifiers and structure: product names, build tags,
+   delivery or batch boundaries, outcomes, phases, statuses, owners, dates,
+   dependencies, and defects.
+2. Search the product/build identifiers. If the build has no exact result or
+   the only hit is a similarly named development-board Project, list active
+   Projects and Versions. Verify whether the build belongs under a firmware
+   Project and a broader release Version such as `2.7`.
+3. Inspect that Version Snapshot for existing Requirements before creating
+   anything. One search hit is not proof of the target container.
+4. Group rows into independently accepted Requirements. Put procurement,
+   assembly, validation, and similar execution steps into exact custom Stages
+   when they belong to the same outcome; create Bugs for independently tracked
+   defects.
+5. If the delivery Version is genuinely missing and the user's instruction
+   authorizes recording the plan, create it first. Then call
+   `create_requirement` with `stages`; do not create generic template Stages and
+   cancel them afterward.
+6. Apply known owners, plans, and statuses with their actual effective times,
+   then dependencies. Do not infer missing facts.
+7. Re-read the Version Snapshot. Report all parallel `activeStages`, execution
+   exceptions, and `reviewItems`. State source omissions as missing Review
+   facts rather than hiding them.
 
 ## Read: “昨天到今天发生了什么？”
 

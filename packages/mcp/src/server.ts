@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { FlowTraceApiClient } from './api-client.js';
 import { flowTraceResources } from './resources.js';
 
-const instructions = `FlowTrace 记录研发交付的真实过程。Project 是长期研发对象，Version 是一次计划交付，Requirement 下有 Stage 和 Bug。Stage 是工作环节，Status 是执行状态，两者不可混用。Baseline 不得被后续排期覆盖，状态和排期修改必须保留历史。独立缺陷优先创建 Bug。Waiting 表示恢复条件明确，Blocked 表示恢复条件不明确，二者都必须记录原因。查询整体状态优先 Snapshot，查询近期变化优先 Changes Since。名称搜索有多个结果时不得猜测。所有写入必须经由业务 Tool。`;
+const instructions = `FlowTrace 记录研发交付的真实过程。Project 是长期研发对象，Version 是一次计划交付，Requirement 下有 Stage 和 Bug。Stage 是工作环节，Status 是执行状态，两者不可混用。Baseline 不得被后续排期覆盖，状态和排期修改必须保留历史。独立缺陷优先创建 Bug。Waiting 表示恢复条件明确，Blocked 表示恢复条件不明确，二者都必须记录原因。查询整体状态优先 Snapshot；其中 activeStages 是全部并行活跃阶段，reviewItems 是待补全项，currentStage 只用于兼容摘要，不能代表全部事实。查询近期变化优先 Changes Since。名称搜索有多个结果时不得猜测。所有写入必须经由业务 Tool。`;
 
 const readAnnotations = {
   readOnlyHint: true,
@@ -215,6 +215,84 @@ export function createFlowTraceMcpServer(
   );
 
   server.registerTool(
+    'create_version',
+    {
+      description:
+        '在已确认的长期项目中创建一次计划交付。发布号、批次或里程碑应建 Version，不要为一次交付新建 Project。',
+      inputSchema: {
+        project_id: z.string().describe('由 search 获得的项目稳定 ID'),
+        name: z.string().min(1),
+        status: z
+          .enum(['planning', 'active', 'released', 'canceled'])
+          .default('planning'),
+        planned_start_at: z.string().optional(),
+        planned_release_at: z.string().optional(),
+        description: z.string().optional(),
+        ...sourceSchema,
+      },
+      annotations: writeAnnotations,
+    },
+    async (input) =>
+      writeResult(
+        api,
+        await api.request(
+          `/projects/${encodeURIComponent(input.project_id)}/versions`,
+          {
+            method: 'POST',
+            body: {
+              name: input.name,
+              status: input.status,
+              plannedStartAt: input.planned_start_at,
+              plannedReleaseAt: input.planned_release_at,
+              description: input.description,
+              ...writeBody(input),
+            },
+          },
+        ),
+      ),
+  );
+
+  server.registerTool(
+    'update_version',
+    {
+      description:
+        '修改已存在 Version 的名称、状态、顺序或计划，并保留审计变化。只传需要修改的字段，排期或状态调整必须说明原因。',
+      inputSchema: {
+        version_id: z.string(),
+        name: z.string().min(1).optional(),
+        status: z
+          .enum(['planning', 'active', 'released', 'canceled'])
+          .optional(),
+        sort_order: z.number().int().min(0).optional(),
+        planned_start_at: z.string().nullable().optional(),
+        planned_release_at: z.string().nullable().optional(),
+        actual_release_at: z.string().nullable().optional(),
+        description: z.string().optional(),
+        agent_name: sourceSchema.agent_name,
+        reason: z.string().min(1).describe('本次版本调整的业务原因'),
+      },
+      annotations: writeAnnotations,
+    },
+    async (input) =>
+      writeResult(
+        api,
+        await api.request(`/versions/${encodeURIComponent(input.version_id)}`, {
+          method: 'PATCH',
+          body: {
+            name: input.name,
+            status: input.status,
+            sortOrder: input.sort_order,
+            plannedStartAt: input.planned_start_at,
+            plannedReleaseAt: input.planned_release_at,
+            actualReleaseAt: input.actual_release_at,
+            description: input.description,
+            ...writeBody(input),
+          },
+        }),
+      ),
+  );
+
+  server.registerTool(
     'get_requirement',
     {
       description:
@@ -259,7 +337,7 @@ export function createFlowTraceMcpServer(
     'create_requirement',
     {
       description:
-        '在明确项目中创建需求并复制项目当前阶段模板。不确定项目或版本时先 search，不要猜测 ID。',
+        '在明确项目和版本中创建需求。stages 省略时复制项目模板；来源已给出真实工作分解时直接传 stages，避免先复制再取消。',
       inputSchema: {
         project_id: z.string().describe('项目稳定 ID'),
         version_id: z.string().optional().describe('省略则放入需求池'),
@@ -268,6 +346,18 @@ export function createFlowTraceMcpServer(
         owner_ids: z.array(z.string()).default([]),
         planned_start_at: z.string().optional(),
         planned_end_at: z.string().optional(),
+        stages: z
+          .array(
+            z.object({
+              name: z.string().min(1),
+              owner_ids: z.array(z.string()).default([]),
+              note: z.string().optional(),
+              planned_start_at: z.string().optional(),
+              planned_end_at: z.string().optional(),
+            }),
+          )
+          .optional()
+          .describe('按数组顺序创建的真实阶段；传空数组表示明确不创建阶段'),
         ...sourceSchema,
       },
       annotations: writeAnnotations,
@@ -285,6 +375,13 @@ export function createFlowTraceMcpServer(
             ownerIds: input.owner_ids,
             plannedStartAt: input.planned_start_at,
             plannedEndAt: input.planned_end_at,
+            stages: input.stages?.map((stage) => ({
+              name: stage.name,
+              ownerIds: stage.owner_ids,
+              note: stage.note,
+              plannedStartAt: stage.planned_start_at,
+              plannedEndAt: stage.planned_end_at,
+            })),
             ...writeBody(input),
           },
         }),

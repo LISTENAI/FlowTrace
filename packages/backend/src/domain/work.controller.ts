@@ -185,7 +185,7 @@ export class RequirementsController {
   }
 
   @Post()
-  @ApiOperation({ summary: '创建需求并复制当前项目模板' })
+  @ApiOperation({ summary: '创建需求，可复制项目模板或直接提供真实阶段' })
   create(@Body() input: CreateRequirementDto) {
     return this.work.createRequirement(input);
   }

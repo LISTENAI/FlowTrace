@@ -21,6 +21,7 @@ import type {
   Requirement,
   RequirementDetail,
   RequirementLifecycle,
+  RequirementStageSummary,
   RequirementSummary,
   ScheduleHistory,
   SearchEntityType,
@@ -37,7 +38,9 @@ import type {
 import {
   reviewRequirement,
   searchEntityTypes,
+  selectActiveStages,
   selectCurrentStage,
+  selectNextStages,
 } from '@flowtrace/shared';
 import { randomUUID } from 'node:crypto';
 import {
@@ -110,6 +113,15 @@ const context = (
   agentName: value.agentName,
   reason: value.reason,
 });
+const normalizeSearchText = (value: string) =>
+  value
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/[\p{P}\p{S}\s]+/gu, '');
+const versionParts = (value: string) => {
+  const match = value.normalize('NFKC').match(/(?:^|[^0-9])(\d+(?:\.\d+)+)/);
+  return match?.[1]?.split('.').map(Number) ?? [];
+};
 
 @Injectable()
 export class WorkService {
@@ -271,7 +283,9 @@ export class WorkService {
     types: SearchEntityType[] = [...searchEntityTypes],
     limit = 20,
   ): Promise<SearchResult[]> {
-    const needle = query.trim().toLocaleLowerCase();
+    const needle = query.trim().normalize('NFKC').toLocaleLowerCase();
+    const compactNeedle = normalizeSearchText(query);
+    const needleVersionParts = versionParts(query);
     const selected = new Set(types.length ? types : searchEntityTypes);
     const needsRequirements = ['requirement', 'stage', 'bug'].some((type) =>
       selected.has(type as SearchEntityType),
@@ -303,20 +317,48 @@ export class WorkService {
     const add = (
       result: SearchResult,
       values: Array<string | null | undefined>,
+      versionFamilyValue?: string,
     ) => {
       const normalized = values
         .filter((value): value is string => Boolean(value))
-        .map((value) => value.toLocaleLowerCase());
+        .map((value) => ({
+          text: value.normalize('NFKC').toLocaleLowerCase(),
+          compact: normalizeSearchText(value),
+        }));
       if (!needle) {
         candidates.push({ rank: 3, result });
         return;
       }
-      if (!normalized.some((value) => value.includes(needle))) return;
-      const rank = normalized.some((value) => value === needle)
+      const versionFamilyMatch =
+        versionFamilyValue !== undefined &&
+        needleVersionParts.length >= 2 &&
+        versionParts(versionFamilyValue).length >= 2 &&
+        versionParts(versionFamilyValue).length < needleVersionParts.length &&
+        versionParts(versionFamilyValue).every(
+          (part, index) => needleVersionParts[index] === part,
+        );
+      if (
+        !normalized.some(
+          (value) =>
+            value.text.includes(needle) ||
+            (compactNeedle && value.compact.includes(compactNeedle)),
+        ) &&
+        !versionFamilyMatch
+      )
+        return;
+      const rank = normalized.some(
+        (value) => value.text === needle || value.compact === compactNeedle,
+      )
         ? 0
-        : normalized.some((value) => value.startsWith(needle))
+        : normalized.some(
+              (value) =>
+                value.text.startsWith(needle) ||
+                (compactNeedle && value.compact.startsWith(compactNeedle)),
+            )
           ? 1
-          : 2;
+          : versionFamilyMatch
+            ? 3
+            : 2;
       candidates.push({ rank, result });
     };
 
@@ -350,6 +392,7 @@ export class WorkService {
             status: version.status,
           },
           [version.name, version.description, project?.name, project?.key],
+          version.name,
         );
       }
     }
@@ -627,6 +670,9 @@ export class WorkService {
   }
 
   async createRequirement(input: CreateRequirementDto): Promise<Requirement> {
+    if (input.stages?.some((stage) => !stage.name.trim())) {
+      throw new BadRequestException('真实阶段名称不能为空');
+    }
     const requirementId = await this.dataSource.transaction(async (manager) => {
       const projectRepository = manager.getRepository(ProjectEntity);
       const project = await projectRepository.findOneBy({
@@ -655,48 +701,72 @@ export class WorkService {
         actualEndAt: null,
       });
       await manager.save(requirement);
+      const usesTemplate = input.stages === undefined;
+      const sourceStages: Array<{
+        id?: string;
+        name: string;
+        order: number;
+        ownerIds?: string[];
+        note?: string;
+        plannedStartAt?: string;
+        plannedEndAt?: string;
+      }> =
+        input.stages === undefined
+          ? project.templateStages.map((template) => ({
+              ...template,
+              note: undefined,
+              plannedStartAt: undefined,
+              plannedEndAt: undefined,
+            }))
+          : input.stages.map((stage, order) => ({ ...stage, order }));
       const templateIdMap = new Map<string, string>();
-      for (const stage of project.templateStages)
-        templateIdMap.set(stage.id, randomUUID());
-      const stages = project.templateStages.map((template) =>
+      if (usesTemplate) {
+        for (const stage of project.templateStages)
+          templateIdMap.set(stage.id, randomUUID());
+      }
+      const stages = sourceStages.map((sourceStage) =>
         manager.getRepository(StageEntity).create({
-          id: templateIdMap.get(template.id),
+          id:
+            (sourceStage.id && templateIdMap.get(sourceStage.id)) ||
+            randomUUID(),
           requirementId: requirement.id,
-          name: template.name,
-          order: template.order,
-          ownerIds: [],
+          name: sourceStage.name.trim(),
+          order: sourceStage.order,
+          ownerIds: usesTemplate ? [] : (sourceStage.ownerIds ?? []),
           status: 'not_started',
-          note: null,
+          note: sourceStage.note ?? null,
           statusReason: null,
           expectedResumeAt: null,
-          baselineStartAt: null,
-          baselineEndAt: null,
-          plannedStartAt: null,
-          plannedEndAt: null,
+          baselineStartAt: date(sourceStage.plannedStartAt),
+          baselineEndAt: date(sourceStage.plannedEndAt),
+          plannedStartAt: date(sourceStage.plannedStartAt),
+          plannedEndAt: date(sourceStage.plannedEndAt),
           actualStartAt: null,
           actualEndAt: null,
         }),
       );
       await manager.save(stages);
-      for (const template of project.templateStages) {
-        for (const predecessorTemplateId of template.dependsOnTemplateStageIds) {
-          const successorId = templateIdMap.get(template.id);
-          const predecessorId = templateIdMap.get(predecessorTemplateId);
-          if (!successorId || !predecessorId) continue;
-          await manager.save(
-            manager.getRepository(DependencyEntity).create({
-              id: randomUUID(),
-              successorType: 'stage',
-              successorId,
-              predecessorType: 'stage',
-              predecessorId,
-              note: '由项目模板复制',
-              active: true,
-              source: context(input).source,
-              agentName: input.agentName ?? null,
-              resolvedAt: null,
-            }),
-          );
+      if (usesTemplate) {
+        for (const template of project.templateStages) {
+          for (const predecessorTemplateId of template.dependsOnTemplateStageIds) {
+            const successorId = templateIdMap.get(template.id);
+            const predecessorId = templateIdMap.get(predecessorTemplateId);
+            if (!successorId || !predecessorId) continue;
+            await manager.save(
+              manager.getRepository(DependencyEntity).create({
+                id: randomUUID(),
+                successorType: 'stage',
+                successorId,
+                predecessorType: 'stage',
+                predecessorId,
+                note: '由项目模板复制',
+                active: true,
+                source: context(input).source,
+                agentName: input.agentName ?? null,
+                resolvedAt: null,
+              }),
+            );
+          }
         }
       }
       await this.recordChange(manager, {
@@ -1522,6 +1592,16 @@ export class WorkService {
         [...entity.ownerIds].sort().join('\0');
     const requirement = await this.findRequirement(entity.requirementId);
     await this.dataSource.transaction(async (manager) => {
+      let historyCreatedAt = await this.nextStatusHistoryCreatedAt(
+        manager,
+        kind,
+        entity.id,
+      );
+      const takeHistoryCreatedAt = () => {
+        const value = historyCreatedAt;
+        historyCreatedAt = new Date(historyCreatedAt.getTime() + 1);
+        return value;
+      };
       const recordsStatus =
         input.status !== entity.status ||
         Boolean(
@@ -1529,6 +1609,17 @@ export class WorkService {
           input.expectedResumeAt ||
           input.note?.trim(),
         );
+      if (actualStartAt && input.status !== 'in_progress') {
+        await this.reconcileActualPeriod(
+          manager,
+          kind,
+          entity.id,
+          actualStartAt,
+          null,
+          input,
+          takeHistoryCreatedAt(),
+        );
+      }
       if (recordsStatus) {
         await manager.save(
           manager.getRepository(StatusHistoryEntity).create({
@@ -1550,17 +1641,19 @@ export class WorkService {
             expectedResumeAt: date(input.expectedResumeAt),
             source: context(input).source,
             agentName: input.agentName ?? null,
+            createdAt: takeHistoryCreatedAt(),
           }),
         );
       }
-      if (actualStartAt || actualEndAt) {
+      if ((actualStartAt && input.status === 'in_progress') || actualEndAt) {
         await this.reconcileActualPeriod(
           manager,
           kind,
           entity.id,
-          actualStartAt,
+          input.status === 'in_progress' ? actualStartAt : null,
           actualEndAt,
           input,
+          takeHistoryCreatedAt(),
         );
       }
       if (recordsStatus || actualStartAt || actualEndAt) {
@@ -1638,6 +1731,7 @@ export class WorkService {
     actualStartAt: Date | null,
     actualEndAt: Date | null,
     input: UpdateStatusDto,
+    createdAt: Date,
   ): Promise<void> {
     const repository = manager.getRepository(StatusHistoryEntity);
     const history = await repository.find({
@@ -1661,6 +1755,7 @@ export class WorkService {
             expectedResumeAt: null,
             source: context(input).source,
             agentName: input.agentName ?? null,
+            createdAt,
           }),
         );
       }
@@ -1684,11 +1779,26 @@ export class WorkService {
             expectedResumeAt: null,
             source: context(input).source,
             agentName: input.agentName ?? null,
+            createdAt,
           }),
         );
       }
     }
     await repository.save(history);
+  }
+
+  private async nextStatusHistoryCreatedAt(
+    manager: EntityManager,
+    kind: 'stage' | 'bug',
+    entityId: string,
+  ): Promise<Date> {
+    const latest = await manager.getRepository(StatusHistoryEntity).findOne({
+      where: { entityType: kind, entityId },
+      order: { createdAt: 'DESC' },
+    });
+    return new Date(
+      Math.max(Date.now(), (latest?.createdAt.getTime() ?? 0) + 1),
+    );
   }
 
   private async reschedule(
@@ -1986,6 +2096,12 @@ export class WorkService {
       currentStageOwnerIds: current?.ownerIds ?? [],
       currentStagePlannedStartAt: current?.plannedStartAt,
       currentStagePlannedEndAt: current?.plannedEndAt,
+      activeStages: selectActiveStages(requirement.stages).map((stage) =>
+        this.toRequirementStageSummary(stage),
+      ),
+      nextStages: selectNextStages(requirement.stages).map((stage) =>
+        this.toRequirementStageSummary(stage),
+      ),
       reviewIssues: reviewRequirement(requirement),
       overdue: this.isOverdue(row),
     };
@@ -2043,6 +2159,14 @@ export class WorkService {
         ),
       },
       requirements,
+      reviewItems: requirements.flatMap((requirement) =>
+        requirement.reviewIssues.map((issue) => ({
+          ...issue,
+          requirementId: requirement.id,
+          requirementKey: requirement.key,
+          requirementTitle: requirement.title,
+        })),
+      ),
       waitingItems: allWork
         .filter(({ item }) => item.status === 'waiting')
         .map(({ item, requirement }) =>
@@ -2088,6 +2212,25 @@ export class WorkService {
       plannedEndAt: item.plannedEndAt,
       actualStartAt: item.actualStartAt,
       actualEndAt: item.actualEndAt,
+    };
+  }
+
+  private toRequirementStageSummary(stage: Stage): RequirementStageSummary {
+    return {
+      id: stage.id,
+      name: stage.name,
+      order: stage.order,
+      ownerIds: stage.ownerIds,
+      status: stage.status,
+      note: stage.note,
+      statusReason: stage.statusReason,
+      expectedResumeAt: stage.expectedResumeAt,
+      baselineStartAt: stage.baselineStartAt,
+      baselineEndAt: stage.baselineEndAt,
+      plannedStartAt: stage.plannedStartAt,
+      plannedEndAt: stage.plannedEndAt,
+      actualStartAt: stage.actualStartAt,
+      actualEndAt: stage.actualEndAt,
     };
   }
 
@@ -2235,12 +2378,18 @@ export class WorkService {
   private orderStatusHistory(
     rows: StatusHistoryEntity[],
   ): StatusHistoryEntity[] {
+    const inferredStart = (item: StatusHistoryEntity) =>
+      item.toStatus === 'in_progress' && item.note === '补录实际开始时间'
+        ? -1
+        : 0;
     const terminal = (status: ExecutionStatus) =>
       status === 'done' || status === 'canceled' ? 1 : 0;
     return [...rows].sort((left, right) => {
       const effective =
         left.effectiveAt.getTime() - right.effectiveAt.getTime();
       if (effective) return effective;
+      const inferredOrder = inferredStart(left) - inferredStart(right);
+      if (inferredOrder) return inferredOrder;
       const terminalOrder = terminal(left.toStatus) - terminal(right.toStatus);
       if (terminalOrder) return terminalOrder;
       const created = left.createdAt.getTime() - right.createdAt.getTime();

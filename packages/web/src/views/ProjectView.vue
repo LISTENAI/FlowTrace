@@ -18,6 +18,7 @@ import {
   PlusIcon,
   RectangleStackIcon,
   SquaresPlusIcon,
+  XMarkIcon,
 } from '@heroicons/vue/24/outline';
 import dayjs from 'dayjs';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
@@ -61,6 +62,8 @@ const form = reactive({
   ownerIds: [] as string[],
   plannedStartAt: dayjs().format('YYYY-MM-DD'),
   plannedEndAt: dayjs().add(14, 'day').format('YYYY-MM-DD'),
+  stageMode: 'template' as 'template' | 'custom',
+  stages: [{ name: '' }],
 });
 
 const versionScopedRequirements = computed(() => {
@@ -119,7 +122,7 @@ const healthFilterOptions = [
   { value: 'blocked', label: '阻塞' },
   { value: 'overdue', label: '已延期' },
   { value: 'open_bugs', label: '有未完成 Bug' },
-  { value: 'review', label: '计划待 Review' },
+  { value: 'review', label: '待补全' },
   { value: 'normal', label: '正常' },
 ];
 const ownerFilterOptions = computed(() => [
@@ -156,18 +159,17 @@ const scopedMetrics = computed(() => {
 });
 const reviewIssueMap = computed(() => {
   const issues = new Map<string, string[]>();
-  for (const item of snapshot.value?.requirements ?? []) {
-    if (item.reviewIssues.length)
-      issues.set(
-        item.id,
-        item.reviewIssues.map((issue) => issue.message),
-      );
+  for (const item of snapshot.value?.reviewItems ?? []) {
+    issues.set(item.requirementId, [
+      ...(issues.get(item.requirementId) ?? []),
+      item.message,
+    ]);
   }
   return issues;
 });
-const scopedReviewRows = computed(() =>
-  versionScopedRequirements.value.filter((item) =>
-    reviewIssueMap.value.has(item.id),
+const scopedReviewItems = computed(() =>
+  (snapshot.value?.reviewItems ?? []).filter((item) =>
+    scopedRequirementIds.value.has(item.requirementId),
   ),
 );
 const scopedBlockedItems = computed(() =>
@@ -321,7 +323,18 @@ function openCreate() {
   form.versionId =
     snapshot.value?.versions.find((item) => item.status === 'active')?.id ?? '';
   form.ownerIds = [];
+  form.stageMode = 'template';
+  form.stages = [{ name: '' }];
   createOpen.value = true;
+}
+
+function addCreateStage() {
+  form.stages.push({ name: '' });
+}
+
+function removeCreateStage(index: number) {
+  form.stages.splice(index, 1);
+  if (!form.stages.length) form.stages.push({ name: '' });
 }
 
 async function createRequirement() {
@@ -335,9 +348,18 @@ async function createRequirement() {
       ownerIds: form.ownerIds,
       plannedStartAt: dayjs(form.plannedStartAt).startOf('day').toISOString(),
       plannedEndAt: dayjs(form.plannedEndAt).endOf('day').toISOString(),
+      stages:
+        form.stageMode === 'custom'
+          ? form.stages.map((stage) => ({ name: stage.name.trim() }))
+          : undefined,
     });
     createOpen.value = false;
-    toasts.show('需求已创建', `${requirement.key} 已复制当前项目流程`);
+    toasts.show(
+      '需求已创建',
+      form.stageMode === 'custom'
+        ? `${requirement.key} 已按本次真实流程创建`
+        : `${requirement.key} 已复制当前项目流程`,
+    );
     await load();
   } catch (caught) {
     toasts.show(
@@ -517,9 +539,9 @@ watch(projectId, () => {
           @click="filters.health = 'review'"
         >
           <div class="text-2xl font-semibold text-indigo-600">
-            {{ scopedReviewRows.length }}
+            {{ scopedReviewItems.length }}
           </div>
-          <div class="mt-1 text-[11px] text-slate-400">计划待 Review</div>
+          <div class="mt-1 text-[11px] text-slate-400">待补全项</div>
         </button>
       </section>
 
@@ -528,7 +550,7 @@ watch(projectId, () => {
           scopedBlockedItems.length ||
           scopedWaitingItems.length ||
           scopedDelayedRows.length ||
-          scopedReviewRows.length ||
+          scopedReviewItems.length ||
           scopedExternalDependencies.length
         "
         class="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
@@ -619,24 +641,24 @@ watch(projectId, () => {
           </div>
         </div>
         <div
-          v-if="scopedReviewRows.length"
+          v-if="scopedReviewItems.length"
           class="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4"
         >
-          <p class="text-xs font-semibold text-indigo-800">计划 Review</p>
+          <p class="text-xs font-semibold text-indigo-800">完整性 Review</p>
           <div class="mt-2 space-y-1.5">
             <RouterLink
-              v-for="item in scopedReviewRows.slice(0, 3)"
-              :key="item.id"
-              :to="`/requirements/${item.id}`"
+              v-for="item in scopedReviewItems.slice(0, 5)"
+              :key="`${item.requirementId}-${item.targetId}-${item.code}`"
+              :to="`/requirements/${item.requirementId}`"
               class="focus-ring block rounded-lg px-1 py-0.5 text-xs text-indigo-700/80 hover:text-indigo-800"
             >
               <span class="font-mono text-[10px] font-bold">{{
-                item.key
+                item.requirementKey
               }}</span>
-              {{ item.title }}
+              {{ item.requirementTitle }}
               <span
                 class="mt-0.5 block truncate text-[10px] text-indigo-500/70"
-                >{{ reviewIssueMap.get(item.id)?.join(' · ') }}</span
+                >{{ item.message }}</span
               >
             </RouterLink>
           </div>
@@ -984,7 +1006,7 @@ watch(projectId, () => {
       <AppModal
         :open="createOpen"
         title="创建需求"
-        description="创建时复制当前项目模板，之后可按实际过程调整阶段。"
+        description="可使用项目默认流程，也可直接定义这次交付的真实阶段。"
         width="lg"
         @close="createOpen = false"
       >
@@ -1038,29 +1060,113 @@ watch(projectId, () => {
           </div>
           <fieldset>
             <legend class="mb-2 text-xs font-medium text-slate-600">
+              此次工作流程
+            </legend>
+            <div class="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                class="rounded-xl border p-3 text-left transition"
+                :class="
+                  form.stageMode === 'template'
+                    ? 'border-indigo-300 bg-indigo-50/70 ring-1 ring-indigo-100'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                "
+                @click="form.stageMode = 'template'"
+              >
+                <span class="block text-xs font-semibold text-slate-700"
+                  >使用项目默认流程</span
+                >
+                <span class="mt-1 block text-[10px] leading-4 text-slate-400">
+                  {{
+                    snapshot.project.templateStages
+                      .map((item) => item.name)
+                      .join(' → ') || '当前项目没有默认阶段'
+                  }}
+                </span>
+              </button>
+              <button
+                type="button"
+                class="rounded-xl border p-3 text-left transition"
+                :class="
+                  form.stageMode === 'custom'
+                    ? 'border-indigo-300 bg-indigo-50/70 ring-1 ring-indigo-100'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                "
+                @click="form.stageMode = 'custom'"
+              >
+                <span class="block text-xs font-semibold text-slate-700"
+                  >定义本次真实流程</span
+                >
+                <span class="mt-1 block text-[10px] leading-4 text-slate-400"
+                  >直接创建真实阶段，不产生待取消的模板阶段</span
+                >
+              </button>
+            </div>
+            <div v-if="form.stageMode === 'custom'" class="mt-3 space-y-2">
+              <div
+                v-for="(stage, index) in form.stages"
+                :key="index"
+                class="flex items-center gap-2"
+              >
+                <span
+                  class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-[10px] font-bold text-slate-400"
+                  >{{ index + 1 }}</span
+                >
+                <input
+                  v-model="stage.name"
+                  required
+                  :placeholder="`阶段 ${index + 1}，例如：物料报价`"
+                  class="focus-ring min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-300 focus:bg-white"
+                />
+                <button
+                  type="button"
+                  class="focus-ring grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                  aria-label="移除此阶段"
+                  @click="removeCreateStage(index)"
+                >
+                  <XMarkIcon class="h-4 w-4" />
+                </button>
+              </div>
+              <button
+                type="button"
+                class="focus-ring inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-50"
+                @click="addCreateStage"
+              >
+                <PlusIcon class="h-3.5 w-3.5" />添加阶段
+              </button>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend class="mb-2 text-xs font-medium text-slate-600">
               需求整体协调人（可选）
             </legend>
             <OwnerPicker v-model="form.ownerIds" :people="workspace.people" />
             <p class="mt-2 text-[10px] leading-4 text-slate-400">
-              各阶段会复制项目模板中的默认负责人，创建后仍可分别调整。
+              这里只设置需求的整体协调人；各阶段负责人需要按实际分工独立设置。
             </p>
           </fieldset>
           <div
             class="flex items-center justify-between rounded-2xl bg-indigo-50/60 px-4 py-3 text-xs text-indigo-700"
           >
-            <span
-              >将自动生成
-              {{ snapshot.project.templateStages.length }} 个阶段</span
-            ><span class="font-medium"
-              >{{
-                snapshot.project.templateStages
-                  .slice(0, 4)
-                  .map((item) => item.name)
-                  .join(' → ')
-              }}{{
-                snapshot.project.templateStages.length > 4 ? '…' : ''
-              }}</span
-            >
+            <template v-if="form.stageMode === 'template'">
+              <span
+                >将自动生成
+                {{ snapshot.project.templateStages.length }} 个阶段</span
+              ><span class="font-medium"
+                >{{
+                  snapshot.project.templateStages
+                    .slice(0, 4)
+                    .map((item) => item.name)
+                    .join(' → ')
+                }}{{
+                  snapshot.project.templateStages.length > 4 ? '…' : ''
+                }}</span
+              >
+            </template>
+            <template v-else>
+              <span>将按本次计划创建真实阶段</span>
+              <span class="font-medium">{{ form.stages.length }} 个阶段</span>
+            </template>
           </div>
           <div class="flex justify-end gap-2 border-t border-slate-100 pt-4">
             <button

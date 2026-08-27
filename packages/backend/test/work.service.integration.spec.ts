@@ -91,6 +91,33 @@ describe.sequential('WorkService business rules', () => {
       (await work.getRequirement(first.id)).stages.map((item) => item.name),
     ).toEqual(['设计', '开发']);
     expect(second.stages.map((item) => item.name)).toEqual(['验证']);
+
+    const custom = await work.createRequirement({
+      projectId: project.id,
+      title: '按实际计划创建',
+      stages: [
+        {
+          name: '物料报价',
+          ownerIds: ['owner-a'],
+          plannedEndAt: '2026-08-28T10:00:00.000Z',
+        },
+        { name: '采购下单', note: '报价齐套后开始' },
+      ],
+    });
+    expect(custom.stages).toEqual([
+      expect.objectContaining({
+        name: '物料报价',
+        order: 0,
+        ownerIds: ['owner-a'],
+        baselineEndAt: '2026-08-28T10:00:00.000Z',
+        plannedEndAt: '2026-08-28T10:00:00.000Z',
+      }),
+      expect.objectContaining({
+        name: '采购下单',
+        order: 1,
+        note: '报价齐套后开始',
+      }),
+    ]);
   });
 
   it('assigns requirement, stage and bug owners independently after creation', async () => {
@@ -315,6 +342,30 @@ describe.sequential('WorkService business rules', () => {
     ]);
   });
 
+  it('keeps waiting current when actual start is backfilled at the same time', async () => {
+    const requirement = await work.createRequirement({
+      projectId: appProjectId,
+      title: '等待状态与实际开始一致性',
+      stages: [{ name: '采购流程' }],
+    });
+    const effectiveAt = '2026-08-27T09:00:00.000Z';
+    await work.updateStageStatus(requirement.stages[0]!.id, {
+      status: 'waiting',
+      statusReason: '等待全部报价确认',
+      effectiveAt,
+      actualStartAt: effectiveAt,
+    });
+
+    const stage = (await work.getRequirement(requirement.id)).stages[0]!;
+    expect(stage.status).toBe('waiting');
+    expect(stage.statusReason).toBe('等待全部报价确认');
+    expect(stage.actualStartAt).toBe(effectiveAt);
+    expect(stage.statusHistory.map((item) => item.toStatus)).toEqual([
+      'in_progress',
+      'waiting',
+    ]);
+  });
+
   it('corrects one named history event and keeps a before-and-after audit', async () => {
     const requirement = await work.createRequirement({
       projectId: appProjectId,
@@ -419,10 +470,17 @@ describe.sequential('WorkService business rules', () => {
       currentStageOwnerIds: [owner.id],
       currentStagePlannedStartAt: '2026-02-01T00:00:00.000Z',
       currentStagePlannedEndAt: '2026-02-05T00:00:00.000Z',
+      activeStages: [
+        expect.objectContaining({ name: '开发', status: 'in_progress' }),
+        expect.objectContaining({ name: '验证', status: 'blocked' }),
+      ],
+      nextStages: [],
     });
     expect(summary?.reviewIssues.map((issue) => issue.code)).toEqual([
       'requirement_owner_missing',
       'version_missing',
+      'work_owner_missing',
+      'work_plan_missing',
     ]);
   });
 
@@ -550,6 +608,7 @@ describe.sequential('WorkService business rules', () => {
     await Promise.all([
       work.createVersion(firstProject.id, { name: '试运行' }),
       work.createVersion(secondProject.id, { name: '试运行' }),
+      work.createVersion(firstProject.id, { name: '2.7' }),
     ]);
 
     const versions = await work.search('试运行', ['version']);
@@ -557,6 +616,9 @@ describe.sequential('WorkService business rules', () => {
     expect(versions.map((item) => item.projectName).sort()).toEqual([
       '搜索项目乙',
       '搜索项目甲',
+    ]);
+    expect(await work.search('2.7.0-alpha.1', ['version'])).toEqual([
+      expect.objectContaining({ name: '2.7', projectName: '搜索项目甲' }),
     ]);
     expect(await work.search('', ['project'], 50)).toEqual(
       expect.arrayContaining([
@@ -645,6 +707,16 @@ describe.sequential('WorkService business rules', () => {
     expect(snapshot.openBugs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ requirementId: requirement.id, type: 'bug' }),
+      ]),
+    );
+    expect(snapshot.reviewItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          requirementId: requirement.id,
+          requirementKey: requirement.key,
+          targetName: '方案评审',
+          code: 'work_plan_missing',
+        }),
       ]),
     );
 

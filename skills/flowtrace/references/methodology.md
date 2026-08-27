@@ -119,10 +119,14 @@ list such as `FW-12、FW-14、FW-18` is not a meaningful progress summary.
 For a Project or Version status report:
 
 1. Use the corresponding Snapshot.
-2. Report counts and name the concrete waiting, blocked, delayed, open-Bug, and
+2. Read every Requirement's `activeStages`; never assume the singular
+   `currentStage` represents parallel work.
+3. Report counts and name the concrete waiting, blocked, delayed, open-Bug, and
    external-dependency items that matter.
-3. Separate recorded facts from your inference.
-4. Do not invent slogans, health scores, or commitments not present in data.
+4. Review `reviewItems` separately and name missing owners, plans, or target
+   Versions that prevent a reliable management review.
+5. Separate recorded facts from your inference.
+6. Do not invent slogans, health scores, or commitments not present in data.
 
 For a change report, use `get_changes_since` with the narrowest requested scope.
 Report event time, object, before/after when available, reason, and source. A
@@ -133,3 +137,36 @@ with the largest limit the Tool permits. A full result page is evidence that the
 report may be incomplete, not a reason to enumerate the whole database. State
 the coverage limit and ask for a narrower scope if exhaustive reporting matters.
 Use Snapshots only for affected scopes whose present state or risk is needed.
+
+## 8. Reconcile external sources before writing
+
+An external source often uses a different hierarchy from FlowTrace. Product
+names, firmware build tags, manufacturing batches, meeting topics, and sheet
+rows are evidence, not object types.
+
+Map them explicitly:
+
+```text
+source product or platform → Project
+release, build family, batch, or milestone → Version
+independently accepted outcome → Requirement
+real execution phase → Stage
+independently actionable defect → Bug
+```
+
+Search exact identifiers first. If they do not resolve, inspect active Projects
+and Versions rather than accepting the nearest lexical hit. Verify the target
+Project's purpose and its Version neighborhood. A build string may be more
+specific than the maintained Version name; `2.7.0-alpha.1` can legitimately map
+to `2.7`, but this is a hierarchy judgment that must be checked in context.
+
+For a multi-row plan, first identify which rows share one acceptance outcome.
+Rows with different owners or dates can still be parallel Stages of one
+Requirement; rows that can ship, fail, or be deferred independently should be
+separate Requirements. Preserve concrete source facts in descriptions or Stage
+notes. Do not invent owners, dates, dependencies, or statuses to make the plan
+look complete.
+
+After writing, use the Version Snapshot as a reconciliation check. Complete
+means both that expected work exists and that Snapshot `reviewItems` have been
+reviewed; zero blocked items alone is not evidence of completeness.

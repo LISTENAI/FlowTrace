@@ -21,14 +21,24 @@ read path that can answer it:
   asked for a global review.
 - For a current Project or Version overview, resolve the named object with
   `search`, then call its Snapshot Tool.
-- For a Requirement, Stage, Bug, or write, resolve only the named targets with
-  `search`, then call `get_requirement` to verify the current facts and stable
-  IDs.
+- For an existing Requirement, Stage, Bug, or write, resolve only the named
+  targets with `search`, then call `get_requirement` to verify the current
+  facts and stable IDs. For creation, resolve and inspect the target Project
+  and Version first.
 
 If more than one search result could match, show the candidates with Project
 and Version context and ask the user to choose. Never pick by list order. Apply
 the domain rules below and ask one concise question only when a missing choice
 would change the result.
+
+A single lexical search result is still only a candidate when the source uses
+an external product name, build tag, batch name, meeting shorthand, or issue
+number. Verify its Project purpose, neighboring Versions, and current Snapshot
+before writing. If a named build cannot be found, list active Projects and
+Versions and reconcile the source hierarchy; do not create under the nearest
+name merely because it is the only hit. A firmware build such as
+`2.7.0-alpha.1` can belong to delivery Version `2.7` inside a broader firmware
+Project.
 
 Call a write Tool only when the user explicitly requested that change.
 Reading, summarizing, diagnosing, or proposing does not authorize writing.
@@ -49,6 +59,43 @@ Do not query the same scope twice. Add Snapshots only when the user also wants
 current status or risk, or when a change event does not reveal the current
 outcome. Limit those Snapshots to the affected or explicitly requested scopes;
 do not scan every Requirement to enrich a change summary.
+
+When reviewing a Snapshot, treat `activeStages` as the complete set of parallel
+active work and `reviewItems` as the explicit missing-information queue.
+`currentStage` is a compatibility attention hint, not a complete account of
+what is happening. Review both execution exceptions and missing controls:
+waiting, blocked, delayed, open Bugs, dependencies, unassigned owners, missing
+plans, and missing target Versions.
+
+## Source-to-plan writes
+
+For meeting notes, email threads, test reports, spreadsheets, or other external
+plans, reason in this order before the first write:
+
+1. Reconcile the source's product, delivery/build, deliverables, work phases,
+   statuses, owners, dates, dependencies, and defects against FlowTrace.
+2. Search stable source identifiers such as build tags, issue numbers, meeting
+   IDs, or sheet row IDs for existing work. Reuse verified objects instead of
+   creating duplicates, and preserve useful identifiers in Requirement
+   descriptions or Stage notes so a later reconciliation can find them.
+3. Confirm the containing Project and Version. Create a missing Version only
+   when the user's write request covers establishing that delivery boundary.
+4. Group source rows by independently reviewable outcome into Requirements;
+   model execution steps as Stages and independently actionable defects as
+   Bugs. Do not mirror rows mechanically.
+5. When the source already defines the real workflow, pass exact `stages` to
+   `create_requirement`. Never copy a generic template and then cancel it to
+   simulate the real plan.
+6. Apply writes in container-first order: Version, Requirements with Stages,
+   owners and plans, statuses, Bugs, then dependencies. Stop on failure.
+7. Re-read the affected Version Snapshot and report both progress exceptions
+   and every `reviewItem`. Do not call an import complete while required facts
+   remain missing unless the source genuinely omitted them.
+
+Before applying a large source with materially ambiguous grouping or target
+container, show the proposed Project → Version → Requirement → Stage mapping
+and ask one focused question. Do not ask for confirmation merely because there
+are many unambiguous rows and the user already authorized the import.
 
 ## Human-readable reporting
 

@@ -45,6 +45,21 @@ const bugProgress = computed(() => {
   );
 });
 
+const activeStageLabel = computed(() => {
+  if (!props.summary.activeStages.length)
+    return (
+      props.summary.currentStage || lifecycleLabels[props.summary.lifecycle]
+    );
+  const names = props.summary.activeStages.map((stage) => stage.name);
+  return names.length > 2
+    ? `${names.slice(0, 2).join('、')}等 ${names.length} 项`
+    : names.join('、');
+});
+
+const activeOwnerIds = computed(() => [
+  ...new Set(props.summary.activeStages.flatMap((stage) => stage.ownerIds)),
+]);
+
 async function loadDetail(force = false) {
   if (detail.value && !force) return;
   loading.value = true;
@@ -125,15 +140,22 @@ async function refreshed() {
           class="hidden w-[25rem] shrink-0 grid-cols-[6rem_2.5rem_7.5rem_5rem] items-center gap-4 md:grid"
         >
           <div>
-            <p class="text-[10px] text-slate-400">当前阶段</p>
-            <p class="mt-0.5 text-xs font-medium text-slate-700">
-              {{ summary.currentStage || lifecycleLabels[summary.lifecycle] }}
+            <p class="text-[10px] text-slate-400">
+              {{ summary.activeStages.length > 1 ? '并行推进' : '当前阶段' }}
+            </p>
+            <p
+              class="mt-0.5 truncate text-xs font-medium text-slate-700"
+              :title="
+                summary.activeStages.map((stage) => stage.name).join('、')
+              "
+            >
+              {{ activeStageLabel }}
             </p>
           </div>
           <div class="flex w-10 justify-start">
             <AvatarStack
-              v-if="summary.currentStageOwnerIds.length"
-              :owner-ids="summary.currentStageOwnerIds"
+              v-if="activeOwnerIds.length"
+              :owner-ids="activeOwnerIds"
               compact
             />
             <span v-else class="text-[10px] text-slate-300">待分配</span>

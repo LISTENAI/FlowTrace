@@ -85,6 +85,13 @@ export const api = {
     ownerIds?: string[];
     plannedStartAt?: string;
     plannedEndAt?: string;
+    stages?: Array<{
+      name: string;
+      ownerIds?: string[];
+      note?: string;
+      plannedStartAt?: string;
+      plannedEndAt?: string;
+    }>;
   }) => request<Requirement>('/requirements', { method: 'POST', body: input }),
   updateRequirement: (id: string, input: Record<string, unknown>) =>
     request<Requirement>(`/requirements/${id}`, {

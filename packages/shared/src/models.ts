@@ -1,3 +1,5 @@
+import type { RequirementReviewIssue } from './review.js';
+
 export const executionStatuses = [
   'not_started',
   'in_progress',
@@ -260,8 +262,27 @@ export interface RequirementSummary extends Omit<
   currentStageOwnerIds: string[];
   currentStagePlannedStartAt?: string;
   currentStagePlannedEndAt?: string;
-  reviewIssues: import('./review.js').RequirementReviewIssue[];
+  activeStages: RequirementStageSummary[];
+  nextStages: RequirementStageSummary[];
+  reviewIssues: RequirementReviewIssue[];
   overdue: boolean;
+}
+
+export interface RequirementStageSummary extends WorkTiming {
+  id: string;
+  name: string;
+  order: number;
+  ownerIds: string[];
+  status: ExecutionStatus;
+  note?: string;
+  statusReason?: string;
+  expectedResumeAt?: string;
+}
+
+export interface SnapshotReviewItem extends RequirementReviewIssue {
+  requirementId: string;
+  requirementKey: string;
+  requirementTitle: string;
 }
 
 export interface SnapshotMetrics {
@@ -279,6 +300,7 @@ export interface ProjectSnapshot {
   versions: Version[];
   metrics: SnapshotMetrics;
   requirements: RequirementSummary[];
+  reviewItems: SnapshotReviewItem[];
   waitingItems: SnapshotWorkItem[];
   blockedItems: SnapshotWorkItem[];
   delayedItems: RequirementSummary[];
