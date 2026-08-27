@@ -30,6 +30,9 @@ const props = withDefaults(
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 const visibleMonth = ref(dayjs().startOf('month'));
 const timeText = ref('09:00');
+const openAbove = ref(false);
+const alignRight = ref(false);
+const panelMaxHeight = ref(480);
 const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
 
 const selected = computed(() => {
@@ -95,12 +98,31 @@ function selectNow() {
   timeText.value = value.format('HH:mm');
   emit('update:modelValue', valueFor(value, timeText.value));
 }
+
+function updatePanelPlacement(event: MouseEvent | KeyboardEvent) {
+  const trigger = event.currentTarget as HTMLElement | null;
+  if (!trigger) return;
+  const rect = trigger.getBoundingClientRect();
+  const panelWidth = Math.min(304, window.innerWidth - 32);
+  const panelHeight = props.mode === 'datetime' ? 430 : 380;
+  const spaceAbove = rect.top - 16;
+  const spaceBelow = window.innerHeight - rect.bottom - 16;
+  openAbove.value = spaceBelow < panelHeight && spaceAbove > spaceBelow;
+  panelMaxHeight.value = Math.max(
+    160,
+    Math.floor(openAbove.value ? spaceAbove : spaceBelow),
+  );
+  alignRight.value = rect.left + panelWidth > window.innerWidth - 16;
+}
 </script>
 
 <template>
   <Popover v-slot="{ close }" as="div" class="relative">
     <PopoverButton
       class="focus-ring flex min-h-10 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm text-slate-700 transition hover:border-slate-300 hover:bg-white"
+      @click="updatePanelPlacement"
+      @keydown.enter="updatePanelPlacement"
+      @keydown.space="updatePanelPlacement"
     >
       <CalendarDaysIcon class="h-4 w-4 shrink-0 text-indigo-500" />
       <span
@@ -123,7 +145,12 @@ function selectNow() {
       leave-to-class="translate-y-1 opacity-0 scale-[.98]"
     >
       <PopoverPanel
-        class="absolute left-0 z-[110] mt-2 w-[19rem] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-xl shadow-slate-900/10 backdrop-blur-xl"
+        class="absolute z-[110] max-h-[calc(100vh-2rem)] w-[19rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-xl shadow-slate-900/10 backdrop-blur-xl"
+        :class="[
+          openAbove ? 'bottom-full mb-2' : 'mt-2',
+          alignRight ? 'right-0' : 'left-0',
+        ]"
+        :style="{ maxHeight: `${panelMaxHeight}px` }"
       >
         <div class="flex items-center justify-between px-1">
           <button

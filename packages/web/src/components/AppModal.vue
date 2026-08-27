@@ -48,7 +48,7 @@ defineEmits<{ close: [] }>();
             leave-to="opacity-0 translate-y-2 scale-[.98]"
           >
             <DialogPanel
-              class="w-full overflow-hidden rounded-[1.4rem] border border-white/70 bg-white shadow-2xl shadow-slate-900/15"
+              class="w-full overflow-visible rounded-[1.4rem] border border-white/70 bg-white shadow-2xl shadow-slate-900/15"
               :class="{
                 'max-w-md': width === 'sm',
                 'max-w-xl': width === 'md',

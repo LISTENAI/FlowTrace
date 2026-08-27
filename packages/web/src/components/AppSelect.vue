@@ -6,7 +6,7 @@ import {
   ListboxOptions,
 } from '@headlessui/vue';
 import { CheckIcon, ChevronUpDownIcon } from '@heroicons/vue/24/outline';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 export interface SelectOption<T> {
   value: T;
@@ -24,16 +24,37 @@ const props = withDefaults(
   { placeholder: '请选择', disabled: false },
 );
 const model = defineModel<T>({ required: true });
+const openAbove = ref(false);
+const alignRight = ref(false);
+const optionsMaxHeight = ref(256);
 
 const selected = computed(() =>
   props.options.find((option) => Object.is(option.value, model.value)),
 );
+
+function updateOptionsPlacement(event: MouseEvent | KeyboardEvent) {
+  const trigger = event.currentTarget as HTMLElement | null;
+  if (!trigger) return;
+  const rect = trigger.getBoundingClientRect();
+  const optionsWidth = Math.max(rect.width, 192);
+  const spaceAbove = rect.top - 16;
+  const spaceBelow = window.innerHeight - rect.bottom - 16;
+  openAbove.value = spaceBelow < 272 && spaceAbove > spaceBelow;
+  optionsMaxHeight.value = Math.max(
+    112,
+    Math.floor(openAbove.value ? spaceAbove : spaceBelow),
+  );
+  alignRight.value = rect.left + optionsWidth > window.innerWidth - 16;
+}
 </script>
 
 <template>
   <Listbox v-model="model" :disabled="disabled" as="div" class="relative">
     <ListboxButton
       class="focus-ring flex min-h-10 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm text-slate-700 transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+      @click="updateOptionsPlacement"
+      @keydown.enter="updateOptionsPlacement"
+      @keydown.space="updateOptionsPlacement"
     >
       <span
         class="min-w-0 flex-1 truncate"
@@ -52,7 +73,12 @@ const selected = computed(() =>
       leave-to-class="translate-y-1 opacity-0 scale-[.98]"
     >
       <ListboxOptions
-        class="absolute z-[110] mt-2 max-h-64 w-full min-w-48 overflow-auto rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl outline-none"
+        class="absolute z-[110] max-h-[min(16rem,calc(100vh-2rem))] w-full min-w-48 overflow-auto rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl outline-none"
+        :class="[
+          openAbove ? 'bottom-full mb-2' : 'mt-2',
+          alignRight ? 'right-0' : 'left-0',
+        ]"
+        :style="{ maxHeight: `${optionsMaxHeight}px` }"
       >
         <ListboxOption
           v-for="option in options"
