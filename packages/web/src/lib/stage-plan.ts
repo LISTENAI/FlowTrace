@@ -1,8 +1,11 @@
+import type { StageWorkDomain } from '@flowtrace/shared';
+
 export interface StagePlanDraft {
   localId: string;
   id?: string;
   templateStageId?: string;
   name: string;
+  workDomain: StageWorkDomain;
   note: string;
   ownerIds: string[];
   plannedStartAt: string;
@@ -18,6 +21,7 @@ export function newStagePlanDraft(
   return {
     localId: `stage-draft-${Date.now()}-${localSequence}`,
     name: '',
+    workDomain: 'other',
     note: '',
     ownerIds: [],
     plannedStartAt: '',

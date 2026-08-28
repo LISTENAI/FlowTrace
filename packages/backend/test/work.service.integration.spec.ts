@@ -10,6 +10,7 @@ import { ProjectRhythms1724515200000 } from '@/database/migrations/1724515200000
 import { SoftDeleteWorkItems1724601600000 } from '@/database/migrations/1724601600000-soft-delete-work-items';
 import { VersionSortOrder1724688000000 } from '@/database/migrations/1724688000000-version-sort-order';
 import { AiChangeContext1724774400000 } from '@/database/migrations/1724774400000-ai-change-context';
+import { StageWorkDomains1724860800000 } from '@/database/migrations/1724860800000-stage-work-domains';
 import { DomainModule } from '@/domain/domain.module';
 import { WorkService } from '@/domain/work.service';
 
@@ -31,6 +32,7 @@ describe.sequential('WorkService business rules', () => {
             SoftDeleteWorkItems1724601600000,
             VersionSortOrder1724688000000,
             AiChangeContext1724774400000,
+            StageWorkDomains1724860800000,
           ],
           migrationsRun: true,
           synchronize: false,
@@ -71,7 +73,10 @@ describe.sequential('WorkService business rules', () => {
     const project = await work.createProject({
       key: 'APP',
       name: '客户端',
-      templateStages: [{ name: '设计' }, { name: '开发' }],
+      templateStages: [
+        { name: '设计' },
+        { name: '开发', workDomain: 'implementation' },
+      ],
     });
     appProjectId = project.id;
     const first = await work.createRequirement({
@@ -90,7 +95,15 @@ describe.sequential('WorkService business rules', () => {
     expect(
       (await work.getRequirement(first.id)).stages.map((item) => item.name),
     ).toEqual(['设计', '开发']);
+    expect(
+      (await work.getRequirement(first.id)).stages.map(
+        (item) => item.workDomain,
+      ),
+    ).toEqual(['design', 'implementation']);
     expect(second.stages.map((item) => item.name)).toEqual(['验证']);
+    expect(second.stages.map((item) => item.workDomain)).toEqual([
+      'verification',
+    ]);
 
     const custom = await work.createRequirement({
       projectId: project.id,
@@ -248,7 +261,10 @@ describe.sequential('WorkService business rules', () => {
     expect(inserted.stages.map((stage) => stage.order)).toEqual([0, 1, 2, 3]);
 
     const testing = inserted.stages.find((stage) => stage.name === '测试')!;
-    await work.updateStage(testing.id, { order: 1 });
+    await work.updateStage(testing.id, {
+      order: 1,
+      workDomain: 'implementation',
+    });
     const reordered = await work.getRequirement(requirement.id);
     expect(reordered.stages.map((stage) => stage.name)).toEqual([
       '设计',
@@ -257,6 +273,7 @@ describe.sequential('WorkService business rules', () => {
       '开发',
     ]);
     expect(reordered.stages.map((stage) => stage.order)).toEqual([0, 1, 2, 3]);
+    expect(reordered.stages[1]?.workDomain).toBe('implementation');
   });
 
   it('soft deletes requirements and stages after explicit confirmation', async () => {

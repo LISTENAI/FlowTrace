@@ -13,7 +13,12 @@ import {
 import dayjs from 'dayjs';
 import { computed, ref, watch } from 'vue';
 import AppDateTimeField from '@/components/AppDateTimeField.vue';
+import AppSelect from '@/components/AppSelect.vue';
 import OwnerPicker from '@/components/OwnerPicker.vue';
+import {
+  stageWorkDomainLabels,
+  stageWorkDomainOptions,
+} from '@/lib/presentation';
 import { newStagePlanDraft, type StagePlanDraft } from '@/lib/stage-plan';
 
 const props = withDefaults(
@@ -51,6 +56,10 @@ const selectedRow = computed(() =>
 const selectedOwnerIds = computed({
   get: () => selectedRow.value?.ownerIds ?? [],
   set: (ownerIds: string[]) => updateSelectedRow({ ownerIds }),
+});
+const selectedWorkDomain = computed({
+  get: () => selectedRow.value?.workDomain ?? 'other',
+  set: (workDomain) => updateSelectedRow({ workDomain }),
 });
 const selectedPlannedStartAt = computed({
   get: () => selectedRow.value?.plannedStartAt ?? '',
@@ -166,7 +175,9 @@ function scheduleLabel(row: StagePlanDraft) {
 </script>
 
 <template>
-  <section class="rounded-2xl border border-slate-200 bg-slate-50/50">
+  <section
+    class="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50"
+  >
     <template v-if="compact">
       <div
         class="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2.5"
@@ -183,13 +194,13 @@ function scheduleLabel(row: StagePlanDraft) {
         </button>
       </div>
 
-      <div v-if="modelValue.length" class="p-3">
-        <div class="overflow-x-auto pb-2">
+      <div v-if="modelValue.length" class="min-w-0 p-3">
+        <div class="w-full min-w-0 max-w-full overflow-x-auto pb-2">
           <div class="flex min-w-max items-center gap-2">
             <template v-for="(row, index) in modelValue" :key="row.localId">
               <button
                 type="button"
-                class="focus-ring min-w-32 max-w-44 rounded-xl border px-3 py-2 text-left transition"
+                class="focus-ring w-40 shrink-0 rounded-xl border px-3 py-2 text-left transition"
                 :class="
                   selectedRowId === row.localId
                     ? 'border-indigo-300 bg-white shadow-sm ring-2 ring-indigo-100'
@@ -204,6 +215,10 @@ function scheduleLabel(row: StagePlanDraft) {
                 <span
                   class="mt-1 flex items-center gap-1.5 text-[10px] text-slate-400"
                 >
+                  <span class="shrink-0 text-indigo-500">{{
+                    stageWorkDomainLabels[row.workDomain]
+                  }}</span>
+                  <span class="text-slate-300">·</span>
                   <span class="max-w-20 truncate">{{ ownerLabel(row) }}</span>
                   <span v-if="showSchedule" class="text-slate-300">·</span>
                   <span v-if="showSchedule">{{ scheduleLabel(row) }}</span>
@@ -219,9 +234,22 @@ function scheduleLabel(row: StagePlanDraft) {
 
         <div
           v-if="selectedRow"
-          class="mt-1 grid gap-3 rounded-xl border border-indigo-100 bg-white p-3 lg:items-end"
-          :class="showSchedule ? 'lg:grid-cols-[1fr_9.5rem_9.5rem]' : ''"
+          class="mt-1 grid min-w-0 gap-3 rounded-xl border border-indigo-100 bg-white p-3 sm:grid-cols-2 xl:items-start"
+          :class="
+            showSchedule
+              ? 'xl:grid-cols-[8.5rem_minmax(0,1fr)_9.5rem_9.5rem]'
+              : 'xl:grid-cols-[8.5rem_minmax(0,1fr)]'
+          "
         >
+          <label class="min-w-0">
+            <span class="mb-1 block text-[10px] font-medium text-slate-500"
+              >工作分类</span
+            >
+            <AppSelect
+              v-model="selectedWorkDomain"
+              :options="stageWorkDomainOptions"
+            />
+          </label>
           <label class="min-w-0">
             <span class="mb-1 block text-[10px] font-medium text-slate-500"
               >{{ selectedRow.name || '当前阶段' }}负责人</span
@@ -297,31 +325,32 @@ function scheduleLabel(row: StagePlanDraft) {
 
       <div
         v-if="modelValue.length"
-        class="hidden gap-2 px-3 pb-1 pt-2 text-[10px] font-medium text-slate-400 lg:grid"
+        class="hidden gap-3 px-4 pb-1 pt-2 text-[10px] font-medium text-slate-400 lg:grid"
         :class="
           showSchedule
-            ? 'grid-cols-[2.5rem_minmax(10rem,1fr)_8.5rem_9.25rem_9.25rem_2rem]'
-            : 'grid-cols-[2.5rem_minmax(10rem,1fr)_8.5rem_2rem]'
+            ? 'grid-cols-[3rem_minmax(15rem,1fr)_9rem_minmax(18rem,21rem)_2rem]'
+            : 'grid-cols-[3rem_minmax(15rem,1fr)_10rem_2rem]'
         "
       >
-        <span>顺序</span><span>阶段名称与说明</span><span>负责人</span
-        ><template v-if="showSchedule"
-          ><span>计划开始</span><span>计划结束</span></template
-        ><span />
+        <span>顺序</span><span>阶段</span><span>负责人</span
+        ><span v-if="showSchedule">计划时间</span><span />
       </div>
 
-      <div v-if="modelValue.length" class="space-y-2 p-2 pt-1">
+      <div
+        v-if="modelValue.length"
+        class="mx-2 mb-2 overflow-visible rounded-xl border border-slate-200 bg-white"
+      >
         <article
           v-for="(row, index) in modelValue"
           :key="row.localId"
-          class="rounded-xl border border-slate-200 bg-white shadow-sm shadow-slate-900/[.025]"
+          class="relative border-b border-slate-100 bg-white transition last:border-b-0 focus-within:z-20 focus-within:bg-indigo-50/20 hover:bg-slate-50/50"
         >
           <div
-            class="grid gap-2 p-2.5 lg:items-center"
+            class="grid gap-3 p-3 lg:items-center"
             :class="
               showSchedule
-                ? 'lg:grid-cols-[2.5rem_minmax(10rem,1fr)_8.5rem_9.25rem_9.25rem_2rem]'
-                : 'lg:grid-cols-[2.5rem_minmax(10rem,1fr)_8.5rem_2rem]'
+                ? 'lg:grid-cols-[3rem_minmax(15rem,1fr)_9rem_minmax(18rem,21rem)_2rem]'
+                : 'lg:grid-cols-[3rem_minmax(15rem,1fr)_10rem_2rem]'
             "
           >
             <div class="flex items-center gap-0.5 max-lg:justify-between">
@@ -351,28 +380,37 @@ function scheduleLabel(row: StagePlanDraft) {
               </span>
             </div>
 
-            <div class="min-w-0 space-y-1.5">
+            <div class="min-w-0">
               <input
                 :value="row.name"
                 required
                 :placeholder="`阶段 ${index + 1} 的名称`"
-                class="focus-ring w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-indigo-300 focus:bg-white"
+                class="focus-ring w-full rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-200 hover:bg-white focus:border-indigo-300 focus:bg-white"
                 @input="
                   updateRow(index, {
                     name: ($event.target as HTMLInputElement).value,
                   })
                 "
               />
-              <input
-                :value="row.note"
-                placeholder="阶段说明（可选）"
-                class="focus-ring w-full rounded-lg border border-transparent bg-transparent px-2.5 py-1 text-[10px] text-slate-500 outline-none hover:border-slate-200 hover:bg-slate-50 focus:border-indigo-200 focus:bg-white"
-                @input="
-                  updateRow(index, {
-                    note: ($event.target as HTMLInputElement).value,
-                  })
-                "
-              />
+              <div class="mt-1 flex min-w-0 items-center gap-2 px-2">
+                <AppSelect
+                  :model-value="row.workDomain"
+                  compact
+                  class="w-32 shrink-0"
+                  :options="stageWorkDomainOptions"
+                  @update:model-value="updateRow(index, { workDomain: $event })"
+                />
+                <input
+                  :value="row.note"
+                  placeholder="添加说明"
+                  class="focus-ring min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-[10px] text-slate-500 outline-none hover:border-slate-200 hover:bg-white focus:border-indigo-200 focus:bg-white"
+                  @input="
+                    updateRow(index, {
+                      note: ($event.target as HTMLInputElement).value,
+                    })
+                  "
+                />
+              </div>
             </div>
 
             <button
@@ -387,27 +425,23 @@ function scheduleLabel(row: StagePlanDraft) {
               <span class="min-w-0 flex-1 truncate">{{ ownerLabel(row) }}</span>
             </button>
 
-            <label v-if="showSchedule" class="min-w-0">
-              <span class="mb-1 block text-[10px] text-slate-400 lg:hidden"
-                >计划开始</span
-              >
+            <div
+              v-if="showSchedule"
+              class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5"
+            >
               <AppDateTimeField
                 :model-value="row.plannedStartAt"
                 @update:model-value="
                   updateRow(index, { plannedStartAt: $event })
                 "
               />
-            </label>
-            <label v-if="showSchedule" class="min-w-0">
-              <span class="mb-1 block text-[10px] text-slate-400 lg:hidden"
-                >计划结束</span
-              >
+              <ArrowRightIcon class="h-3.5 w-3.5 shrink-0 text-slate-300" />
               <AppDateTimeField
                 :model-value="row.plannedEndAt"
                 :min="row.plannedStartAt"
                 @update:model-value="updateRow(index, { plannedEndAt: $event })"
               />
-            </label>
+            </div>
 
             <button
               v-if="!row.id || allowRemoveExisting"

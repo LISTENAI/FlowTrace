@@ -2,6 +2,7 @@ import type {
   ExecutionStatus,
   HealthStatus,
   RequirementLifecycle,
+  StageWorkDomain,
   VersionStatus,
 } from '@flowtrace/shared';
 import dayjs from 'dayjs';
@@ -34,6 +35,19 @@ export const versionLabels: Record<VersionStatus, string> = {
   released: '已发布',
   canceled: '已取消',
 };
+
+export const stageWorkDomainLabels: Record<StageWorkDomain, string> = {
+  product: '产品与需求',
+  design: '方案与设计',
+  implementation: '研发执行',
+  verification: '联调与验证',
+  delivery: '发布交付',
+  other: '其他',
+};
+
+export const stageWorkDomainOptions = Object.entries(stageWorkDomainLabels).map(
+  ([value, label]) => ({ value: value as StageWorkDomain, label }),
+);
 
 export const statusDot: Record<ExecutionStatus, string> = {
   not_started: 'bg-slate-300',

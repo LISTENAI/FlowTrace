@@ -1,4 +1,4 @@
-import type { ExecutionStatus } from '@flowtrace/shared';
+import type { ExecutionStatus, StageWorkDomain } from '@flowtrace/shared';
 import { Column, DeleteDateColumn, Entity, Index } from 'typeorm';
 import { BaseEntity } from '@/database/entities/base';
 
@@ -13,6 +13,9 @@ export class StageEntity extends BaseEntity {
 
   @Column('text')
   name!: string;
+
+  @Column('text', { default: 'other' })
+  workDomain!: StageWorkDomain;
 
   @Column('integer')
   order!: number;

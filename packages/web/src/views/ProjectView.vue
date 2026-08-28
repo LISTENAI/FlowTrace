@@ -4,7 +4,9 @@ import type {
   Requirement,
   RequirementSummary,
   SnapshotWorkItem,
+  StageWorkDomain,
 } from '@flowtrace/shared';
+import { stageWorkDomains } from '@flowtrace/shared';
 import {
   AdjustmentsHorizontalIcon,
   ArrowPathIcon,
@@ -33,6 +35,7 @@ import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
 import StagePlanEditor from '@/components/StagePlanEditor.vue';
 import TimelineView from '@/components/TimelineView.vue';
 import { formatDate, versionLabels } from '@/lib/presentation';
+import { stageWorkDomainLabels } from '@/lib/presentation';
 import { newStagePlanDraft, type StagePlanDraft } from '@/lib/stage-plan';
 import { toasts } from '@/state/toasts';
 import { loadWorkspace, workspace } from '@/state/workspace';
@@ -49,6 +52,8 @@ const timelineExpansionMode = ref<'smart' | 'depth' | 'custom'>('smart');
 const timelineExpansionDepth = ref(1);
 const timelineExpansionOpen = ref(false);
 const timelineFocusOpen = ref(false);
+const timelineExactFocusOpen = ref(false);
+const timelineFocusedDomains = ref<StageWorkDomain[]>([]);
 const timelineFocusedStages = ref<string[]>([]);
 const timelineIncludeBugs = ref(false);
 const timelineRequirements = ref<Requirement[]>([]);
@@ -223,19 +228,45 @@ const timelineStageOptions = computed(() => {
         left.name.localeCompare(right.name, 'zh-CN'),
     );
 });
+const timelineDomainOptions = computed(() => {
+  const counts = new Map<StageWorkDomain, number>();
+  for (const requirement of filteredTimelineRequirements.value) {
+    for (const domain of new Set(
+      requirement.stages.map((stage) => stage.workDomain),
+    ))
+      counts.set(domain, (counts.get(domain) ?? 0) + 1);
+  }
+  return stageWorkDomains
+    .filter((domain) => counts.has(domain))
+    .map((domain) => ({
+      domain,
+      label: stageWorkDomainLabels[domain],
+      count: counts.get(domain) ?? 0,
+    }));
+});
 const timelineFocusLabel = computed(() => {
+  if (timelineFocusedDomains.value.length === 1)
+    return stageWorkDomainLabels[timelineFocusedDomains.value[0]!];
+  if (timelineFocusedDomains.value.length > 1)
+    return `${timelineFocusedDomains.value.length} 个工作域`;
   if (!timelineFocusedStages.value.length) return '全流程';
   if (timelineFocusedStages.value.length === 1)
     return timelineFocusedStages.value[0];
   return `${timelineFocusedStages.value.length} 个阶段`;
 });
 const focusedTimelineRequirementCount = computed(() => {
-  if (!timelineFocusedStages.value.length)
+  if (
+    !timelineFocusedDomains.value.length &&
+    !timelineFocusedStages.value.length
+  )
     return filteredTimelineRequirements.value.length;
+  const domains = new Set(timelineFocusedDomains.value);
   const names = new Set(timelineFocusedStages.value);
   return filteredTimelineRequirements.value.filter(
     (requirement) =>
-      requirement.stages.some((stage) => names.has(stage.name)) ||
+      requirement.stages.some(
+        (stage) => domains.has(stage.workDomain) || names.has(stage.name),
+      ) ||
       (timelineIncludeBugs.value && requirement.bugs.length > 0),
   ).length;
 });
@@ -273,12 +304,21 @@ function selectTimelineExpansion(value: 'smart' | number) {
 }
 
 function toggleTimelineStage(name: string) {
+  timelineFocusedDomains.value = [];
   timelineFocusedStages.value = timelineFocusedStages.value.includes(name)
     ? timelineFocusedStages.value.filter((item) => item !== name)
     : [...timelineFocusedStages.value, name];
 }
 
+function toggleTimelineDomain(domain: StageWorkDomain) {
+  timelineFocusedStages.value = [];
+  timelineFocusedDomains.value = timelineFocusedDomains.value.includes(domain)
+    ? timelineFocusedDomains.value.filter((item) => item !== domain)
+    : [...timelineFocusedDomains.value, domain];
+}
+
 function clearTimelineFocus() {
+  timelineFocusedDomains.value = [];
   timelineFocusedStages.value = [];
   timelineIncludeBugs.value = false;
 }
@@ -336,6 +376,7 @@ function openCreate() {
     newStagePlanDraft({
       templateStageId: stage.id,
       name: stage.name,
+      workDomain: stage.workDomain,
       ownerIds: [...stage.ownerIds],
     }),
   );
@@ -378,6 +419,7 @@ async function createRequirement() {
       stages: form.stages.map((stage) => ({
         templateStageId: stage.templateStageId,
         name: stage.name.trim(),
+        workDomain: stage.workDomain,
         note: stage.note.trim() || undefined,
         ownerIds: stage.ownerIds,
         plannedStartAt:
@@ -875,7 +917,10 @@ watch(timelineStageOptions, (options) => {
                   timelineFocusLabel
                 }}</span>
                 <span
-                  v-if="timelineFocusedStages.length"
+                  v-if="
+                    timelineFocusedDomains.length ||
+                    timelineFocusedStages.length
+                  "
                   class="text-[9px] tabular-nums text-slate-400"
                   >{{ focusedTimelineRequirementCount }}/{{
                     filteredTimelineRequirements.length
@@ -902,16 +947,23 @@ watch(timelineStageOptions, (options) => {
                 <button
                   type="button"
                   role="menuitemcheckbox"
-                  :aria-checked="!timelineFocusedStages.length"
+                  :aria-checked="
+                    !timelineFocusedDomains.length &&
+                    !timelineFocusedStages.length
+                  "
                   class="focus-ring flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50"
                   :class="
-                    !timelineFocusedStages.length ? 'bg-indigo-50/70' : ''
+                    !timelineFocusedDomains.length &&
+                    !timelineFocusedStages.length
+                      ? 'bg-indigo-50/70'
+                      : ''
                   "
                   @click="clearTimelineFocus"
                 >
                   <span
                     class="grid h-5 w-5 shrink-0 place-items-center rounded-md border"
                     :class="
+                      !timelineFocusedDomains.length &&
                       !timelineFocusedStages.length
                         ? 'border-indigo-500 bg-indigo-500 text-white'
                         : 'border-slate-200 text-transparent'
@@ -930,23 +982,23 @@ watch(timelineStageOptions, (options) => {
                 </button>
                 <div class="my-1 h-px bg-slate-100" />
                 <button
-                  v-for="item in timelineStageOptions"
-                  :key="item.name"
+                  v-for="item in timelineDomainOptions"
+                  :key="item.domain"
                   type="button"
                   role="menuitemcheckbox"
-                  :aria-checked="timelineFocusedStages.includes(item.name)"
+                  :aria-checked="timelineFocusedDomains.includes(item.domain)"
                   class="focus-ring flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-slate-50"
                   :class="
-                    timelineFocusedStages.includes(item.name)
+                    timelineFocusedDomains.includes(item.domain)
                       ? 'bg-indigo-50/70'
                       : ''
                   "
-                  @click="toggleTimelineStage(item.name)"
+                  @click="toggleTimelineDomain(item.domain)"
                 >
                   <span
                     class="grid h-5 w-5 shrink-0 place-items-center rounded-md border"
                     :class="
-                      timelineFocusedStages.includes(item.name)
+                      timelineFocusedDomains.includes(item.domain)
                         ? 'border-indigo-500 bg-indigo-500 text-white'
                         : 'border-slate-200 text-transparent'
                     "
@@ -955,14 +1007,64 @@ watch(timelineStageOptions, (options) => {
                   </span>
                   <span
                     class="min-w-0 flex-1 truncate text-xs font-medium text-slate-700"
-                    >{{ item.name }}</span
+                    >{{ item.label }}</span
                   >
                   <span class="text-[10px] tabular-nums text-slate-400"
                     >{{ item.count }} 项</span
                   >
                 </button>
+                <div class="my-1 h-px bg-slate-100" />
+                <button
+                  type="button"
+                  class="focus-ring flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[11px] font-medium text-slate-500 transition hover:bg-slate-50 hover:text-indigo-600"
+                  :aria-expanded="timelineExactFocusOpen"
+                  @click="timelineExactFocusOpen = !timelineExactFocusOpen"
+                >
+                  按具体环节
+                  <ChevronDownIcon
+                    class="h-3.5 w-3.5 transition"
+                    :class="timelineExactFocusOpen ? 'rotate-180' : ''"
+                  />
+                </button>
+                <template v-if="timelineExactFocusOpen">
+                  <button
+                    v-for="item in timelineStageOptions"
+                    :key="item.name"
+                    type="button"
+                    role="menuitemcheckbox"
+                    :aria-checked="timelineFocusedStages.includes(item.name)"
+                    class="focus-ring flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-slate-50"
+                    :class="
+                      timelineFocusedStages.includes(item.name)
+                        ? 'bg-indigo-50/70'
+                        : ''
+                    "
+                    @click="toggleTimelineStage(item.name)"
+                  >
+                    <span
+                      class="grid h-5 w-5 shrink-0 place-items-center rounded-md border"
+                      :class="
+                        timelineFocusedStages.includes(item.name)
+                          ? 'border-indigo-500 bg-indigo-500 text-white'
+                          : 'border-slate-200 text-transparent'
+                      "
+                    >
+                      <CheckIcon class="h-3 w-3" />
+                    </span>
+                    <span
+                      class="min-w-0 flex-1 truncate text-xs font-medium text-slate-700"
+                      >{{ item.name }}</span
+                    >
+                    <span class="text-[10px] tabular-nums text-slate-400"
+                      >{{ item.count }} 项</span
+                    >
+                  </button>
+                </template>
                 <label
-                  v-if="timelineFocusedStages.length"
+                  v-if="
+                    timelineFocusedDomains.length ||
+                    timelineFocusedStages.length
+                  "
                   class="mt-1 flex cursor-pointer items-center gap-3 rounded-xl border-t border-slate-100 px-3 py-2.5 text-xs text-slate-600"
                 >
                   <input
@@ -972,9 +1074,6 @@ watch(timelineStageOptions, (options) => {
                   />
                   同时包含 Bug
                 </label>
-                <p class="px-3 py-2 text-[10px] leading-4 text-slate-400">
-                  选项来自当前筛选结果中真实存在的阶段；可以多选。
-                </p>
               </div>
             </div>
 
@@ -1079,6 +1178,7 @@ watch(timelineStageOptions, (options) => {
             :requirements="filteredTimelineRequirements"
             :versions="timelineVersions"
             :people="workspace.people"
+            :focused-stage-domains="timelineFocusedDomains"
             :focused-stage-names="timelineFocusedStages"
             :include-bugs="timelineIncludeBugs"
             :restore-token="timelineRestoreToken"
@@ -1093,7 +1193,7 @@ watch(timelineStageOptions, (options) => {
         width="xl"
         @close="createOpen = false"
       >
-        <form class="space-y-5" @submit.prevent="createRequirement">
+        <form class="min-w-0 space-y-5" @submit.prevent="createRequirement">
           <label class="block"
             ><span class="mb-1.5 block text-xs font-medium text-slate-600"
               >需求标题</span
@@ -1115,7 +1215,9 @@ watch(timelineStageOptions, (options) => {
             />
           </label>
           <section>
-            <div class="mb-2 flex items-center justify-between gap-3">
+            <div
+              class="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
+            >
               <h3 class="text-xs font-medium text-slate-600">版本与计划</h3>
               <button
                 type="button"
@@ -1169,8 +1271,13 @@ watch(timelineStageOptions, (options) => {
               </div>
             </div>
           </section>
-          <fieldset aria-labelledby="create-flow-label">
-            <div class="mb-2 flex items-center justify-between gap-3">
+          <fieldset
+            aria-labelledby="create-flow-label"
+            class="min-w-0 max-w-full"
+          >
+            <div
+              class="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
+            >
               <span
                 id="create-flow-label"
                 class="text-xs font-medium text-slate-600"
@@ -1205,7 +1312,7 @@ watch(timelineStageOptions, (options) => {
               @request-collapse="createFlowExpanded = false"
             />
           </fieldset>
-          <fieldset>
+          <fieldset class="min-w-0">
             <legend class="mb-2 text-xs font-medium text-slate-600">
               需求协调人（可选）
             </legend>

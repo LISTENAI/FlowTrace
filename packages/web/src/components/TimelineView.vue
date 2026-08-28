@@ -5,6 +5,7 @@ import type {
   Person,
   Requirement,
   Stage,
+  StageWorkDomain,
   Version,
   VersionStatus,
 } from '@flowtrace/shared';
@@ -34,7 +35,12 @@ import { useRouter } from 'vue-router';
 import { api } from '@/api';
 import AppModal from '@/components/AppModal.vue';
 import OwnerPicker from '@/components/OwnerPicker.vue';
-import { formatDate, statusDot, statusLabels } from '@/lib/presentation';
+import {
+  formatDate,
+  stageWorkDomainLabels,
+  statusDot,
+  statusLabels,
+} from '@/lib/presentation';
 import PlanningDialog from '@/components/PlanningDialog.vue';
 import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
 import TimelineBar from '@/components/TimelineBar.vue';
@@ -61,11 +67,20 @@ type VersionGroup = {
   version?: Version;
   requirements: Requirement[];
 };
+type StageFocusGroup = {
+  kind: 'domain';
+  id: string;
+  workDomain: StageWorkDomain;
+  stages: Stage[];
+};
+type StageFocusRow =
+  StageFocusGroup | { kind: 'stage'; id: string; stage: Stage };
 
 const props = defineProps<{
   requirements: Requirement[];
   versions: Version[];
   people: Person[];
+  focusedStageDomains?: StageWorkDomain[];
   focusedStageNames?: string[];
   includeBugs?: boolean;
   restoreToken?: number;
@@ -79,6 +94,7 @@ const expansionDepth = defineModel<number>('expansionDepth', { default: 1 });
 
 const expandedVersions = reactive(new Set<string>());
 const expandedRequirements = reactive(new Set<string>());
+const expandedStageGroups = reactive(new Set<string>());
 const expandedBugGroups = reactive(new Set<string>());
 const timelineSurface = ref<HTMLElement>();
 const scrollContainer = ref<HTMLElement>();
@@ -289,12 +305,86 @@ function mergeRanges(ranges: Array<DateRange | undefined>) {
   };
 }
 
-const hasStageFocus = computed(() => Boolean(props.focusedStageNames?.length));
+const hasDomainFocus = computed(() =>
+  Boolean(props.focusedStageDomains?.length),
+);
+const hasStageFocus = computed(() =>
+  Boolean(props.focusedStageDomains?.length || props.focusedStageNames?.length),
+);
 
 function visibleStages(requirement: Requirement) {
   if (!hasStageFocus.value) return requirement.stages;
+  const domains = new Set(props.focusedStageDomains);
   const names = new Set(props.focusedStageNames);
-  return requirement.stages.filter((stage) => names.has(stage.name));
+  return requirement.stages.filter(
+    (stage) => domains.has(stage.workDomain) || names.has(stage.name),
+  );
+}
+
+function focusedDomainGroups(requirement: Requirement): StageFocusGroup[] {
+  const stages = visibleStages(requirement);
+  return (props.focusedStageDomains ?? []).flatMap((workDomain) => {
+    const matching = stages.filter((stage) => stage.workDomain === workDomain);
+    return matching.length
+      ? [
+          {
+            kind: 'domain' as const,
+            id: `${requirement.id}:${workDomain}`,
+            workDomain,
+            stages: matching,
+          },
+        ]
+      : [];
+  });
+}
+
+function stageFocusRows(requirement: Requirement): StageFocusRow[] {
+  if (!hasDomainFocus.value)
+    return visibleStages(requirement).map((stage) => ({
+      kind: 'stage' as const,
+      id: stage.id,
+      stage,
+    }));
+  return focusedDomainGroups(requirement).flatMap((group) => {
+    if (group.stages.length === 1)
+      return [
+        {
+          kind: 'stage' as const,
+          id: group.stages[0]!.id,
+          stage: group.stages[0]!,
+        },
+      ];
+    return [
+      group,
+      ...(expandedStageGroups.has(group.id)
+        ? group.stages.map((stage) => ({
+            kind: 'stage' as const,
+            id: stage.id,
+            stage,
+          }))
+        : []),
+    ];
+  });
+}
+
+function stageGroupDateRange(group: StageFocusGroup, mode: TimelineMode) {
+  return mergeRanges(group.stages.map((stage) => itemDateRange(stage, mode)));
+}
+
+function stageGroupStatus(group: StageFocusGroup): ExecutionStatus {
+  if (group.stages.some((stage) => stage.status === 'blocked'))
+    return 'blocked';
+  if (group.stages.some((stage) => stage.status === 'waiting'))
+    return 'waiting';
+  if (group.stages.some((stage) => stage.status === 'in_progress'))
+    return 'in_progress';
+  if (
+    group.stages.every((stage) => ['done', 'canceled'].includes(stage.status))
+  )
+    return group.stages.some((stage) => stage.status === 'done')
+      ? 'done'
+      : 'canceled';
+  return 'not_started';
 }
 
 function visibleBugs(requirement: Requirement) {
@@ -428,6 +518,13 @@ function pruneSet(set: Set<string>, validIds: Set<string>) {
 
 function syncExpansion() {
   const requirements = groups.value.flatMap((group) => group.requirements);
+  const stageGroupIds = new Set(
+    requirements.flatMap((requirement) =>
+      focusedDomainGroups(requirement)
+        .filter((group) => group.stages.length > 1)
+        .map((group) => group.id),
+    ),
+  );
   if (expansionMode.value === 'custom') {
     pruneSet(expandedVersions, new Set(groups.value.map((group) => group.id)));
     pruneSet(
@@ -438,6 +535,7 @@ function syncExpansion() {
       expandedBugGroups,
       new Set(requirements.map((requirement) => requirement.id)),
     );
+    pruneSet(expandedStageGroups, stageGroupIds);
     return;
   }
 
@@ -449,6 +547,7 @@ function syncExpansion() {
         .map((group) => group.id),
     );
     expandedRequirements.clear();
+    expandedStageGroups.clear();
     expandedBugGroups.clear();
     return;
   }
@@ -462,6 +561,10 @@ function syncExpansion() {
     expansionDepth.value >= 2
       ? requirements.map((requirement) => requirement.id)
       : [],
+  );
+  replaceSet(
+    expandedStageGroups,
+    expansionDepth.value >= 3 ? [...stageGroupIds] : [],
   );
   replaceSet(
     expandedBugGroups,
@@ -1227,101 +1330,175 @@ watch(
               </div>
 
               <template v-if="expandedRequirements.has(requirement.id)">
-                <div
-                  v-for="stage in visibleStages(requirement)"
-                  :key="stage.id"
-                  class="timeline-grid group grid border-b border-slate-100/80 bg-white"
+                <template
+                  v-for="row in stageFocusRows(requirement)"
+                  :key="row.id"
                 >
-                  <div
-                    class="sticky left-0 z-20 flex h-10 items-center gap-1 border-r border-slate-100 bg-white pl-12 pr-3 transition hover:bg-slate-50"
+                  <button
+                    v-if="row.kind === 'domain'"
+                    type="button"
+                    class="timeline-grid group grid w-full border-b border-indigo-100 bg-indigo-50/30 text-left hover:bg-indigo-50/50"
+                    @click="toggle(expandedStageGroups, row.id)"
                   >
-                    <button
-                      type="button"
-                      v-tooltip="`记录「${stage.name}」的进展`"
-                      class="focus-ring grid h-6 w-6 shrink-0 place-items-center rounded-lg hover:bg-slate-100"
-                      :aria-label="`记录「${stage.name}」的进展`"
-                      @click="statusTarget = stage"
+                    <div
+                      class="sticky left-0 z-20 flex h-10 items-center gap-2 border-r border-indigo-100 bg-indigo-50/60 pl-12 pr-4 backdrop-blur group-hover:bg-indigo-50"
                     >
-                      <span
-                        class="h-2 w-2 rounded-full"
-                        :class="statusDot[stage.status]"
+                      <ChevronDownIcon
+                        class="h-3.5 w-3.5 text-indigo-400 transition"
+                        :class="
+                          expandedStageGroups.has(row.id) ? '' : '-rotate-90'
+                        "
                       />
-                    </button>
-                    <button
-                      type="button"
-                      v-tooltip="
-                        itemDateRange(stage)
-                          ? `定位到${stage.name}的开始日期`
-                          : '该阶段暂无时间记录'
-                      "
-                      class="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
-                      :class="
-                        itemDateRange(stage)
-                          ? 'cursor-pointer'
-                          : 'cursor-default'
-                      "
-                      @click="scrollToItem(stage)"
-                    >
                       <span
-                        class="min-w-0 flex-1 truncate text-[11px] text-slate-600"
-                        >{{ stage.name }}</span
+                        class="h-2 w-2 shrink-0 rounded-full"
+                        :class="statusDot[stageGroupStatus(row)]"
+                      />
+                      <span
+                        class="min-w-0 flex-1 truncate text-[11px] font-semibold text-slate-700"
                       >
-                    </button>
-                    <button
-                      type="button"
-                      v-tooltip="'分配负责人'"
-                      class="timeline-row-action focus-ring"
-                      :aria-label="`分配「${stage.name}」的负责人`"
-                      @click="openOwners(stage)"
+                        {{ stageWorkDomainLabels[row.workDomain] }}
+                      </span>
+                      <span class="shrink-0 text-[10px] text-slate-400">
+                        {{ row.stages.length }} 个环节
+                      </span>
+                    </div>
+                    <TimelineBar
+                      :days="range.days"
+                      :bar-style="styleFor(stageGroupDateRange(row, 'current'))"
+                      bar-class="top-[14px] h-3 bg-indigo-300/90"
+                      :bar-title="
+                        rangeTooltip(
+                          '当前计划',
+                          stageGroupDateRange(row, 'current'),
+                          '展开后可调整具体环节',
+                        )
+                      "
+                      :baseline-style="
+                        styleFor(stageGroupDateRange(row, 'baseline'))
+                      "
+                      :baseline-title="
+                        rangeTooltip(
+                          '初始计划边界',
+                          stageGroupDateRange(row, 'baseline'),
+                          '由组内环节汇总',
+                        )
+                      "
+                      :actual-style="
+                        styleFor(stageGroupDateRange(row, 'actual'))
+                      "
+                      :actual-class="statusDot[stageGroupStatus(row)]"
+                      :actual-title="
+                        rangeTooltip(
+                          `实际进展（${statusLabels[stageGroupStatus(row)]}）`,
+                          stageGroupDateRange(row, 'actual'),
+                          '由组内环节汇总',
+                        )
+                      "
+                      @pan-start="startTimelinePan"
+                    />
+                  </button>
+
+                  <div
+                    v-else
+                    class="timeline-grid group grid border-b border-slate-100/80 bg-white"
+                  >
+                    <div
+                      class="sticky left-0 z-20 flex h-10 items-center gap-1 border-r border-slate-100 bg-white pl-12 pr-3 transition hover:bg-slate-50"
                     >
-                      <UserPlusIcon class="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      v-tooltip="`调整「${stage.name}」的计划`"
-                      class="timeline-row-action focus-ring"
-                      :aria-label="`调整「${stage.name}」的计划`"
-                      @click="openPlanning(stage)"
-                    >
-                      <CalendarDaysIcon class="h-3.5 w-3.5" />
-                    </button>
+                      <button
+                        type="button"
+                        v-tooltip="`记录「${row.stage.name}」的进展`"
+                        class="focus-ring grid h-6 w-6 shrink-0 place-items-center rounded-lg hover:bg-slate-100"
+                        :aria-label="`记录「${row.stage.name}」的进展`"
+                        @click="statusTarget = row.stage"
+                      >
+                        <span
+                          class="h-2 w-2 rounded-full"
+                          :class="statusDot[row.stage.status]"
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        v-tooltip="
+                          itemDateRange(row.stage)
+                            ? `定位到${row.stage.name}的开始日期`
+                            : '该阶段暂无时间记录'
+                        "
+                        class="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
+                        :class="
+                          itemDateRange(row.stage)
+                            ? 'cursor-pointer'
+                            : 'cursor-default'
+                        "
+                        @click="scrollToItem(row.stage)"
+                      >
+                        <span
+                          class="min-w-0 flex-1 truncate text-[11px] text-slate-600"
+                          >{{ row.stage.name }}</span
+                        >
+                      </button>
+                      <button
+                        type="button"
+                        v-tooltip="'分配负责人'"
+                        class="timeline-row-action focus-ring"
+                        :aria-label="`分配「${row.stage.name}」的负责人`"
+                        @click="openOwners(row.stage)"
+                      >
+                        <UserPlusIcon class="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        v-tooltip="`调整「${row.stage.name}」的计划`"
+                        class="timeline-row-action focus-ring"
+                        :aria-label="`调整「${row.stage.name}」的计划`"
+                        @click="openPlanning(row.stage)"
+                      >
+                        <CalendarDaysIcon class="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <TimelineBar
+                      :days="range.days"
+                      :bar-style="styleFor(displayedItemRange(row.stage))"
+                      bar-class="top-[14px] h-3 bg-indigo-200/90"
+                      :bar-title="
+                        rangeTooltip(
+                          '当前计划',
+                          itemDateRange(row.stage, 'current'),
+                          '可拖动主条或两端调整日期',
+                        )
+                      "
+                      :baseline-style="
+                        styleFor(itemDateRange(row.stage, 'baseline'))
+                      "
+                      :baseline-title="
+                        rangeTooltip(
+                          '初始计划边界',
+                          itemDateRange(row.stage, 'baseline'),
+                          '仅作为基准参照',
+                        )
+                      "
+                      :actual-style="
+                        styleFor(itemDateRange(row.stage, 'actual'))
+                      "
+                      :actual-class="statusDot[row.stage.status]"
+                      :actual-title="
+                        rangeTooltip(
+                          `实际进展（${statusLabels[row.stage.status]}）`,
+                          itemDateRange(row.stage, 'actual'),
+                          '点击实际进展线或左侧状态圆点记录变化',
+                        )
+                      "
+                      :actual-segments="segments(row.stage)"
+                      actual-interactive
+                      :interactive="
+                        Boolean(itemDateRange(row.stage, 'current'))
+                      "
+                      @pan-start="startTimelinePan"
+                      @bar-drag-start="startScheduleDrag(row.stage, $event)"
+                      @actual-activate="statusTarget = row.stage"
+                    />
                   </div>
-                  <TimelineBar
-                    :days="range.days"
-                    :bar-style="styleFor(displayedItemRange(stage))"
-                    bar-class="top-[14px] h-3 bg-indigo-200/90"
-                    :bar-title="
-                      rangeTooltip(
-                        '当前计划',
-                        itemDateRange(stage, 'current'),
-                        '可拖动主条或两端调整日期',
-                      )
-                    "
-                    :baseline-style="styleFor(itemDateRange(stage, 'baseline'))"
-                    :baseline-title="
-                      rangeTooltip(
-                        '初始计划边界',
-                        itemDateRange(stage, 'baseline'),
-                        '仅作为基准参照',
-                      )
-                    "
-                    :actual-style="styleFor(itemDateRange(stage, 'actual'))"
-                    :actual-class="statusDot[stage.status]"
-                    :actual-title="
-                      rangeTooltip(
-                        `实际进展（${statusLabels[stage.status]}）`,
-                        itemDateRange(stage, 'actual'),
-                        '点击实际进展线或左侧状态圆点记录变化',
-                      )
-                    "
-                    :actual-segments="segments(stage)"
-                    actual-interactive
-                    :interactive="Boolean(itemDateRange(stage, 'current'))"
-                    @pan-start="startTimelinePan"
-                    @bar-drag-start="startScheduleDrag(stage, $event)"
-                    @actual-activate="statusTarget = stage"
-                  />
-                </div>
+                </template>
 
                 <button
                   v-if="visibleBugs(requirement).length"

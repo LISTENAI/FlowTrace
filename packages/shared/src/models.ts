@@ -16,6 +16,15 @@ export type HealthStatus = 'normal' | 'waiting' | 'blocked';
 export type VersionStatus = 'planning' | 'active' | 'released' | 'canceled';
 export type ChangeSource = 'manual' | 'api' | 'agent';
 export type DependencyTargetType = 'requirement' | 'stage' | 'bug';
+export const stageWorkDomains = [
+  'product',
+  'design',
+  'implementation',
+  'verification',
+  'delivery',
+  'other',
+] as const;
+export type StageWorkDomain = (typeof stageWorkDomains)[number];
 export const searchEntityTypes = [
   'project',
   'version',
@@ -44,6 +53,7 @@ export interface Person {
 export interface TemplateStage {
   id: string;
   name: string;
+  workDomain: StageWorkDomain;
   order: number;
   ownerIds: string[];
   dependsOnTemplateStageIds: string[];
@@ -129,6 +139,7 @@ export interface Stage extends WorkTiming {
   id: string;
   requirementId: string;
   name: string;
+  workDomain: StageWorkDomain;
   order: number;
   ownerIds: string[];
   status: ExecutionStatus;
@@ -271,6 +282,7 @@ export interface RequirementSummary extends Omit<
 export interface RequirementStageSummary extends WorkTiming {
   id: string;
   name: string;
+  workDomain: StageWorkDomain;
   order: number;
   ownerIds: string[];
   status: ExecutionStatus;
@@ -319,6 +331,7 @@ export interface SnapshotWorkItem extends WorkTiming {
   id: string;
   key?: string;
   name: string;
+  workDomain?: StageWorkDomain;
   status: ExecutionStatus;
   reason?: string;
   expectedResumeAt?: string;

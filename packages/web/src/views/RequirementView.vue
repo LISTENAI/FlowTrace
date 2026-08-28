@@ -329,6 +329,7 @@ function openStageMaintenance() {
     newStagePlanDraft({
       id: stage.id,
       name: stage.name,
+      workDomain: stage.workDomain,
       note: stage.note ?? '',
       ownerIds: [...stage.ownerIds],
       plannedStartAt: stageDate(stage.plannedStartAt),
@@ -375,6 +376,7 @@ async function saveStageMaintenance() {
       if (!draft.id) {
         await api.addStage(requirement.value.id, {
           name: draft.name.trim(),
+          workDomain: draft.workDomain,
           note: draft.note.trim(),
           ownerIds: draft.ownerIds,
           order,
@@ -389,12 +391,14 @@ async function saveStageMaintenance() {
       if (!original) continue;
       if (
         draft.name.trim() !== original.name ||
+        draft.workDomain !== original.workDomain ||
         draft.note.trim() !== (original.note ?? '') ||
         !sameOwners(draft.ownerIds, original.ownerIds) ||
         order !== original.order
       ) {
         await api.updateStage(draft.id, {
           name: draft.name.trim(),
+          workDomain: draft.workDomain,
           note: draft.note.trim(),
           ownerIds: draft.ownerIds,
           order,
@@ -790,7 +794,7 @@ watch(id, load);
             </div>
             <form
               v-if="stageMaintenanceOpen"
-              class="space-y-4 p-4 sm:p-5"
+              class="min-w-0 space-y-4 p-4 sm:p-5"
               @submit.prevent="saveStageMaintenance"
             >
               <StagePlanEditor

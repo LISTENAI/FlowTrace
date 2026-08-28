@@ -170,13 +170,18 @@ describe('FlowTrace MCP Server', () => {
       arguments: {
         requirement_id: 'requirement-1',
         name: '联调',
+        work_domain: 'verification',
         order: 2,
         agent_name: '验收调用方',
       },
     });
     expect(request).toHaveBeenCalledWith('/requirements/requirement-1/stages', {
       method: 'POST',
-      body: expect.objectContaining({ order: 2, source: 'agent' }),
+      body: expect.objectContaining({
+        workDomain: 'verification',
+        order: 2,
+        source: 'agent',
+      }),
     });
 
     await client.callTool({
@@ -245,6 +250,7 @@ describe('FlowTrace MCP Server', () => {
         stages: [
           {
             name: '物料报价',
+            work_domain: 'implementation',
             owner_ids: ['person-1'],
             planned_end_at: '2026-08-28T10:00:00.000Z',
           },
@@ -259,6 +265,7 @@ describe('FlowTrace MCP Server', () => {
         stages: [
           expect.objectContaining({
             name: '物料报价',
+            workDomain: 'implementation',
             ownerIds: ['person-1'],
           }),
           expect.objectContaining({ name: '采购下单' }),

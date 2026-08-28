@@ -16,7 +16,11 @@ import AppDateTimeField from '@/components/AppDateTimeField.vue';
 import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
 import { createLocalId } from '@/lib/local-id';
-import { formatDate, versionLabels } from '@/lib/presentation';
+import {
+  formatDate,
+  stageWorkDomainOptions,
+  versionLabels,
+} from '@/lib/presentation';
 import { toasts } from '@/state/toasts';
 import { loadWorkspace } from '@/state/workspace';
 
@@ -56,6 +60,7 @@ function addStage() {
   stages.value.push({
     id: createLocalId(),
     name: '新阶段',
+    workDomain: 'other',
     order: stages.value.length,
     ownerIds: [],
     dependsOnTemplateStageIds: [],
@@ -227,6 +232,12 @@ onMounted(async () => {
             ><input
               v-model="stage.name"
               class="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-700 outline-none"
+            />
+            <AppSelect
+              v-model="stage.workDomain"
+              compact
+              class="col-span-3 sm:col-auto sm:w-36"
+              :options="stageWorkDomainOptions"
             />
             <div
               class="col-span-3 flex items-center justify-end gap-1 border-t border-slate-200/70 pt-2 sm:contents"

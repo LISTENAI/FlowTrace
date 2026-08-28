@@ -10,6 +10,7 @@ import type {
   Requirement,
   RequirementSummary,
   Stage,
+  StageWorkDomain,
   TemplateStage,
   Version,
 } from '@flowtrace/shared';
@@ -20,7 +21,7 @@ export const api = {
   createProjectRhythm: (input: {
     name: string;
     description?: string;
-    stages: Array<{ name: string }>;
+    stages: Array<{ name: string; workDomain?: StageWorkDomain }>;
   }) =>
     request<ProjectRhythm>('/project-rhythms', {
       method: 'POST',
@@ -42,7 +43,7 @@ export const api = {
     key: string;
     name: string;
     description?: string;
-    templateStages: Array<{ name: string }>;
+    templateStages: Array<{ name: string; workDomain?: StageWorkDomain }>;
   }) => request<Project>('/projects', { method: 'POST', body: input }),
   updateProject: (id: string, input: { name?: string; description?: string }) =>
     request<Project>(`/projects/${id}`, { method: 'PATCH', body: input }),
@@ -57,6 +58,7 @@ export const api = {
     projectId: string,
     input: {
       name: string;
+      workDomain?: StageWorkDomain;
       status?: string;
       plannedStartAt?: string;
       plannedReleaseAt?: string;

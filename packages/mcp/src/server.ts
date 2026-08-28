@@ -41,6 +41,14 @@ const statusSchema = z.enum([
   'done',
   'canceled',
 ]);
+const stageWorkDomainSchema = z.enum([
+  'product',
+  'design',
+  'implementation',
+  'verification',
+  'delivery',
+  'other',
+]);
 
 type JsonObject = Record<string, unknown>;
 type ToolWarning = { code: string; message: string; dependency_id?: string };
@@ -350,6 +358,7 @@ export function createFlowTraceMcpServer(
           .array(
             z.object({
               name: z.string().min(1),
+              work_domain: stageWorkDomainSchema.optional(),
               owner_ids: z.array(z.string()).default([]),
               note: z.string().optional(),
               planned_start_at: z.string().optional(),
@@ -377,6 +386,7 @@ export function createFlowTraceMcpServer(
             plannedEndAt: input.planned_end_at,
             stages: input.stages?.map((stage) => ({
               name: stage.name,
+              workDomain: stage.work_domain,
               ownerIds: stage.owner_ids,
               note: stage.note,
               plannedStartAt: stage.planned_start_at,
@@ -489,6 +499,9 @@ export function createFlowTraceMcpServer(
       inputSchema: {
         requirement_id: z.string(),
         name: z.string().min(1),
+        work_domain: stageWorkDomainSchema
+          .optional()
+          .describe('跨需求聚焦使用的工作域；省略时按名称推断'),
         order: z.number().int().min(0).optional(),
         owner_ids: z.array(z.string()).default([]),
         note: z.string().optional(),
@@ -507,6 +520,7 @@ export function createFlowTraceMcpServer(
             method: 'POST',
             body: {
               name: input.name,
+              workDomain: input.work_domain,
               order: input.order,
               ownerIds: input.owner_ids,
               note: input.note,
@@ -523,10 +537,11 @@ export function createFlowTraceMcpServer(
     'update_stage',
     {
       description:
-        '修改既有阶段的名称、说明或顺序。只传需要修改的字段；order 从 0 开始。负责人使用 assign_owners，状态使用 update_stage_status，排期使用 reschedule_stage。',
+        '修改既有阶段的名称、工作域、说明或顺序。只传需要修改的字段；order 从 0 开始。负责人使用 assign_owners，状态使用 update_stage_status，排期使用 reschedule_stage。',
       inputSchema: {
         stage_id: z.string(),
         name: z.string().min(1).optional(),
+        work_domain: stageWorkDomainSchema.optional(),
         note: z.string().optional(),
         order: z.number().int().min(0).optional(),
         ...sourceSchema,
@@ -540,6 +555,7 @@ export function createFlowTraceMcpServer(
           method: 'PATCH',
           body: {
             name: input.name,
+            workDomain: input.work_domain,
             note: input.note,
             order: input.order,
             ...writeBody(input),

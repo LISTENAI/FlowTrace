@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import type { ProjectRhythm, TemplateStage } from '@flowtrace/shared';
+import type {
+  ProjectRhythm,
+  StageWorkDomain,
+  TemplateStage,
+} from '@flowtrace/shared';
 import {
   CheckIcon,
   ChevronLeftIcon,
@@ -11,7 +15,9 @@ import {
 import { onMounted, reactive, ref } from 'vue';
 import { api } from '@/api';
 import AppModal from '@/components/AppModal.vue';
+import AppSelect from '@/components/AppSelect.vue';
 import { createLocalId } from '@/lib/local-id';
+import { stageWorkDomainOptions } from '@/lib/presentation';
 import { toasts } from '@/state/toasts';
 
 const rhythms = ref<ProjectRhythm[]>([]);
@@ -22,7 +28,11 @@ const deleteTarget = ref<ProjectRhythm>();
 const newForm = reactive({
   name: '',
   description: '',
-  stages: ['需求梳理', '执行', '验证'],
+  stages: [
+    { name: '需求梳理', workDomain: 'product' as StageWorkDomain },
+    { name: '执行', workDomain: 'implementation' as StageWorkDomain },
+    { name: '验证', workDomain: 'verification' as StageWorkDomain },
+  ],
 });
 
 onMounted(load);
@@ -40,6 +50,7 @@ function emptyStage(order: number): TemplateStage {
   return {
     id: createLocalId(),
     name: '新环节',
+    workDomain: 'other',
     order,
     ownerIds: [],
     dependsOnTemplateStageIds: [],
@@ -92,14 +103,13 @@ async function save(rhythm: ProjectRhythm) {
 }
 
 function addNewStage() {
-  newForm.stages.push('');
+  newForm.stages.push({ name: '', workDomain: 'other' });
 }
 
 async function createRhythm() {
   const stages = newForm.stages
-    .map((name) => name.trim())
-    .filter(Boolean)
-    .map((name) => ({ name }));
+    .map((stage) => ({ ...stage, name: stage.name.trim() }))
+    .filter((stage) => stage.name);
   if (!newForm.name.trim() || !stages.length) return;
   savingId.value = 'new';
   try {
@@ -112,7 +122,13 @@ async function createRhythm() {
     createOpen.value = false;
     newForm.name = '';
     newForm.description = '';
-    newForm.stages.splice(0, newForm.stages.length, '需求梳理', '执行', '验证');
+    newForm.stages.splice(
+      0,
+      newForm.stages.length,
+      { name: '需求梳理', workDomain: 'product' },
+      { name: '执行', workDomain: 'implementation' },
+      { name: '验证', workDomain: 'verification' },
+    );
     toasts.show('项目节奏已添加', `「${created.name}」现在可用于创建项目`);
   } catch (error) {
     toasts.show(
@@ -192,7 +208,7 @@ async function confirmDelete() {
       <article
         v-for="(rhythm, rhythmIndex) in rhythms"
         :key="rhythm.id"
-        class="surface overflow-hidden"
+        class="surface relative overflow-visible focus-within:z-30"
       >
         <div
           class="grid gap-5 p-5 lg:grid-cols-[15rem_1fr_auto] lg:items-start"
@@ -226,12 +242,12 @@ async function confirmDelete() {
               >默认环节</span
             >
             <div
-              class="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2"
+              class="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-2"
             >
               <div
                 v-for="(stage, index) in rhythm.stages"
                 :key="stage.id"
-                class="group flex min-h-10 min-w-0 items-center rounded-xl border border-slate-200 bg-white shadow-sm focus-within:border-indigo-300"
+                class="group relative grid min-h-10 min-w-0 grid-cols-[auto_minmax(0,1fr)_8rem_auto_auto_auto] items-center rounded-xl border border-slate-200 bg-white shadow-sm focus-within:z-20 focus-within:border-indigo-300"
               >
                 <span
                   class="pl-2.5 font-mono text-[10px] font-semibold text-slate-300"
@@ -241,6 +257,12 @@ async function confirmDelete() {
                   v-model="stage.name"
                   :aria-label="`${rhythm.name}第 ${index + 1} 个环节`"
                   class="min-w-0 flex-1 bg-transparent px-2 py-2 text-xs font-medium text-slate-700 outline-none"
+                />
+                <AppSelect
+                  v-model="stage.workDomain"
+                  compact
+                  class="w-32"
+                  :options="stageWorkDomainOptions"
                 />
                 <button
                   type="button"
@@ -298,7 +320,7 @@ async function confirmDelete() {
           </div>
         </div>
         <div
-          class="border-t border-slate-100 bg-slate-50/60 px-5 py-2 text-[10px] text-slate-400"
+          class="rounded-b-2xl border-t border-slate-100 bg-slate-50/60 px-5 py-2 text-[10px] text-slate-400"
         >
           节奏 {{ String(rhythmIndex + 1).padStart(2, '0') }} ·
           {{ rhythm.stages.length }} 个默认环节
@@ -350,7 +372,7 @@ async function confirmDelete() {
           </legend>
           <div class="space-y-2">
             <div
-              v-for="(_, index) in newForm.stages"
+              v-for="(stage, index) in newForm.stages"
               :key="index"
               class="flex items-center gap-2"
             >
@@ -359,9 +381,15 @@ async function confirmDelete() {
                 >{{ index + 1 }}</span
               >
               <input
-                v-model="newForm.stages[index]"
+                v-model="stage.name"
                 required
                 class="focus-ring min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-indigo-300 focus:bg-white"
+              />
+              <AppSelect
+                v-model="stage.workDomain"
+                compact
+                class="w-36 shrink-0"
+                :options="stageWorkDomainOptions"
               />
               <button
                 v-if="newForm.stages.length > 1"

@@ -373,7 +373,10 @@ async function createProject() {
       key: form.key.toUpperCase(),
       name: form.name,
       description: form.description,
-      templateStages: rhythm.stages.map(({ name }) => ({ name })),
+      templateStages: rhythm.stages.map(({ name, workDomain }) => ({
+        name,
+        workDomain,
+      })),
     });
     await loadWorkspace(true);
     createOpen.value = false;

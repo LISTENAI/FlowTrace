@@ -28,6 +28,7 @@ import type {
   SearchResult,
   SnapshotWorkItem,
   Stage,
+  StageWorkDomain,
   StatusDuration,
   StatusHistory,
   TemplateStage,
@@ -36,6 +37,7 @@ import type {
   VersionSnapshot,
 } from '@flowtrace/shared';
 import {
+  inferStageWorkDomain,
   reviewRequirement,
   searchEntityTypes,
   selectActiveStages,
@@ -719,6 +721,7 @@ export class WorkService {
       const sourceStages: Array<{
         templateStageId?: string;
         name: string;
+        workDomain?: StageWorkDomain;
         order: number;
         ownerIds?: string[];
         note?: string;
@@ -729,6 +732,7 @@ export class WorkService {
           ? project.templateStages.map((template) => ({
               templateStageId: template.id,
               name: template.name,
+              workDomain: template.workDomain,
               order: template.order,
               ownerIds: [],
               note: undefined,
@@ -749,6 +753,8 @@ export class WorkService {
             randomUUID(),
           requirementId: requirement.id,
           name: sourceStage.name.trim(),
+          workDomain:
+            sourceStage.workDomain ?? inferStageWorkDomain(sourceStage.name),
           order: sourceStage.order,
           ownerIds: sourceStage.ownerIds ?? [],
           status: 'not_started',
@@ -965,6 +971,7 @@ export class WorkService {
         id: randomUUID(),
         requirementId: requirement.id,
         name: input.name,
+        workDomain: input.workDomain ?? inferStageWorkDomain(input.name),
         order: targetOrder,
         ownerIds: input.ownerIds ?? [],
         status: 'not_started',
@@ -1006,12 +1013,14 @@ export class WorkService {
 
       const before = {
         name: stage.name,
+        workDomain: stage.workDomain,
         ownerIds: [...stage.ownerIds],
         note: stage.note,
         order: stage.order,
       };
 
       if (input.name !== undefined) stage.name = input.name;
+      if (input.workDomain !== undefined) stage.workDomain = input.workDomain;
       if (input.ownerIds !== undefined) stage.ownerIds = input.ownerIds;
       if (input.note !== undefined) stage.note = input.note || null;
 
@@ -1048,6 +1057,7 @@ export class WorkService {
 
       if (
         input.name !== undefined ||
+        input.workDomain !== undefined ||
         input.ownerIds !== undefined ||
         input.note !== undefined
       ) {
@@ -1062,6 +1072,7 @@ export class WorkService {
             before,
             after: {
               name: stage.name,
+              workDomain: stage.workDomain,
               ownerIds: stage.ownerIds,
               note: stage.note,
               order: stage.order,
@@ -2215,6 +2226,7 @@ export class WorkService {
       id: item.id,
       key: isBug ? item.key : undefined,
       name: isBug ? item.title : item.name,
+      workDomain: isBug ? undefined : item.workDomain,
       status: item.status,
       reason: item.statusReason,
       expectedResumeAt: item.expectedResumeAt,
@@ -2235,6 +2247,7 @@ export class WorkService {
     return {
       id: stage.id,
       name: stage.name,
+      workDomain: stage.workDomain,
       order: stage.order,
       ownerIds: stage.ownerIds,
       status: stage.status,
@@ -2273,7 +2286,10 @@ export class WorkService {
       key: row.key,
       name: row.name,
       description: row.description ?? undefined,
-      templateStages: row.templateStages,
+      templateStages: row.templateStages.map((stage) => ({
+        ...stage,
+        workDomain: stage.workDomain ?? inferStageWorkDomain(stage.name),
+      })),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       metrics,
@@ -2285,7 +2301,10 @@ export class WorkService {
       id: row.id,
       name: row.name,
       description: row.description ?? undefined,
-      stages: row.stages,
+      stages: row.stages.map((stage) => ({
+        ...stage,
+        workDomain: stage.workDomain ?? inferStageWorkDomain(stage.name),
+      })),
       sortOrder: row.sortOrder,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
@@ -2328,6 +2347,7 @@ export class WorkService {
       id: row.id,
       requirementId: row.requirementId,
       name: row.name,
+      workDomain: row.workDomain,
       order: row.order,
       ownerIds: row.ownerIds,
       status: row.status,
@@ -2580,6 +2600,7 @@ export class WorkService {
     stages: Array<{
       id?: string;
       name: string;
+      workDomain?: StageWorkDomain;
       dependsOnTemplateStageIds?: string[];
     }>,
   ): TemplateStage[] {
@@ -2587,6 +2608,7 @@ export class WorkService {
     return stages.map((stage, order) => ({
       id: ids[order] as string,
       name: stage.name,
+      workDomain: stage.workDomain ?? inferStageWorkDomain(stage.name),
       order,
       ownerIds: [],
       dependsOnTemplateStageIds: (stage.dependsOnTemplateStageIds ?? []).filter(

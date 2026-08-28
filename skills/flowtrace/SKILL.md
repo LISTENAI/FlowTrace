@@ -87,9 +87,12 @@ plans, reason in this order before the first write:
    `create_requirement`. Never copy a generic template and then cancel it to
    simulate the real plan.
 6. When reconciling an existing workflow, use `update_stage` to correct a
-   Stage name, note, or order. Use `assign_owners`, `reschedule_stage`, and
-   `update_stage_status` for their separate concerns; do not replace an
-   existing Stage merely to change its metadata.
+   Stage name, work domain, note, or order. Preserve the real Stage name and
+   use the closest work domain for cross-Requirement grouping: product,
+   design, implementation, verification, delivery, or other. Use
+   `assign_owners`, `reschedule_stage`, and `update_stage_status` for their
+   separate concerns; do not replace an existing Stage merely to change its
+   metadata.
 7. Apply writes in container-first order: Version, Requirements with Stages,
    owners and plans, statuses, Bugs, then dependencies. Stop on failure.
 8. Re-read the affected Version Snapshot and report both progress exceptions

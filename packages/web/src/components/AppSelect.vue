@@ -20,8 +20,9 @@ const props = withDefaults(
     options: ReadonlyArray<SelectOption<T>>;
     placeholder?: string;
     disabled?: boolean;
+    compact?: boolean;
   }>(),
-  { placeholder: '请选择', disabled: false },
+  { placeholder: '请选择', disabled: false, compact: false },
 );
 const model = defineModel<T>({ required: true });
 const openAbove = ref(false);
@@ -49,9 +50,19 @@ function updateOptionsPlacement(event: MouseEvent | KeyboardEvent) {
 </script>
 
 <template>
-  <Listbox v-model="model" :disabled="disabled" as="div" class="relative">
+  <Listbox
+    v-model="model"
+    :disabled="disabled"
+    as="div"
+    class="relative min-w-0 focus-within:z-[130]"
+  >
     <ListboxButton
-      class="focus-ring flex min-h-10 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm text-slate-700 transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+      class="focus-ring flex w-full items-center text-left text-slate-700 transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+      :class="
+        compact
+          ? 'h-7 gap-1 rounded-lg border border-slate-200 bg-white px-2 text-[10px] font-medium'
+          : 'min-h-10 gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm'
+      "
       @click="updateOptionsPlacement"
       @keydown.enter="updateOptionsPlacement"
       @keydown.space="updateOptionsPlacement"
@@ -62,7 +73,10 @@ function updateOptionsPlacement(event: MouseEvent | KeyboardEvent) {
       >
         {{ selected?.label ?? placeholder }}
       </span>
-      <ChevronUpDownIcon class="h-4 w-4 shrink-0 text-slate-400" />
+      <ChevronUpDownIcon
+        class="shrink-0 text-slate-400"
+        :class="compact ? 'h-3 w-3' : 'h-4 w-4'"
+      />
     </ListboxButton>
     <Transition
       enter-active-class="transition duration-120 ease-out"

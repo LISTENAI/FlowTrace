@@ -12,6 +12,7 @@ import type {
   Version,
   VersionStatus,
 } from '@flowtrace/shared';
+import { inferStageWorkDomain } from '@flowtrace/shared';
 import { randomUUID } from 'node:crypto';
 import { WorkService } from '@/domain/work.service';
 
@@ -27,6 +28,7 @@ const template = (names: string[]): TemplateStage[] => {
   return names.map((name, order) => ({
     id: ids[order] as string,
     name,
+    workDomain: inferStageWorkDomain(name),
     order,
     ownerIds: [],
     dependsOnTemplateStageIds: order ? [ids[order - 1] as string] : [],

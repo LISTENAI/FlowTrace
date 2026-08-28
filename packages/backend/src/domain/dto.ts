@@ -17,9 +17,11 @@ import {
 import { Type } from 'class-transformer';
 import {
   executionStatuses,
+  stageWorkDomains,
   type ChangeSource,
   type DependencyTargetType,
   type ExecutionStatus,
+  type StageWorkDomain,
   type VersionStatus,
 } from '@flowtrace/shared';
 
@@ -94,6 +96,11 @@ export class TemplateStageDto {
   @IsString()
   @IsNotEmpty()
   name!: string;
+
+  @ApiPropertyOptional({ enum: stageWorkDomains })
+  @IsOptional()
+  @IsIn(stageWorkDomains)
+  workDomain?: StageWorkDomain;
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
@@ -259,6 +266,11 @@ export class CreateRequirementStageDto {
   @IsNotEmpty()
   name!: string;
 
+  @ApiPropertyOptional({ enum: stageWorkDomains })
+  @IsOptional()
+  @IsIn(stageWorkDomains)
+  workDomain?: StageWorkDomain;
+
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
@@ -371,6 +383,11 @@ export class CreateStageDto extends ChangeContextDto {
   @IsNotEmpty()
   name!: string;
 
+  @ApiPropertyOptional({ enum: stageWorkDomains })
+  @IsOptional()
+  @IsIn(stageWorkDomains)
+  workDomain?: StageWorkDomain;
+
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
@@ -404,6 +421,11 @@ export class UpdateStageDto extends ChangeContextDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @ApiPropertyOptional({ enum: stageWorkDomains })
+  @IsOptional()
+  @IsIn(stageWorkDomains)
+  workDomain?: StageWorkDomain;
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
