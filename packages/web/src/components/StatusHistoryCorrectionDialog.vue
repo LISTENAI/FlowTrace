@@ -69,7 +69,7 @@ watch(
 async function save() {
   saving.value = true;
   try {
-    await api.correctStatusHistory(props.history.id, {
+    const updated = await api.correctStatusHistory(props.history.id, {
       status: form.status,
       effectiveAt: dayjs(form.effectiveAt).toISOString(),
       note: form.note,
@@ -80,7 +80,12 @@ async function save() {
           : null,
       reason: form.correctionReason,
     });
-    toasts.show('历史已修正', `${props.itemName} 的实际过程已重算`);
+    toasts.show(
+      '历史已修正',
+      updated.status === form.status
+        ? `${props.itemName} · 当前为「${statusLabels[updated.status]}」`
+        : `此后还有更晚的记录，当前为「${statusLabels[updated.status]}」`,
+    );
     emit('saved');
     emit('close');
   } catch (error) {

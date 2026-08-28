@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import type { ExecutionStatus, Person } from '@flowtrace/shared';
+import type {
+  ExecutionStatus,
+  Person,
+  StatusHistory,
+} from '@flowtrace/shared';
 import { ChevronDownIcon, UserGroupIcon } from '@heroicons/vue/24/outline';
 import dayjs from 'dayjs';
 import { computed, reactive, ref, watch } from 'vue';
@@ -21,6 +25,7 @@ const props = defineProps<{
   expectedResumeAt?: string;
   ownerIds?: string[];
   people?: Person[];
+  statusHistory?: StatusHistory[];
 }>();
 
 const emit = defineEmits<{ close: []; saved: [] }>();
@@ -124,6 +129,17 @@ const ownerSummary = computed(() => {
   if (names.length <= 3) return names.join('、');
   return `${names.slice(0, 3).join('、')}等 ${names.length} 人`;
 });
+const laterHistory = computed(() =>
+  [...(props.statusHistory ?? [])]
+    .filter((item) =>
+      dayjs(item.effectiveAt).isAfter(dayjs(form.effectiveAt)),
+    )
+    .sort(
+      (left, right) =>
+        dayjs(left.effectiveAt).valueOf() - dayjs(right.effectiveAt).valueOf(),
+    ),
+);
+const latestLaterHistory = computed(() => laterHistory.value.at(-1));
 
 function localTime(value?: string) {
   return value ? dayjs(value).format('YYYY-MM-DDTHH:mm') : '';
@@ -167,9 +183,19 @@ async function save() {
       note: recordsProgressEvent.value ? form.note || undefined : undefined,
       ownerIds: ownersChanged.value ? form.ownerIds : undefined,
     };
-    if (props.itemType === 'stage')
-      await api.updateStageStatus(props.itemId, input);
-    else await api.updateBugStatus(props.itemId, input);
+    const updated =
+      props.itemType === 'stage'
+        ? await api.updateStageStatus(props.itemId, input)
+        : await api.updateBugStatus(props.itemId, input);
+    if (recordsProgressEvent.value && updated.status !== form.status) {
+      toasts.show(
+        '进展已补记',
+        `发生时间之后还有更晚的记录，当前仍为「${statusLabels[updated.status]}」`,
+      );
+      emit('saved');
+      emit('close');
+      return;
+    }
     toasts.show(
       !recordsProgressEvent.value &&
         !backfillsStart.value &&
@@ -255,6 +281,15 @@ async function save() {
           将补记一条发生于
           {{ formatDateTime(dayjs(form.effectiveAt).toISOString()) }}
           的进展，时间线会按实际发生时间重排。
+        </p>
+        <p
+          v-if="latestLaterHistory"
+          class="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800"
+        >
+          此后还有 {{ laterHistory.length }} 条进展记录，最后一条是
+          {{ formatDateTime(latestLaterHistory.effectiveAt) }} 的「{{
+            statusLabels[latestLaterHistory.toStatus]
+          }}」。这次补记会保留，但不会成为当前状态；原记录有误时请直接修正历史。
         </p>
       </div>
 

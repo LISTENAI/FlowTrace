@@ -1548,6 +1548,7 @@ watch(
       :expected-resume-at="statusTarget.expectedResumeAt"
       :owner-ids="statusTarget.ownerIds"
       :people="people"
+      :status-history="statusTarget.statusHistory"
       @close="statusTarget = undefined"
       @saved="emit('scheduleSaved')"
     />

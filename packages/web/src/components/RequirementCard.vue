@@ -344,6 +344,7 @@ function openDetail() {
       :expected-resume-at="statusTarget.expectedResumeAt"
       :owner-ids="statusTarget.ownerIds"
       :people="workspace.people"
+      :status-history="statusTarget.statusHistory"
       @close="statusTarget = undefined"
       @saved="refreshed"
     />

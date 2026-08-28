@@ -94,6 +94,7 @@ const assigningOwners = ref(false);
 const stageMaintenanceOpen = ref(false);
 const savingStages = ref(false);
 const stageMaintenanceReason = ref('');
+const historyExpanded = ref(false);
 const stageDrafts = ref<StagePlanDraft[]>([]);
 const candidateRequirements = ref<
   Array<{ id: string; key: string; title: string; projectId: string }>
@@ -226,6 +227,9 @@ const events = computed(() => {
     (a, b) => dayjs(b.time).valueOf() - dayjs(a.time).valueOf(),
   );
 });
+const visibleEvents = computed(() =>
+  historyExpanded.value ? events.value : events.value.slice(0, 20),
+);
 
 const currentWork = computed<Array<Stage | Bug>>(() => {
   if (!requirement.value) return [];
@@ -1237,13 +1241,29 @@ watch(id, load);
             </div>
           </section>
           <section class="surface overflow-hidden">
-            <div class="border-b border-slate-100 px-5 py-4">
-              <h2 class="text-sm font-semibold text-slate-900">最近历史</h2>
-              <p class="mt-0.5 text-[11px] text-slate-400">实际生效时间排序</p>
+            <div
+              class="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4"
+            >
+              <div>
+                <h2 class="text-sm font-semibold text-slate-900">历史记录</h2>
+                <p class="mt-0.5 text-[11px] text-slate-400">
+                  按实际生效时间排序，共 {{ events.length }} 条
+                </p>
+              </div>
+              <button
+                v-if="events.length > 20"
+                type="button"
+                class="focus-ring inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-violet-600 transition hover:bg-violet-50"
+                @click="historyExpanded = !historyExpanded"
+              >
+                {{ historyExpanded ? '收起' : '查看全部' }}
+                <ChevronUpIcon v-if="historyExpanded" class="h-3.5 w-3.5" />
+                <ChevronDownIcon v-else class="h-3.5 w-3.5" />
+              </button>
             </div>
             <div class="max-h-[36rem] overflow-y-auto px-5 py-3">
               <div
-                v-for="event in events.slice(0, 20)"
+                v-for="event in visibleEvents"
                 :key="event.id"
                 class="group/history relative border-l border-slate-200 py-2 pl-4"
               >
@@ -1298,6 +1318,7 @@ watch(id, load);
       :expected-resume-at="statusTarget.expectedResumeAt"
       :owner-ids="statusTarget.ownerIds"
       :people="workspace.people"
+      :status-history="statusTarget.statusHistory"
       @close="statusTarget = undefined"
       @saved="load"
     />
