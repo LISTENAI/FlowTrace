@@ -794,6 +794,25 @@ function handleTimelineWheel(event: WheelEvent) {
   if (remaining > 0) scrollPageBy(-remaining);
 }
 
+let pageScrollBridgeActive = false;
+
+function activatePageScrollBridge() {
+  if (pageScrollBridgeActive) return;
+  window.addEventListener('wheel', handleOuterWheel, { passive: false });
+  window.addEventListener('scroll', keepPageAtTimelineAnchor, {
+    passive: true,
+  });
+  pageScrollBridgeActive = true;
+  keepPageAtTimelineAnchor();
+}
+
+function deactivatePageScrollBridge() {
+  if (!pageScrollBridgeActive) return;
+  window.removeEventListener('wheel', handleOuterWheel);
+  window.removeEventListener('scroll', keepPageAtTimelineAnchor);
+  pageScrollBridgeActive = false;
+}
+
 function styleFor(value?: DateRange) {
   if (!value) return undefined;
   const start = dayjs(value.start).startOf('day');
@@ -866,21 +885,18 @@ function toggle(set: Set<string>, id: string) {
 
 onMounted(() => {
   requestAnimationFrame(scrollToToday);
-  window.addEventListener('wheel', handleOuterWheel, { passive: false });
-  window.addEventListener('scroll', keepPageAtTimelineAnchor, {
-    passive: true,
-  });
-  keepPageAtTimelineAnchor();
+  activatePageScrollBridge();
 });
 
 onBeforeUnmount(() => {
   cancelPointerGesture();
-  window.removeEventListener('wheel', handleOuterWheel);
-  window.removeEventListener('scroll', keepPageAtTimelineAnchor);
+  deactivatePageScrollBridge();
 });
 
 onDeactivated(() => {
   if (!capturedBeforeNavigation) captureScrollPosition();
+  cancelPointerGesture();
+  deactivatePageScrollBridge();
 });
 
 function restoreScrollPosition() {
@@ -899,6 +915,7 @@ function restoreScrollPosition() {
 }
 
 onActivated(async () => {
+  activatePageScrollBridge();
   await nextTick();
   restoreScrollPosition();
 });
