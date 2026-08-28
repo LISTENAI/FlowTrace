@@ -36,6 +36,7 @@ import AvatarStack from '@/components/AvatarStack.vue';
 import DeleteWorkItemDialog from '@/components/DeleteWorkItemDialog.vue';
 import OwnerPicker from '@/components/OwnerPicker.vue';
 import PlanningDialog from '@/components/PlanningDialog.vue';
+import RequirementBasicsDialog from '@/components/RequirementBasicsDialog.vue';
 import StatusHistoryCorrectionDialog from '@/components/StatusHistoryCorrectionDialog.vue';
 import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
 import StagePlanEditor from '@/components/StagePlanEditor.vue';
@@ -92,6 +93,7 @@ const deleting = ref(false);
 const ownerForm = ref<string[]>([]);
 const assigningOwners = ref(false);
 const stageMaintenanceOpen = ref(false);
+const editBasicsOpen = ref(false);
 const savingStages = ref(false);
 const stageMaintenanceReason = ref('');
 const historyExpanded = ref(false);
@@ -669,15 +671,24 @@ watch(id, load);
                 leave-to-class="translate-y-1 opacity-0 scale-95"
               >
                 <MenuItems
-                  class="absolute right-0 z-30 mt-1.5 w-36 origin-top-right rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl outline-none"
+                  class="absolute right-0 z-30 mt-1.5 w-44 origin-top-right rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl outline-none"
                 >
                   <MenuItem v-slot="{ active }">
                     <button
-                      class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-rose-600 transition"
+                      class="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600 transition"
+                      :class="active ? 'bg-slate-100 text-slate-900' : ''"
+                      @click="editBasicsOpen = true"
+                    >
+                      <PencilSquareIcon class="h-4 w-4 shrink-0" />编辑基本信息
+                    </button>
+                  </MenuItem>
+                  <MenuItem v-slot="{ active }">
+                    <button
+                      class="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium text-rose-600 transition"
                       :class="active ? 'bg-rose-50' : ''"
                       @click="deleteTarget = requirement"
                     >
-                      <TrashIcon class="h-4 w-4" />删除需求
+                      <TrashIcon class="h-4 w-4 shrink-0" />删除需求
                     </button>
                   </MenuItem>
                 </MenuItems>
@@ -941,20 +952,20 @@ watch(id, load);
                     >
                       <MenuItem v-slot="{ active }">
                         <button
-                          class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600"
+                          class="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600"
                           :class="active ? 'bg-slate-50 text-indigo-600' : ''"
                           @click="openOwners(stage)"
                         >
-                          <UserPlusIcon class="h-4 w-4" />分配负责人
+                          <UserPlusIcon class="h-4 w-4 shrink-0" />分配负责人
                         </button>
                       </MenuItem>
                       <MenuItem v-slot="{ active }">
                         <button
-                          class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600"
+                          class="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600"
                           :class="active ? 'bg-slate-50 text-indigo-600' : ''"
                           @click="planningTarget = stage"
                         >
-                          <CalendarDaysIcon class="h-4 w-4" />调整计划
+                          <CalendarDaysIcon class="h-4 w-4 shrink-0" />调整计划
                         </button>
                       </MenuItem>
                       <div class="my-1 h-px bg-slate-100" />
@@ -964,11 +975,11 @@ watch(id, load);
                       >
                         <button
                           :disabled="disabled || movingStageId === stage.id"
-                          class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600 disabled:opacity-30"
+                          class="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600 disabled:opacity-30"
                           :class="active ? 'bg-slate-50 text-indigo-600' : ''"
                           @click="moveStage(stage, index, -1)"
                         >
-                          <ChevronUpIcon class="h-4 w-4" />上移阶段
+                          <ChevronUpIcon class="h-4 w-4 shrink-0" />上移阶段
                         </button>
                       </MenuItem>
                       <MenuItem
@@ -977,21 +988,21 @@ watch(id, load);
                       >
                         <button
                           :disabled="disabled || movingStageId === stage.id"
-                          class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600 disabled:opacity-30"
+                          class="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600 disabled:opacity-30"
                           :class="active ? 'bg-slate-50 text-indigo-600' : ''"
                           @click="moveStage(stage, index, 1)"
                         >
-                          <ChevronDownIcon class="h-4 w-4" />下移阶段
+                          <ChevronDownIcon class="h-4 w-4 shrink-0" />下移阶段
                         </button>
                       </MenuItem>
                       <div class="my-1 h-px bg-slate-100" />
                       <MenuItem v-slot="{ active }">
                         <button
-                          class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-rose-600"
+                          class="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium text-rose-600"
                           :class="active ? 'bg-rose-50' : ''"
                           @click="deleteTarget = stage"
                         >
-                          <TrashIcon class="h-4 w-4" />删除阶段
+                          <TrashIcon class="h-4 w-4 shrink-0" />删除阶段
                         </button>
                       </MenuItem>
                     </MenuItems>
@@ -1074,30 +1085,30 @@ watch(id, load);
                   >
                     <MenuItem v-slot="{ active }">
                       <button
-                        class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600"
+                        class="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600"
                         :class="active ? 'bg-slate-50 text-indigo-600' : ''"
                         @click="openOwners(bug)"
                       >
-                        <UserPlusIcon class="h-4 w-4" />分配负责人
+                        <UserPlusIcon class="h-4 w-4 shrink-0" />分配负责人
                       </button>
                     </MenuItem>
                     <MenuItem v-slot="{ active }">
                       <button
-                        class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600"
+                        class="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600"
                         :class="active ? 'bg-slate-50 text-indigo-600' : ''"
                         @click="planningTarget = bug"
                       >
-                        <CalendarDaysIcon class="h-4 w-4" />调整计划
+                        <CalendarDaysIcon class="h-4 w-4 shrink-0" />调整计划
                       </button>
                     </MenuItem>
                     <div class="my-1 h-px bg-slate-100" />
                     <MenuItem v-slot="{ active }">
                       <button
-                        class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-rose-600"
+                        class="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium text-rose-600"
                         :class="active ? 'bg-rose-50' : ''"
                         @click="deleteTarget = bug"
                       >
-                        <TrashIcon class="h-4 w-4" />删除 Bug
+                        <TrashIcon class="h-4 w-4 shrink-0" />删除 Bug
                       </button>
                     </MenuItem>
                   </MenuItems>
@@ -1366,6 +1377,14 @@ watch(id, load);
       "
       :versions="versions"
       @close="planningTarget = undefined"
+      @saved="load"
+    />
+
+    <RequirementBasicsDialog
+      v-if="requirement"
+      :open="editBasicsOpen"
+      :requirement="requirement"
+      @close="editBasicsOpen = false"
       @saved="load"
     />
 

@@ -179,20 +179,20 @@ onMounted(load);
             leave-to-class="translate-y-1 opacity-0 scale-95"
           >
             <MenuItems
-              class="absolute right-0 z-30 mt-1.5 w-36 origin-top-right rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl outline-none"
+              class="absolute right-0 z-30 mt-1.5 w-40 origin-top-right rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl outline-none"
             >
               <MenuItem v-slot="{ active }">
                 <button
-                  class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600 transition"
+                  class="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600 transition"
                   :class="active ? 'bg-slate-100 text-slate-900' : ''"
                   @click="openEdit(person)"
                 >
-                  <PencilSquareIcon class="h-4 w-4" />修改资料
+                  <PencilSquareIcon class="h-4 w-4 shrink-0" />修改资料
                 </button>
               </MenuItem>
               <MenuItem v-slot="{ active }">
                 <button
-                  class="mt-0.5 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition"
+                  class="mt-0.5 flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium transition"
                   :class="[
                     person.active ? 'text-rose-600' : 'text-emerald-600',
                     active
@@ -203,8 +203,8 @@ onMounted(load);
                   ]"
                   @click="toggleActive(person.id, person.active)"
                 >
-                  <NoSymbolIcon v-if="person.active" class="h-4 w-4" />
-                  <CheckCircleIcon v-else class="h-4 w-4" />
+                  <NoSymbolIcon v-if="person.active" class="h-4 w-4 shrink-0" />
+                  <CheckCircleIcon v-else class="h-4 w-4 shrink-0" />
                   {{ person.active ? '停用人员' : '重新启用' }}
                 </button>
               </MenuItem>

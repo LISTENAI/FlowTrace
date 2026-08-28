@@ -96,7 +96,15 @@ export const api = {
       plannedEndAt?: string;
     }>;
   }) => request<Requirement>('/requirements', { method: 'POST', body: input }),
-  updateRequirement: (id: string, input: Record<string, unknown>) =>
+  updateRequirement: (
+    id: string,
+    input: {
+      title?: string;
+      description?: string;
+      ownerIds?: string[];
+      lifecycle?: 'not_started' | 'in_progress' | 'done' | 'canceled';
+    },
+  ) =>
     request<Requirement>(`/requirements/${id}`, {
       method: 'PATCH',
       body: input,

@@ -344,6 +344,7 @@ export class UpdateRequirementDto extends ChangeContextDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   title?: string;
 
   @ApiPropertyOptional()

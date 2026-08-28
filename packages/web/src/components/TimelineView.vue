@@ -11,13 +11,11 @@ import type {
 } from '@flowtrace/shared';
 import { Popover, PopoverButton, PopoverPanel } from '@headlessui/vue';
 import {
-  ArrowTopRightOnSquareIcon,
   BugAntIcon,
   CalendarDaysIcon,
   ChevronDownIcon,
   CubeIcon,
   InformationCircleIcon,
-  UserPlusIcon,
 } from '@heroicons/vue/24/outline';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
@@ -42,8 +40,10 @@ import {
   statusLabels,
 } from '@/lib/presentation';
 import PlanningDialog from '@/components/PlanningDialog.vue';
+import RequirementBasicsDialog from '@/components/RequirementBasicsDialog.vue';
 import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
 import TimelineBar from '@/components/TimelineBar.vue';
+import TimelineItemActionsMenu from '@/components/TimelineItemActionsMenu.vue';
 import { toasts } from '@/state/toasts';
 
 type TimelineMode = 'baseline' | 'current' | 'actual';
@@ -106,6 +106,7 @@ const savedScrollPosition = ref<{
 }>();
 let capturedBeforeNavigation = false;
 const planningTarget = ref<PlanningTarget>();
+const editBasicsTarget = ref<Requirement>();
 const statusTarget = ref<WorkItem>();
 const ownerTarget = ref<SchedulableItem>();
 const ownerForm = ref<string[]>([]);
@@ -1124,7 +1125,7 @@ watch(
                     <p
                       class="mt-3 border-t border-slate-100 pt-3 text-[10px] leading-5 text-slate-400"
                     >
-                      行尾图标依次提供负责人、计划和详情操作；悬停轨道可查看当前事项的具体日期与状态。
+                      行尾更多菜单集中提供编辑、负责人、计划和详情操作；悬停轨道可查看当前事项的具体日期与状态。
                     </p>
                   </PopoverPanel>
                 </Transition>
@@ -1249,46 +1250,15 @@ watch(
                       >{{ requirement.title }}</span
                     >
                   </button>
-                  <button
-                    type="button"
-                    v-tooltip="
-                      `负责人：${
-                        requirement.ownerIds.length
-                          ? requirement.ownerIds
-                              .map(
-                                (id) =>
-                                  people.find((person) => person.id === id)
-                                    ?.name,
-                              )
-                              .filter(Boolean)
-                              .join('、')
-                          : '待分配'
-                      }`
-                    "
-                    class="timeline-row-action focus-ring"
-                    :aria-label="`分配「${requirement.title}」的负责人`"
-                    @click="openOwners(requirement)"
-                  >
-                    <UserPlusIcon class="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    v-tooltip="`调整「${requirement.title}」的计划`"
-                    class="timeline-row-action focus-ring"
-                    :aria-label="`调整「${requirement.title}」的计划`"
-                    @click="openPlanning(requirement)"
-                  >
-                    <CalendarDaysIcon class="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    v-tooltip="'打开完整详情'"
-                    class="timeline-row-action focus-ring"
-                    :aria-label="`打开「${requirement.title}」的完整详情`"
-                    @click="openRequirementDetail(requirement)"
-                  >
-                    <ArrowTopRightOnSquareIcon class="h-3.5 w-3.5" />
-                  </button>
+                  <TimelineItemActionsMenu
+                    :label="requirement.title"
+                    allow-edit
+                    allow-detail
+                    @edit="editBasicsTarget = requirement"
+                    @owners="openOwners(requirement)"
+                    @planning="openPlanning(requirement)"
+                    @detail="openRequirementDetail(requirement)"
+                  />
                 </div>
                 <TimelineBar
                   :days="range.days"
@@ -1437,24 +1407,11 @@ watch(
                           >{{ row.stage.name }}</span
                         >
                       </button>
-                      <button
-                        type="button"
-                        v-tooltip="'分配负责人'"
-                        class="timeline-row-action focus-ring"
-                        :aria-label="`分配「${row.stage.name}」的负责人`"
-                        @click="openOwners(row.stage)"
-                      >
-                        <UserPlusIcon class="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        v-tooltip="`调整「${row.stage.name}」的计划`"
-                        class="timeline-row-action focus-ring"
-                        :aria-label="`调整「${row.stage.name}」的计划`"
-                        @click="openPlanning(row.stage)"
-                      >
-                        <CalendarDaysIcon class="h-3.5 w-3.5" />
-                      </button>
+                      <TimelineItemActionsMenu
+                        :label="row.stage.name"
+                        @owners="openOwners(row.stage)"
+                        @planning="openPlanning(row.stage)"
+                      />
                     </div>
                     <TimelineBar
                       :days="range.days"
@@ -1607,24 +1564,11 @@ watch(
                           >{{ bug.title }}</span
                         >
                       </button>
-                      <button
-                        type="button"
-                        v-tooltip="'分配负责人'"
-                        class="timeline-row-action focus-ring"
-                        :aria-label="`分配「${bug.title}」的负责人`"
-                        @click="openOwners(bug)"
-                      >
-                        <UserPlusIcon class="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        v-tooltip="`调整「${bug.title}」的计划`"
-                        class="timeline-row-action focus-ring"
-                        :aria-label="`调整「${bug.title}」的计划`"
-                        @click="openPlanning(bug)"
-                      >
-                        <CalendarDaysIcon class="h-3.5 w-3.5" />
-                      </button>
+                      <TimelineItemActionsMenu
+                        :label="bug.title"
+                        @owners="openOwners(bug)"
+                        @planning="openPlanning(bug)"
+                      />
                     </div>
                     <TimelineBar
                       :days="range.days"
@@ -1708,6 +1652,14 @@ watch(
       "
       :versions="props.versions"
       @close="planningTarget = undefined"
+      @saved="emit('scheduleSaved')"
+    />
+
+    <RequirementBasicsDialog
+      v-if="editBasicsTarget"
+      :open="Boolean(editBasicsTarget)"
+      :requirement="editBasicsTarget"
+      @close="editBasicsTarget = undefined"
       @saved="emit('scheduleSaved')"
     />
 

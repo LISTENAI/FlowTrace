@@ -12,11 +12,13 @@ import {
   ClockIcon,
   ExclamationTriangleIcon,
   LinkIcon,
+  PencilSquareIcon,
 } from '@heroicons/vue/24/outline';
 import { computed, onActivated, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@/api';
 import AvatarStack from '@/components/AvatarStack.vue';
+import RequirementBasicsDialog from '@/components/RequirementBasicsDialog.vue';
 import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
 import {
   formatDate,
@@ -38,6 +40,7 @@ const open = ref(false);
 const loading = ref(false);
 const detail = ref<Requirement>();
 const statusTarget = ref<Stage | Bug>();
+const editBasicsOpen = ref(false);
 
 const bugProgress = computed(() => {
   if (!props.summary.bugCount) return 0;
@@ -231,12 +234,20 @@ function openDetail() {
           <p class="text-[11px] font-semibold tracking-[.1em] text-slate-400">
             过程轨迹
           </p>
-          <button
-            class="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800"
-            @click.stop="openDetail"
-          >
-            查看完整详情 <ArrowRightIcon class="h-3.5 w-3.5" />
-          </button>
+          <div class="flex items-center gap-3">
+            <button
+              class="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-indigo-700"
+              @click.stop="editBasicsOpen = true"
+            >
+              <PencilSquareIcon class="h-3.5 w-3.5" />编辑信息
+            </button>
+            <button
+              class="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800"
+              @click.stop="openDetail"
+            >
+              查看完整详情 <ArrowRightIcon class="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
         <div
           class="relative space-y-1.5 before:absolute before:bottom-5 before:left-[11px] before:top-5 before:w-px before:bg-slate-200"
@@ -346,6 +357,14 @@ function openDetail() {
       :people="workspace.people"
       :status-history="statusTarget.statusHistory"
       @close="statusTarget = undefined"
+      @saved="refreshed"
+    />
+
+    <RequirementBasicsDialog
+      v-if="detail"
+      :open="editBasicsOpen"
+      :requirement="detail"
+      @close="editBasicsOpen = false"
       @saved="refreshed"
     />
   </article>

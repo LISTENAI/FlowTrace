@@ -173,6 +173,24 @@ describe.sequential('HTTP API', () => {
     expect(requirementResponse.body.key).toBe('WEB-1');
     expect(requirementResponse.body.stages).toHaveLength(2);
 
+    const updatedRequirement = await request(app.getHttpServer())
+      .patch(`/api/requirements/${requirementResponse.body.id}`)
+      .send({
+        title: '搭建项目概览',
+        description: '让团队快速了解当前研发进展。',
+      })
+      .expect(200);
+    expect(updatedRequirement.body).toMatchObject({
+      id: requirementResponse.body.id,
+      key: 'WEB-1',
+      title: '搭建项目概览',
+      description: '让团队快速了解当前研发进展。',
+    });
+    await request(app.getHttpServer())
+      .patch(`/api/requirements/${requirementResponse.body.id}`)
+      .send({ title: '' })
+      .expect(400);
+
     const customResponse = await request(app.getHttpServer())
       .post('/api/requirements')
       .send({
@@ -211,6 +229,10 @@ describe.sequential('HTTP API', () => {
           type: 'requirement_created',
           source: 'agent',
           agentName: '验收 Agent',
+        }),
+        expect.objectContaining({
+          type: 'requirement_updated',
+          entityId: requirementResponse.body.id,
         }),
       ]),
     );
