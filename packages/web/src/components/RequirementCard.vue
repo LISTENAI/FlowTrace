@@ -171,10 +171,10 @@ function openDetail() {
               {{ summary.activeStages.length > 1 ? '并行推进' : '当前阶段' }}
             </p>
             <p
-              class="mt-0.5 truncate text-xs font-medium text-slate-700"
-              :title="
+              v-tooltip="
                 summary.activeStages.map((stage) => stage.name).join('、')
               "
+              class="mt-0.5 truncate text-xs font-medium text-slate-700"
             >
               {{ activeStageLabel }}
             </p>

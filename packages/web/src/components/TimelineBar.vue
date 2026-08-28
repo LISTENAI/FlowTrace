@@ -65,34 +65,39 @@ function startBarDrag(event: PointerEvent, mode: ScheduleDragMode) {
 <template>
   <div
     ref="track"
+    v-tooltip="'拖动空白处平移时间线'"
     class="timeline-track relative h-full min-h-10 bg-[repeating-linear-gradient(90deg,transparent,transparent_calc((100%/var(--days))-1px),#f2f3f7_calc((100%/var(--days))-1px),#f2f3f7_calc(100%/var(--days)))]"
     :class="pannable ? 'cursor-grab active:cursor-grabbing' : ''"
     :style="{ '--days': days }"
-    title="拖动空白处平移时间线"
     @click.stop
     @pointerdown.self="startPan"
   >
     <div
       v-if="baselineStyle"
+      v-tooltip="baselineTitle ?? '初始计划的起止位置；仅作为基准参照'"
       class="pointer-events-none absolute top-[7px] z-[1] h-6 border-x border-slate-400/80"
       :style="baselineStyle"
-      :title="baselineTitle ?? '初始计划的起止位置；仅作为基准参照'"
     />
     <template v-if="segments?.length">
       <div
         v-for="segment in segments"
         :key="segment.id"
+        v-tooltip="segment.title"
         class="absolute top-[14px] h-3 rounded-sm"
         :class="[
           segment.status ? statusDot[segment.status] : '',
           segment.class,
         ]"
         :style="segment.style"
-        :title="segment.title"
       />
     </template>
     <div
       v-else-if="barStyle"
+      v-tooltip="
+        interactive
+          ? `${barTitle ? `${barTitle}；` : ''}拖动主条调整日期，拖动两端改变开始或结束时间`
+          : barTitle
+      "
       class="group/bar absolute touch-none rounded-full"
       :class="[
         barClass,
@@ -101,11 +106,6 @@ function startBarDrag(event: PointerEvent, mode: ScheduleDragMode) {
           : '',
       ]"
       :style="barStyle"
-      :title="
-        interactive
-          ? `${barTitle ? `${barTitle}；` : ''}拖动主条调整日期，拖动两端改变开始或结束时间`
-          : barTitle
-      "
       @pointerdown.stop="startBarDrag($event, 'move')"
     >
       <template v-if="interactive">
@@ -125,6 +125,7 @@ function startBarDrag(event: PointerEvent, mode: ScheduleDragMode) {
       <div
         v-for="segment in actualSegments"
         :key="`actual-${segment.id}`"
+        v-tooltip="segment.title"
         class="absolute top-[18px] z-10 h-1.5 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,.55)]"
         :class="[
           actualInteractive ? 'cursor-pointer' : 'cursor-help',
@@ -132,19 +133,18 @@ function startBarDrag(event: PointerEvent, mode: ScheduleDragMode) {
           segment.class,
         ]"
         :style="segment.style"
-        :title="segment.title"
         @click.stop="actualInteractive && emit('actualActivate')"
       />
     </template>
     <div
       v-else-if="actualStyle"
+      v-tooltip="actualTitle ?? '实际进展；请通过左侧状态圆点记录变化'"
       class="absolute top-[18px] z-10 h-1.5 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,.55)]"
       :class="[
         actualInteractive ? 'cursor-pointer' : 'cursor-help',
         actualClass,
       ]"
       :style="actualStyle"
-      :title="actualTitle ?? '实际进展；请通过左侧状态圆点记录变化'"
       @click.stop="actualInteractive && emit('actualActivate')"
     />
   </div>

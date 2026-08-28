@@ -163,8 +163,8 @@ onMounted(() => loadWorkspace());
             <span class="min-w-0 flex-1 truncate">{{ project.name }}</span>
             <span
               v-if="project.metrics?.blocked"
+              v-tooltip="'阻塞需求'"
               class="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-600"
-              title="阻塞需求"
             >
               {{ project.metrics.blocked }}
             </span>

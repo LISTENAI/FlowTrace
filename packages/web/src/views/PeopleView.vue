@@ -164,9 +164,9 @@ onMounted(load);
         </div>
         <Menu as="div" class="relative shrink-0">
           <MenuButton
+            v-tooltip="`${person.name}的更多操作`"
             class="focus-ring grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
             :aria-label="`${person.name}的更多操作`"
-            :title="`${person.name}的更多操作`"
           >
             <EllipsisHorizontalIcon class="h-5 w-5" />
           </MenuButton>

@@ -28,9 +28,9 @@ const current = computed(
 <template>
   <Menu as="div" class="relative">
     <MenuButton
+      v-tooltip="`外观：${current.label}`"
       class="focus-ring inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-white"
       :aria-label="`外观：${current.label}`"
-      :title="`外观：${current.label}`"
     >
       <component :is="current.icon" class="h-4 w-4" />
       <span class="hidden text-xs font-medium xl:inline">{{

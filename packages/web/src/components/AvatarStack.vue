@@ -23,7 +23,7 @@ const owners = computed(() =>
     <div
       v-for="owner in owners.slice(0, max)"
       :key="owner?.id"
-      :title="owner?.name"
+      v-tooltip="owner?.name"
       class="grid place-items-center rounded-full border-2 border-white font-semibold ring-1 ring-slate-100"
       :class="[
         compact ? 'h-6 w-6 text-[10px]' : 'h-7 w-7 text-[11px]',

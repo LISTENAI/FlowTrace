@@ -634,9 +634,9 @@ watch(id, load);
               <CalendarDaysIcon class="h-3.5 w-3.5" />调整计划
             </button>
             <button
+              v-tooltip="'分配需求负责人'"
               class="focus-ring flex min-h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 text-slate-500 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
               aria-label="分配需求负责人"
-              title="分配需求负责人"
               @click="openOwners(requirement)"
             >
               <UserPlusIcon class="h-3.5 w-3.5" />
@@ -1268,10 +1268,10 @@ watch(id, load);
                   </div>
                   <button
                     v-if="event.correction"
+                    v-tooltip="'修正这条历史记录'"
                     type="button"
                     class="focus-ring rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-violet-50 hover:text-violet-600 focus:opacity-100 sm:opacity-0 sm:group-hover/history:opacity-100"
                     :aria-label="`修正历史记录：${event.title}`"
-                    title="修正这条历史记录"
                     @click="correctionTarget = event.correction"
                   >
                     <PencilSquareIcon class="h-3.5 w-3.5" />

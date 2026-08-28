@@ -1107,9 +1107,9 @@ watch(
                 >
                   <button
                     type="button"
-                    class="timeline-title-trigger focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
+                    v-tooltip="`${requirement.key} · ${requirement.title}`"
+                    class="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
                     :aria-label="`${requirement.key} ${requirement.title}，点击展开过程`"
-                    :data-tooltip="`${requirement.key} · ${requirement.title}`"
                     @click="toggle(expandedRequirements, requirement.id)"
                   >
                     <ChevronDownIcon
@@ -1131,37 +1131,40 @@ watch(
                   </button>
                   <button
                     type="button"
+                    v-tooltip="
+                      `负责人：${
+                        requirement.ownerIds.length
+                          ? requirement.ownerIds
+                              .map(
+                                (id) =>
+                                  people.find((person) => person.id === id)
+                                    ?.name,
+                              )
+                              .filter(Boolean)
+                              .join('、')
+                          : '待分配'
+                      }`
+                    "
                     class="timeline-row-action focus-ring"
                     :aria-label="`分配「${requirement.title}」的负责人`"
-                    :title="`负责人：${
-                      requirement.ownerIds.length
-                        ? requirement.ownerIds
-                            .map(
-                              (id) =>
-                                people.find((person) => person.id === id)?.name,
-                            )
-                            .filter(Boolean)
-                            .join('、')
-                        : '待分配'
-                    }`"
                     @click="openOwners(requirement)"
                   >
                     <UserPlusIcon class="h-3.5 w-3.5" />
                   </button>
                   <button
                     type="button"
+                    v-tooltip="`调整「${requirement.title}」的计划`"
                     class="timeline-row-action focus-ring"
                     :aria-label="`调整「${requirement.title}」的计划`"
-                    :title="`调整「${requirement.title}」的计划`"
                     @click="openPlanning(requirement)"
                   >
                     <CalendarDaysIcon class="h-3.5 w-3.5" />
                   </button>
                   <button
                     type="button"
+                    v-tooltip="'打开完整详情'"
                     class="timeline-row-action focus-ring"
                     :aria-label="`打开「${requirement.title}」的完整详情`"
-                    title="打开完整详情"
                     @click="openRequirementDetail(requirement)"
                   >
                     <ArrowTopRightOnSquareIcon class="h-3.5 w-3.5" />
@@ -1217,9 +1220,9 @@ watch(
                   >
                     <button
                       type="button"
+                      v-tooltip="`记录「${stage.name}」的进展`"
                       class="focus-ring grid h-6 w-6 shrink-0 place-items-center rounded-lg hover:bg-slate-100"
                       :aria-label="`记录「${stage.name}」的进展`"
-                      :title="`记录「${stage.name}」的进展`"
                       @click="statusTarget = stage"
                     >
                       <span
@@ -1229,16 +1232,16 @@ watch(
                     </button>
                     <button
                       type="button"
+                      v-tooltip="
+                        itemDateRange(stage)
+                          ? `定位到${stage.name}的开始日期`
+                          : '该阶段暂无时间记录'
+                      "
                       class="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
                       :class="
                         itemDateRange(stage)
                           ? 'cursor-pointer'
                           : 'cursor-default'
-                      "
-                      :title="
-                        itemDateRange(stage)
-                          ? `定位到${stage.name}的开始日期`
-                          : '该阶段暂无时间记录'
                       "
                       @click="scrollToItem(stage)"
                     >
@@ -1249,18 +1252,18 @@ watch(
                     </button>
                     <button
                       type="button"
+                      v-tooltip="'分配负责人'"
                       class="timeline-row-action focus-ring"
                       :aria-label="`分配「${stage.name}」的负责人`"
-                      title="分配负责人"
                       @click="openOwners(stage)"
                     >
                       <UserPlusIcon class="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
+                      v-tooltip="`调整「${stage.name}」的计划`"
                       class="timeline-row-action focus-ring"
                       :aria-label="`调整「${stage.name}」的计划`"
-                      :title="`调整「${stage.name}」的计划`"
                       @click="openPlanning(stage)"
                     >
                       <CalendarDaysIcon class="h-3.5 w-3.5" />
@@ -1376,9 +1379,9 @@ watch(
                     >
                       <button
                         type="button"
+                        v-tooltip="`记录「${bug.title}」的进展`"
                         class="focus-ring grid h-6 w-6 shrink-0 place-items-center rounded-lg hover:bg-slate-100"
                         :aria-label="`记录「${bug.title}」的进展`"
-                        :title="`记录「${bug.title}」的进展`"
                         @click="statusTarget = bug"
                       >
                         <span
@@ -1388,16 +1391,16 @@ watch(
                       </button>
                       <button
                         type="button"
+                        v-tooltip="
+                          itemDateRange(bug)
+                            ? `${bug.key} · ${bug.title}；点击定位到开始日期`
+                            : `${bug.key} · ${bug.title}；暂无时间记录`
+                        "
                         class="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
                         :class="
                           itemDateRange(bug)
                             ? 'cursor-pointer'
                             : 'cursor-default'
-                        "
-                        :title="
-                          itemDateRange(bug)
-                            ? `${bug.key} · ${bug.title}；点击定位到开始日期`
-                            : `${bug.key} · ${bug.title}；暂无时间记录`
                         "
                         @click="scrollToItem(bug)"
                       >
@@ -1412,18 +1415,18 @@ watch(
                       </button>
                       <button
                         type="button"
+                        v-tooltip="'分配负责人'"
                         class="timeline-row-action focus-ring"
                         :aria-label="`分配「${bug.title}」的负责人`"
-                        title="分配负责人"
                         @click="openOwners(bug)"
                       >
                         <UserPlusIcon class="h-3.5 w-3.5" />
                       </button>
                       <button
                         type="button"
+                        v-tooltip="`调整「${bug.title}」的计划`"
                         class="timeline-row-action focus-ring"
                         :aria-label="`调整「${bug.title}」的计划`"
-                        :title="`调整「${bug.title}」的计划`"
                         @click="openPlanning(bug)"
                       >
                         <CalendarDaysIcon class="h-3.5 w-3.5" />
