@@ -182,6 +182,14 @@ a[class~="inline-flex"] {
   z-index: 60;
 }
 
+@media (min-width: 64rem) {
+  .timeline-workbench-wide {
+    width: max(100%, calc(100vw - 15.5rem - 4.5rem));
+    margin-left: 50%;
+    transform: translateX(-50%);
+  }
+}
+
 .timeline-surface {
   position: sticky;
   top: 8.25rem;

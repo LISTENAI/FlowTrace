@@ -757,7 +757,10 @@ watch(timelineStageOptions, (options) => {
         </div>
       </section>
 
-      <section class="mt-7">
+      <section
+        class="mt-7"
+        :class="view === 'timeline' ? 'timeline-workbench-wide' : ''"
+      >
         <div
           class="timeline-toolbar mb-2 flex flex-wrap items-center gap-1.5 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm"
         >
