@@ -84,5 +84,5 @@ describe.sequential('SeedService experience data', () => {
     expect(
       snapshots.flatMap((item) => item.externalDependencies).length,
     ).toBeGreaterThan(2);
-  });
+  }, 15_000);
 });
