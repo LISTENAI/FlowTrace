@@ -4,7 +4,6 @@ import {
   BoltIcon,
   ChevronRightIcon,
   CpuChipIcon,
-  FolderIcon,
   QueueListIcon,
   Squares2X2Icon,
   UsersIcon,
@@ -187,7 +186,7 @@ onMounted(() => loadWorkspace());
       <header
         class="sticky top-0 z-[70] flex h-16 items-center justify-between border-b border-slate-200/60 bg-[#f7f8fb]/85 px-4 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/85 sm:px-7 lg:px-9"
       >
-        <div class="flex items-center gap-3">
+        <div>
           <button
             class="focus-ring rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm lg:hidden"
             aria-label="打开导航"
@@ -195,12 +194,6 @@ onMounted(() => loadWorkspace());
           >
             <Bars3BottomLeftIcon class="h-5 w-5" />
           </button>
-          <div class="hidden items-center gap-2 text-xs text-slate-400 sm:flex">
-            <FolderIcon class="h-4 w-4" />
-            <span>可信内部环境</span>
-            <span class="h-1 w-1 rounded-full bg-emerald-400" />
-            <span>自动保存历史</span>
-          </div>
         </div>
         <div class="flex items-center gap-2">
           <ThemeMenu />

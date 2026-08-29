@@ -619,13 +619,39 @@ watch(timelineStageOptions, (options) => {
         </button>
       </section>
 
+      <section v-if="scopedExternalDependencies.length" class="mt-4">
+        <div class="surface overflow-hidden">
+          <div
+            class="flex items-center gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800"
+          >
+            <span
+              class="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-violet-50 text-violet-500 dark:bg-violet-950/60"
+            >
+              <RectangleStackIcon class="h-4 w-4" />
+            </span>
+            <p class="min-w-0 flex-1 text-xs font-semibold text-slate-800">
+              跨项目协作
+            </p>
+          </div>
+          <p class="px-4 py-3 text-xs leading-5 text-slate-500">
+            <span class="font-mono text-[10px] font-bold text-indigo-600">{{
+              scopedExternalDependencies[0]?.successor?.requirementKey
+            }}</span>
+            {{ scopedExternalDependencies[0]?.successor?.name }} 正在等待
+            <span class="font-medium text-slate-700">
+              {{ scopedExternalDependencies[0]?.predecessor?.projectName }} /
+              {{ scopedExternalDependencies[0]?.predecessor?.name }}
+            </span>
+          </p>
+        </div>
+      </section>
+
       <section
         v-if="
           scopedBlockedItems.length ||
           scopedWaitingItems.length ||
           scopedDelayedRows.length ||
-          scopedReviewItems.length ||
-          scopedExternalDependencies.length
+          scopedReviewItems.length
         "
         class="mt-4 grid items-start gap-3 lg:grid-cols-2"
       >
@@ -729,7 +755,17 @@ watch(timelineStageOptions, (options) => {
             </div>
           </div>
         </div>
-        <div v-if="scopedReviewItems.length" class="surface overflow-hidden">
+        <div
+          v-if="scopedReviewItems.length"
+          class="surface overflow-hidden"
+          :class="
+            !scopedBlockedItems.length &&
+            !scopedWaitingItems.length &&
+            !scopedDelayedRows.length
+              ? 'lg:col-span-2'
+              : ''
+          "
+        >
           <div
             class="flex items-center gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800"
           >
@@ -769,33 +805,6 @@ watch(timelineStageOptions, (options) => {
               >
             </RouterLink>
           </div>
-        </div>
-        <div
-          v-if="scopedExternalDependencies.length"
-          class="surface overflow-hidden"
-        >
-          <div
-            class="flex items-center gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800"
-          >
-            <span
-              class="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-violet-50 text-violet-500 dark:bg-violet-950/60"
-            >
-              <RectangleStackIcon class="h-4 w-4" />
-            </span>
-            <p class="min-w-0 flex-1 text-xs font-semibold text-slate-800">
-              跨项目协作
-            </p>
-          </div>
-          <p class="px-4 py-3 text-xs leading-5 text-slate-500">
-            <span class="font-mono text-[10px] font-bold text-indigo-600">{{
-              scopedExternalDependencies[0]?.successor?.requirementKey
-            }}</span>
-            {{ scopedExternalDependencies[0]?.successor?.name }} 正在等待
-            <span class="font-medium text-slate-700">
-              {{ scopedExternalDependencies[0]?.predecessor?.projectName }} /
-              {{ scopedExternalDependencies[0]?.predecessor?.name }}
-            </span>
-          </p>
         </div>
       </section>
 
