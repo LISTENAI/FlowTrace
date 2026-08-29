@@ -1,9 +1,5 @@
 <script setup lang="ts">
-import type {
-  ExecutionStatus,
-  Person,
-  StatusHistory,
-} from '@flowtrace/shared';
+import type { ExecutionStatus, Person, StatusHistory } from '@flowtrace/shared';
 import { ChevronDownIcon, UserGroupIcon } from '@heroicons/vue/24/outline';
 import dayjs from 'dayjs';
 import { computed, reactive, ref, watch } from 'vue';
@@ -131,9 +127,7 @@ const ownerSummary = computed(() => {
 });
 const laterHistory = computed(() =>
   [...(props.statusHistory ?? [])]
-    .filter((item) =>
-      dayjs(item.effectiveAt).isAfter(dayjs(form.effectiveAt)),
-    )
+    .filter((item) => dayjs(item.effectiveAt).isAfter(dayjs(form.effectiveAt)))
     .sort(
       (left, right) =>
         dayjs(left.effectiveAt).valueOf() - dayjs(right.effectiveAt).valueOf(),

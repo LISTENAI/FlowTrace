@@ -1,0 +1,29 @@
+name: 功能建议
+description: 描述希望 FlowTrace 解决的研发协作问题
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 需要解决的问题
+      description: 请描述目前的工作方式、阻碍和影响，不必先限定实现方案。
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 期望结果
+      description: 这个问题被解决后，用户应当能够更容易地完成什么？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 可选方案
+      description: 如已有交互、数据模型或接口设想，可以在这里补充。
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 当前替代方式
+      description: 目前如何绕过或处理这个问题？

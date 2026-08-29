@@ -1,0 +1,53 @@
+name: Bug 报告
+description: 报告可以稳定复现的 FlowTrace 问题
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你帮助改进 FlowTrace。安全问题请按照 SECURITY.md 私下报告。
+  - type: input
+    id: version
+    attributes:
+      label: 版本或提交
+      description: 请提供镜像标签、版本号或 Git commit。
+      placeholder: 例如 0.1.0 或 abc1234
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: 运行方式
+      options:
+        - Docker Compose 开发环境
+        - Docker Compose 正式环境
+        - 自定义容器或 Kubernetes
+        - 主机直接运行
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请提供最小、完整的复现步骤，并隐去真实项目数据和凭据。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: 补充信息
+      description: 可附经过脱敏的日志、截图、浏览器和操作系统信息。
