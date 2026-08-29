@@ -16,6 +16,12 @@ PostgreSQL 实例。
 
 ```bash
 export FLOWTRACE_POSTGRES_PASSWORD='请替换为随机生成的强密码'
+export FLOWTRACE_AUTH_SECRET='请替换为至少32字符的随机密钥'
+export FLOWTRACE_AUTH_BASE_URL='https://flowtrace.example.com'
+export FLOWTRACE_AUTH_PROVIDER='oidc'
+export FLOWTRACE_OIDC_ISSUER='https://id.example.com'
+export FLOWTRACE_OIDC_CLIENT_ID='flowtrace'
+export FLOWTRACE_OIDC_CLIENT_SECRET='请替换为OIDC客户端密钥'
 docker compose -f compose.production.yml up -d --build
 ```
 
@@ -36,7 +42,11 @@ TLS，可将 `FLOWTRACE_DATABASE_SSL` 设为 `require` 或 `verify-full`。
 启动前显式设置 `FLOWTRACE_SEED_DEMO=true`；项目库中已有项目后不会再次补齐
 演示内容。
 
-当前版本没有账号、登录和权限隔离，只能部署在可信内网或受控的私有网络中，
-不得直接暴露到公网；反向代理和 HTTPS 不能替代身份认证。升级前应使用
-`pg_dump` 创建一致性备份，并验证备份可以恢复；不得仅把正在运行的
-PostgreSQL 数据目录作为逻辑备份复制。
+身份认证是必需能力，未选择登录适配器时应用会拒绝启动。生产环境支持本地
+账号、标准 OIDC 和企业微信适配器，详细变量、回调地址和人员关联规则见
+[身份认证](authentication.md)。`FLOWTRACE_AUTH_BASE_URL` 必须是用户实际访问
+的 HTTPS 地址。
+
+当前版本尚无 RBAC，登录后的组织成员可以读取和维护整个实例的数据。升级前应
+使用 `pg_dump` 创建一致性备份并验证可恢复；不得仅复制正在运行的 PostgreSQL
+数据目录作为逻辑备份。

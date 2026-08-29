@@ -212,7 +212,7 @@ export const api = {
   ) => request<Bug>(`/bugs/${id}/reschedule`, { method: 'POST', body: input }),
   people: (includeInactive = false) =>
     request<Person[]>(`/people?includeInactive=${includeInactive}`),
-  createPerson: (input: { name: string; note?: string }) =>
+  createPerson: (input: { name: string; email?: string; note?: string }) =>
     request<Person>('/people', { method: 'POST', body: input }),
   updatePerson: (id: string, input: Record<string, unknown>) =>
     request<Person>(`/people/${id}`, { method: 'PATCH', body: input }),

@@ -6,9 +6,24 @@ import {
   CpuChipIcon,
   ExclamationTriangleIcon,
   LightBulbIcon,
+  KeyIcon,
   PuzzlePieceIcon,
+  TrashIcon,
 } from '@heroicons/vue/24/outline';
+import { onMounted, ref } from 'vue';
 import { toasts } from '@/state/toasts';
+
+interface PersonalApiKey {
+  id: string;
+  name?: string | null;
+  start?: string | null;
+  createdAt: string;
+  lastRequest?: string | null;
+}
+
+const apiKeys = ref<PersonalApiKey[]>([]);
+const createdKey = ref('');
+const keyLoading = ref(false);
 
 function resolveMcpEndpoint() {
   const url = new URL('/mcp', window.location.origin);
@@ -18,6 +33,61 @@ function resolveMcpEndpoint() {
 
 const mcpEndpoint = resolveMcpEndpoint();
 const skillCommand = 'npx skills add LISTENAI/FlowTrace';
+
+async function authRequest<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`/api/auth${path}`, {
+    method: body ? 'POST' : 'GET',
+    headers: body ? { 'content-type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = (await response.json().catch(() => undefined)) as
+    T | { message?: string };
+  if (!response.ok) {
+    throw new Error(
+      (payload as { message?: string } | undefined)?.message ?? '操作未能完成',
+    );
+  }
+  return payload as T;
+}
+
+async function loadKeys() {
+  const result = await authRequest<{ apiKeys: PersonalApiKey[] }>(
+    '/api-key/list',
+  );
+  apiKeys.value = result.apiKeys;
+}
+
+async function createKey() {
+  keyLoading.value = true;
+  try {
+    const result = await authRequest<PersonalApiKey & { key: string }>(
+      '/api-key/create',
+      { name: `AI 接入 ${new Date().toLocaleDateString('zh-CN')}` },
+    );
+    createdKey.value = result.key;
+    await loadKeys();
+  } catch (cause) {
+    toasts.show('密钥创建失败', (cause as Error).message, 'error');
+  } finally {
+    keyLoading.value = false;
+  }
+}
+
+async function deleteKey(keyId: string) {
+  try {
+    await authRequest('/api-key/delete', { keyId });
+    await loadKeys();
+    toasts.show('密钥已撤销');
+  } catch (cause) {
+    toasts.show('无法撤销密钥', (cause as Error).message, 'error');
+  }
+}
+
+onMounted(() => {
+  void loadKeys().catch((cause) =>
+    toasts.show('无法读取个人密钥', (cause as Error).message, 'error'),
+  );
+});
 
 async function copyText(value: string, label: string) {
   try {
@@ -100,6 +170,80 @@ async function copyText(value: string, label: string) {
                   <ClipboardDocumentIcon class="h-4 w-4" />
                   复制地址
                 </button>
+              </div>
+            </div>
+            <div
+              class="mt-5 border-t border-slate-100 pt-5 dark:border-slate-800"
+            >
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <p class="text-xs font-semibold text-slate-500">
+                    个人访问密钥
+                  </p>
+                  <p class="mt-1 text-xs leading-5 text-slate-400">
+                    MCP 使用它识别你的身份；密钥只在创建时完整显示。
+                  </p>
+                </div>
+                <button
+                  class="section-action"
+                  :disabled="keyLoading"
+                  @click="createKey"
+                >
+                  <KeyIcon class="h-4 w-4" />
+                  创建密钥
+                </button>
+              </div>
+              <div
+                v-if="createdKey"
+                class="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/30"
+              >
+                <p
+                  class="text-xs font-semibold text-emerald-800 dark:text-emerald-300"
+                >
+                  请立即保存，离开后无法再次查看
+                </p>
+                <div class="mt-2 flex items-center gap-2">
+                  <code
+                    class="min-w-0 flex-1 break-all text-xs text-emerald-900 dark:text-emerald-200"
+                    >{{ createdKey }}</code
+                  >
+                  <button
+                    class="section-action"
+                    @click="copyText(createdKey, '个人密钥')"
+                  >
+                    <ClipboardDocumentIcon class="h-4 w-4" />复制
+                  </button>
+                </div>
+              </div>
+              <div
+                v-if="apiKeys.length"
+                class="mt-3 divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white/70 dark:divide-slate-800 dark:border-slate-700 dark:bg-slate-900/40"
+              >
+                <div
+                  v-for="key in apiKeys"
+                  :key="key.id"
+                  class="flex items-center gap-3 px-3.5 py-3"
+                >
+                  <KeyIcon class="h-4 w-4 shrink-0 text-slate-400" />
+                  <div class="min-w-0 flex-1">
+                    <p
+                      class="truncate text-xs font-semibold text-slate-700 dark:text-slate-200"
+                    >
+                      {{ key.name || '未命名密钥' }}
+                    </p>
+                    <p class="mt-0.5 text-[11px] text-slate-400">
+                      {{ key.start || 'ft_…' }}
+                    </p>
+                  </div>
+                  <button
+                    v-tooltip="'撤销密钥'"
+                    class="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30"
+                    aria-label="撤销密钥"
+                    @click="deleteKey(key.id)"
+                  >
+                    <TrashIcon class="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -216,11 +360,11 @@ async function copyText(value: string, label: string) {
         >
           <div class="flex items-center gap-2 text-amber-700">
             <ExclamationTriangleIcon class="h-5 w-5" />
-            <h2 class="font-semibold">仅限可信网络</h2>
+            <h2 class="font-semibold">妥善保管个人密钥</h2>
           </div>
           <p class="mt-2 text-xs leading-5 text-amber-700/90">
-            当前版本没有账号和权限隔离。获得 MCP 地址的调用方可以读取并修改
-            项目数据，不要将此 Endpoint 直接暴露到公网。
+            密钥代表你的身份和操作权限。不要写入 Skill、代码仓库或聊天记录；
+            怀疑泄露时立即在这里撤销并重新创建。
           </p>
         </section>
       </aside>

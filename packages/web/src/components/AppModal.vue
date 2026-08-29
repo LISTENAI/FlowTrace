@@ -48,7 +48,7 @@ defineEmits<{ close: [] }>();
             leave-to="opacity-0 translate-y-2 scale-[.98]"
           >
             <DialogPanel
-              class="w-full overflow-visible rounded-[1.4rem] border border-white/70 bg-white shadow-2xl shadow-slate-900/15"
+              class="w-full overflow-visible rounded-[1.4rem] border border-white/70 bg-white shadow-2xl shadow-slate-900/15 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/40"
               :class="{
                 'max-w-md': width === 'sm',
                 'max-w-xl': width === 'md',
@@ -57,24 +57,24 @@ defineEmits<{ close: [] }>();
               }"
             >
               <div
-                class="flex items-start justify-between border-b border-slate-100 px-6 py-5"
+                class="flex items-start justify-between border-b border-slate-100 px-6 py-5 dark:border-slate-800"
               >
                 <div>
                   <DialogTitle
-                    class="text-lg font-semibold tracking-tight text-slate-900"
+                    class="text-lg font-semibold tracking-tight text-slate-900 dark:text-white"
                   >
                     {{ title }}
                   </DialogTitle>
                   <p
                     v-if="description"
-                    class="mt-1 text-sm leading-6 text-slate-500"
+                    class="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400"
                   >
                     {{ description }}
                   </p>
                 </div>
                 <button
                   type="button"
-                  class="focus-ring rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                  class="focus-ring rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                   aria-label="关闭"
                   @click="$emit('close')"
                 >

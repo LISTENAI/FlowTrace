@@ -32,6 +32,11 @@ describe('initial database migration', () => {
         'version_history',
         'dependencies',
         'change_events',
+        'auth_user',
+        'auth_session',
+        'auth_account',
+        'auth_api_key',
+        'auth_person_bindings',
       ]),
     );
 
@@ -52,5 +57,31 @@ describe('initial database migration', () => {
     );
     expect(changeColumns.map((column) => column.name)).toContain('reason');
     expect(stageColumns.map((column) => column.name)).toContain('workDomain');
+    const personColumns = (await dataSource.query(
+      `SELECT column_name AS "name" FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'people'`,
+    )) as Array<{ name: string }>;
+    expect(personColumns.map((column) => column.name)).toContain('email');
+
+    const authUserColumns = (await dataSource.query(
+      `SELECT column_name AS "name" FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'auth_user'`,
+    )) as Array<{ name: string }>;
+    expect(authUserColumns.map((column) => column.name)).toContain(
+      'localOwner',
+    );
+
+    const bindingColumns = (await dataSource.query(
+      `SELECT column_name AS "name" FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'auth_person_bindings'`,
+    )) as Array<{ name: string }>;
+    expect(bindingColumns.map((column) => column.name)).toEqual(
+      expect.arrayContaining([
+        'providerId',
+        'providerSubject',
+        'nameAuthority',
+        'emailAuthority',
+      ]),
+    );
   });
 });

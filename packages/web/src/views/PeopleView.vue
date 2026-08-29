@@ -11,6 +11,7 @@ import {
 } from '@heroicons/vue/24/outline';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { api } from '@/api';
+import { currentIdentity } from '@/auth';
 import AppModal from '@/components/AppModal.vue';
 import { personToneClass } from '@/lib/person-color';
 import { toasts } from '@/state/toasts';
@@ -21,9 +22,10 @@ const saving = ref(false);
 const editTarget = ref<Person>();
 const editing = ref(false);
 const includeInactive = ref(true);
+const currentPersonId = ref<string>();
 const people = ref(workspace.people);
-const form = reactive({ name: '', note: '' });
-const editForm = reactive({ name: '', note: '' });
+const form = reactive({ name: '', email: '', note: '' });
+const editForm = reactive({ name: '', email: '', note: '' });
 const visible = computed(() =>
   includeInactive.value
     ? people.value
@@ -40,6 +42,7 @@ async function create() {
     await api.createPerson(form);
     modalOpen.value = false;
     form.name = '';
+    form.email = '';
     form.note = '';
     toasts.show('人员已加入目录');
     await Promise.all([load(), loadWorkspace(true)]);
@@ -65,6 +68,7 @@ async function toggleActive(id: string, active: boolean) {
 
 function openEdit(person: Person) {
   editForm.name = person.name;
+  editForm.email = person.email ?? '';
   editForm.note = person.note ?? '';
   editTarget.value = person;
 }
@@ -74,7 +78,14 @@ async function updateDetails() {
   editing.value = true;
   try {
     await api.updatePerson(editTarget.value.id, {
-      name: editForm.name,
+      ...(!editTarget.value.identity ||
+      editTarget.value.identity.nameAuthority === 'flowtrace'
+        ? { name: editForm.name }
+        : {}),
+      ...(!editTarget.value.identity ||
+      editTarget.value.identity.emailAuthority === 'flowtrace'
+        ? { email: editForm.email }
+        : {}),
       note: editForm.note,
     });
     editTarget.value = undefined;
@@ -91,7 +102,10 @@ async function updateDetails() {
   }
 }
 
-onMounted(load);
+onMounted(async () => {
+  const [, identity] = await Promise.all([load(), currentIdentity()]);
+  currentPersonId.value = identity.person.id;
+});
 </script>
 
 <template>
@@ -104,12 +118,12 @@ onMounted(load);
           <UserGroupIcon class="h-4 w-4" />负责人目录
         </div>
         <h1
-          class="text-2xl font-semibold tracking-[-.035em] text-slate-900 sm:text-3xl"
+          class="text-2xl font-semibold tracking-[-.035em] text-slate-900 dark:text-white sm:text-3xl"
         >
           人员
         </h1>
         <p class="mt-1 text-sm text-slate-500">
-          这里只维护可选负责人，不创建账号或权限。
+          人员是可以承担工作的参与者；登录后会自动建立或关联对应的人员档案。
         </p>
       </div>
       <button
@@ -157,9 +171,19 @@ onMounted(load);
               class="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-500"
               >已停用</span
             >
+            <span
+              v-if="person.id === currentPersonId"
+              class="rounded-full bg-indigo-50 px-2 py-0.5 text-[9px] font-semibold text-indigo-500 dark:bg-indigo-950/50 dark:text-indigo-300"
+              >当前用户</span
+            >
+            <span
+              v-else-if="person.identity"
+              class="rounded-full bg-indigo-50 px-2 py-0.5 text-[9px] font-semibold text-indigo-500 dark:bg-indigo-950/50 dark:text-indigo-300"
+              >已连接登录身份</span
+            >
           </div>
           <p class="mt-0.5 truncate text-xs text-slate-400">
-            {{ person.note || '未填写备注' }}
+            {{ person.email || person.note || '未填写邮箱' }}
           </p>
         </div>
         <Menu as="div" class="relative shrink-0">
@@ -179,18 +203,25 @@ onMounted(load);
             leave-to-class="translate-y-1 opacity-0 scale-95"
           >
             <MenuItems
-              class="absolute right-0 z-30 mt-1.5 w-40 origin-top-right rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl outline-none"
+              class="absolute right-0 z-30 mt-1.5 w-40 origin-top-right rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl outline-none dark:border-slate-700 dark:bg-slate-900/95"
             >
               <MenuItem v-slot="{ active }">
                 <button
-                  class="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600 transition"
-                  :class="active ? 'bg-slate-100 text-slate-900' : ''"
+                  class="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600 transition dark:text-slate-300"
+                  :class="
+                    active
+                      ? 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white'
+                      : ''
+                  "
                   @click="openEdit(person)"
                 >
                   <PencilSquareIcon class="h-4 w-4 shrink-0" />修改资料
                 </button>
               </MenuItem>
-              <MenuItem v-slot="{ active }">
+              <MenuItem
+                v-if="!person.active || person.id !== currentPersonId"
+                v-slot="{ active }"
+              >
                 <button
                   class="mt-0.5 flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-medium transition"
                   :class="[
@@ -215,7 +246,7 @@ onMounted(load);
     </div>
 
     <div
-      class="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-4 text-xs leading-5 text-slate-500"
+      class="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-4 text-xs leading-5 text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400"
     >
       停用人员不会出现在新事项的默认选择中，但已有需求、阶段和 Bug
       中的负责人关系会永久保留。
@@ -224,7 +255,7 @@ onMounted(load);
     <AppModal
       :open="modalOpen"
       title="新增负责人"
-      description="人员仅用于被选为负责人，不会获得登录账号。"
+      description="工作邮箱可用于将外部登录身份准确关联到这个人。"
       width="sm"
       @close="modalOpen = false"
     >
@@ -235,6 +266,15 @@ onMounted(load);
           ><input
             v-model="form.name"
             required
+            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm" /></label
+        ><label class="block"
+          ><span class="mb-1.5 block text-xs font-medium text-slate-600"
+            >工作邮箱（可选）</span
+          ><input
+            v-model="form.email"
+            type="email"
+            autocomplete="email"
+            placeholder="name@example.com"
             class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm" /></label
         ><label class="block"
           ><span class="mb-1.5 block text-xs font-medium text-slate-600"
@@ -276,7 +316,39 @@ onMounted(load);
             v-model="editForm.name"
             required
             maxlength="50"
-            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm" /></label
+            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400"
+            :disabled="
+              Boolean(editTarget?.identity) &&
+              editTarget?.identity?.nameAuthority !== 'flowtrace'
+            "
+          /><span
+            v-if="
+              editTarget?.identity &&
+              editTarget.identity.nameAuthority !== 'flowtrace'
+            "
+            class="mt-1.5 block text-[11px] text-slate-400"
+            >姓名由登录账号或身份提供方管理</span
+          ></label
+        ><label class="block"
+          ><span class="mb-1.5 block text-xs font-medium text-slate-600"
+            >邮箱（可选）</span
+          ><input
+            v-model="editForm.email"
+            type="email"
+            autocomplete="email"
+            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400"
+            :disabled="
+              Boolean(editTarget?.identity) &&
+              editTarget?.identity?.emailAuthority !== 'flowtrace'
+            "
+          /><span
+            v-if="
+              editTarget?.identity &&
+              editTarget.identity.emailAuthority !== 'flowtrace'
+            "
+            class="mt-1.5 block text-[11px] text-slate-400"
+            >邮箱由登录账号或身份提供方管理</span
+          ></label
         ><label class="block"
           ><span class="mb-1.5 block text-xs font-medium text-slate-600"
             >备注（可选）</span

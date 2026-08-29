@@ -44,10 +44,42 @@ export interface ChangeContext {
 export interface Person {
   id: string;
   name: string;
+  email?: string;
   note?: string;
   active: boolean;
+  identity?: {
+    providerId: string;
+    nameAuthority: ProfileAuthority;
+    emailAuthority: ProfileAuthority;
+  };
   createdAt: string;
   updatedAt: string;
+}
+
+export type ProfileAuthority = 'provider' | 'account' | 'flowtrace';
+
+export interface AuthProviderInfo {
+  id: string;
+  name: string;
+  kind: 'local' | 'external';
+  nameAuthority: ProfileAuthority;
+  emailAuthority: ProfileAuthority;
+}
+
+export interface AuthConfig {
+  provider: AuthProviderInfo;
+  setupRequired: boolean;
+}
+
+export interface CurrentIdentity {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    emailVerified: boolean;
+  };
+  person: Person;
+  provider: AuthProviderInfo;
 }
 
 export interface TemplateStage {

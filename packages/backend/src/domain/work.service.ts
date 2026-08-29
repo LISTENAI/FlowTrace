@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -56,6 +57,7 @@ import {
   Repository,
 } from 'typeorm';
 import {
+  AuthPersonBindingEntity,
   BugEntity,
   ChangeEventEntity,
   DependencyEntity,
@@ -137,6 +139,8 @@ export class WorkService {
     private readonly projectRhythms: Repository<ProjectRhythmEntity>,
     @InjectRepository(PersonEntity)
     private readonly people: Repository<PersonEntity>,
+    @InjectRepository(AuthPersonBindingEntity)
+    private readonly personBindings: Repository<AuthPersonBindingEntity>,
     @InjectRepository(VersionEntity)
     private readonly versions: Repository<VersionEntity>,
     @InjectRepository(RequirementEntity)
@@ -274,11 +278,15 @@ export class WorkService {
   }
 
   async listPeople(includeInactive = false): Promise<Person[]> {
-    const rows = await this.people.find({
-      where: includeInactive ? {} : { active: true },
-      order: { active: 'DESC', name: 'ASC' },
-    });
-    return rows.map((item) => this.toPerson(item));
+    const [rows, bindings] = await Promise.all([
+      this.people.find({
+        where: includeInactive ? {} : { active: true },
+        order: { active: 'DESC', name: 'ASC' },
+      }),
+      this.personBindings.find(),
+    ]);
+    const byPerson = new Map(bindings.map((item) => [item.personId, item]));
+    return rows.map((item) => this.toPerson(item, byPerson.get(item.id)));
   }
 
   async search(
@@ -521,22 +529,69 @@ export class WorkService {
   }
 
   async createPerson(input: CreatePersonDto): Promise<Person> {
+    const email = input.email?.trim().toLowerCase() || null;
+    if (email && (await this.people.existsBy({ email }))) {
+      throw new ConflictException('该邮箱已经关联其他人员');
+    }
     const person = this.people.create({
       id: randomUUID(),
       name: input.name,
+      email,
       note: input.note ?? null,
       active: true,
     });
     return this.toPerson(await this.people.save(person));
   }
 
-  async updatePerson(id: string, input: UpdatePersonDto): Promise<Person> {
+  async updatePerson(
+    id: string,
+    input: UpdatePersonDto,
+    actorPersonId?: string,
+  ): Promise<Person> {
     const person = await this.people.findOneBy({ id });
     if (!person) throw new NotFoundException('未找到人员');
+    if (input.active === false && actorPersonId === id) {
+      throw new BadRequestException('不能停用自己的人员档案');
+    }
+    const binding = await this.personBindings.findOneBy({ personId: id });
+    if (
+      input.name !== undefined &&
+      binding &&
+      binding.nameAuthority !== 'flowtrace' &&
+      input.name !== person.name
+    ) {
+      throw new BadRequestException(
+        binding.nameAuthority === 'provider'
+          ? '姓名由登录提供方管理，不能在 FlowTrace 修改'
+          : '姓名属于登录账号，请通过账号资料流程修改',
+      );
+    }
+    if (
+      input.email !== undefined &&
+      binding &&
+      binding.emailAuthority !== 'flowtrace' &&
+      (input.email.trim().toLowerCase() || null) !== person.email
+    ) {
+      throw new BadRequestException(
+        binding.emailAuthority === 'provider'
+          ? '邮箱由登录提供方管理，不能在 FlowTrace 修改'
+          : '邮箱属于登录账号，请通过账号安全流程修改',
+      );
+    }
     if (input.name !== undefined) person.name = input.name;
+    if (input.email !== undefined) {
+      const email = input.email.trim().toLowerCase() || null;
+      const claimed = email
+        ? await this.people.findOneBy({ email })
+        : undefined;
+      if (claimed && claimed.id !== id) {
+        throw new ConflictException('该邮箱已经关联其他人员');
+      }
+      person.email = email;
+    }
     if (input.note !== undefined) person.note = input.note || null;
     if (input.active !== undefined) person.active = input.active;
-    return this.toPerson(await this.people.save(person));
+    return this.toPerson(await this.people.save(person), binding ?? undefined);
   }
 
   async listVersions(projectId: string): Promise<Version[]> {
@@ -2314,12 +2369,23 @@ export class WorkService {
     };
   }
 
-  private toPerson(row: PersonEntity): Person {
+  private toPerson(
+    row: PersonEntity,
+    binding?: AuthPersonBindingEntity,
+  ): Person {
     return {
       id: row.id,
       name: row.name,
+      email: row.email ?? undefined,
       note: row.note ?? undefined,
       active: row.active,
+      identity: binding
+        ? {
+            providerId: binding.providerId,
+            nameAuthority: binding.nameAuthority,
+            emailAuthority: binding.emailAuthority,
+          }
+        : undefined,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

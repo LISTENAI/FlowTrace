@@ -2,6 +2,10 @@ export class FlowTraceApiClient {
   constructor(
     private readonly baseUrl = process.env.FLOWTRACE_API_URL ??
       'http://127.0.0.1:3100/api',
+    private readonly authorization: Record<string, string> = process.env
+      .FLOWTRACE_API_KEY
+      ? { authorization: `Bearer ${process.env.FLOWTRACE_API_KEY}` }
+      : {},
   ) {}
 
   async request<T>(
@@ -13,9 +17,10 @@ export class FlowTraceApiClient {
   ): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: options.method ?? 'GET',
-      headers: options.body
-        ? { 'content-type': 'application/json' }
-        : undefined,
+      headers: {
+        ...this.authorization,
+        ...(options.body ? { 'content-type': 'application/json' } : {}),
+      },
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
     const text = await response.text();

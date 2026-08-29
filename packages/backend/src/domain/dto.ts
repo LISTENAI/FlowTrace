@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
+  IsEmail,
   IsIn,
   IsInt,
   IsISO8601,
@@ -64,6 +65,11 @@ export class CreatePersonDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   note?: string;
 }
@@ -75,6 +81,11 @@ export class UpdatePersonDto {
   @IsNotEmpty()
   @MaxLength(50)
   name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

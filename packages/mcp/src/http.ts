@@ -5,6 +5,7 @@ import { createFlowTraceMcpServer } from './server.js';
 
 export interface FlowTraceMcpHttpOptions {
   apiBaseUrl?: string;
+  apiHeaders?: Record<string, string>;
   allowedHosts?: string[];
 }
 
@@ -48,7 +49,7 @@ export async function handleFlowTraceMcpRequest(
       : {}),
   });
   const server = createFlowTraceMcpServer(
-    new FlowTraceApiClient(options.apiBaseUrl),
+    new FlowTraceApiClient(options.apiBaseUrl, options.apiHeaders),
   );
   let closed = false;
   const close = () => {

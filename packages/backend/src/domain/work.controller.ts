@@ -12,6 +12,7 @@ import {
   Post,
   Put,
   Query,
+  Req,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import {
@@ -44,6 +45,8 @@ import {
   UpdateVersionDto,
 } from '@/domain/dto';
 import { WorkService } from '@/domain/work.service';
+import { PublicAuth } from '@/auth/auth-public';
+import type { AuthenticatedRequest } from '@/auth/auth-session';
 
 @ApiTags('项目')
 @Controller('projects')
@@ -148,8 +151,16 @@ export class PeopleController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() input: UpdatePersonDto) {
-    return this.work.updatePerson(id, input);
+  update(
+    @Param('id') id: string,
+    @Body() input: UpdatePersonDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.work.updatePerson(
+      id,
+      input,
+      request.flowTraceIdentity?.person.id,
+    );
   }
 }
 
@@ -316,6 +327,7 @@ export class InsightsController {
   constructor(@Inject(WorkService) private readonly work: WorkService) {}
 
   @Get('health')
+  @PublicAuth()
   health() {
     return { status: 'ok', time: new Date().toISOString() };
   }

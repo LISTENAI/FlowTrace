@@ -49,6 +49,61 @@ describe.sequential('WorkService business rules', () => {
     expect(await work.listProjectRhythms()).toHaveLength(0);
   });
 
+  it('keeps provider-managed person fields read-only', async () => {
+    const person = await work.createPerson({
+      name: '企业成员',
+      email: 'managed@example.com',
+    });
+    await dataSource.query(
+      `INSERT INTO "auth_user"
+        ("id", "name", "email", "emailVerified", "createdAt", "updatedAt")
+       VALUES ('managed-user', '企业成员', 'managed@example.com', true,
+               CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    );
+    await dataSource.query(
+      `INSERT INTO "auth_person_bindings"
+        ("id", "authUserId", "personId", "providerId", "providerSubject",
+         "nameAuthority", "emailAuthority")
+       VALUES ('aaf22976-87f5-48a2-bbbc-d4e149783960', 'managed-user', $1,
+               'wecom', 'wecom-user', 'provider', 'provider')`,
+      [person.id],
+    );
+
+    await expect(
+      work.updatePerson(person.id, { email: 'changed@example.com' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      work.updatePerson(person.id, { name: '自行改名' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(
+      (await work.updatePerson(person.id, { note: '平台研发' })).note,
+    ).toBe('平台研发');
+    expect(
+      (await work.listPeople(true)).find((item) => item.id === person.id),
+    ).toMatchObject({
+      identity: {
+        providerId: 'wecom',
+        nameAuthority: 'provider',
+        emailAuthority: 'provider',
+      },
+    });
+  });
+
+  it('prevents a person from deactivating their own directory entry', async () => {
+    const person = await work.createPerson({ name: '当前操作者' });
+
+    await expect(
+      work.updatePerson(person.id, { active: false }, person.id),
+    ).rejects.toThrow('不能停用自己的人员档案');
+    expect(
+      (await work.updatePerson(person.id, { active: false }, 'other-person'))
+        .active,
+    ).toBe(false);
+    expect(
+      (await work.updatePerson(person.id, { active: true }, person.id)).active,
+    ).toBe(true);
+  });
+
   afterAll(async () => {
     if (dataSource?.isInitialized) await dataSource.destroy();
   });

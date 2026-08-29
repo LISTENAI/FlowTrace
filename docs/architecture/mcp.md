@@ -17,8 +17,14 @@ Endpoint 使用无会话状态的请求/响应模式。MCP 协议层不保留 Ag
 多个 Host 访问时，可用逗号分隔的 `FLOWTRACE_MCP_ALLOWED_HOSTS`
 启用 Host 白名单校验。
 
-当前没有账号和权限隔离，`/mcp` 只能部署在可信内网或受控私有
-网络中，不得直接暴露到公网。
+每个请求都必须携带当前用户在“AI 接入”页面创建的个人密钥：
+
+```text
+Authorization: Bearer ft_...
+```
+
+也可以使用 `X-API-Key` 请求头。服务会以密钥所属用户的身份执行 MCP 调用，
+并把同一凭证传递给内部 HTTP API；`/mcp` 不存在匿名访问路径。
 
 ## Tool 与返回值
 
@@ -72,5 +78,5 @@ npm run dev -w @flowtrace/mcp
 ```
 
 默认 API 地址为 `http://127.0.0.1:3100/api`，可用 `FLOWTRACE_API_URL`
-覆盖。stdio 是调试便利入口，正式集成应使用镜像内置的远程
-Endpoint。
+覆盖，并通过 `FLOWTRACE_API_KEY` 提供个人访问密钥。stdio 是调试便利入口，
+正式集成应使用镜像内置的远程 Endpoint。

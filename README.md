@@ -16,8 +16,8 @@ FlowTrace 是面向研发团队、AI 友好的自部署项目过程追踪工具�
 
 > [!IMPORTANT]
 > FlowTrace 目前处于早期开发阶段（`0.1.x`）。数据模型、API 和 MCP 接口仍可能
-> 在版本迭代中调整；当前版本尚未提供登录和权限隔离，只适合部署在可信内网或
-> 受控私有网络中。
+> 在版本迭代中调整。当前版本要求所有 Web、HTTP API 和 MCP 访问经过身份
+> 认证，但尚未提供细粒度的角色权限管理。
 
 ## 为什么使用 FlowTrace
 
@@ -47,7 +47,8 @@ docker compose up -d --build
 ```
 
 开发 Compose 会启动 PostgreSQL、API 和支持热更新的 Web，并在空库中注入一次
-虚构演示数据：
+虚构演示数据。首次打开页面时创建此实例的本地所有者账号；系统会自动建立对应
+的人员档案，完成初始化后不再开放注册：
 
 - Web：<http://localhost:5173>
 - API：<http://localhost:3100/api>
@@ -60,11 +61,17 @@ docker compose up -d --build
 ## 正式部署
 
 正式交付物是一个同时提供 Web、HTTP API、OpenAPI 文档和远程 MCP 的应用
-镜像，数据存储在 PostgreSQL 中。生产 Compose 要求显式设置数据库密码，并
-默认只监听本机回环地址：
+镜像，数据存储在 PostgreSQL 中。生产 Compose 要求显式配置数据库密码、认证
+密钥、公开访问地址和一个登录适配器。以下示例使用标准 OIDC：
 
 ```bash
 export FLOWTRACE_POSTGRES_PASSWORD='请替换为随机生成的强密码'
+export FLOWTRACE_AUTH_SECRET='请替换为至少32字符的随机密钥'
+export FLOWTRACE_AUTH_BASE_URL='https://flowtrace.example.com'
+export FLOWTRACE_AUTH_PROVIDER='oidc'
+export FLOWTRACE_OIDC_ISSUER='https://id.example.com'
+export FLOWTRACE_OIDC_CLIENT_ID='flowtrace'
+export FLOWTRACE_OIDC_CLIENT_SECRET='请替换为OIDC客户端密钥'
 docker compose -f compose.production.yml up -d --build
 ```
 
@@ -76,8 +83,8 @@ docker compose -f compose.production.yml up -d --build
 `flowtrace_postgres_data` 卷中，升级前应使用 `pg_dump` 创建并验证备份。
 
 > [!WARNING]
-> 当前版本没有账号、登录和权限隔离。不要将 FlowTrace 直接暴露到公网；反向
-> 代理和 HTTPS 不能替代身份认证。
+> FlowTrace 尚未提供 RBAC。登录后的用户可以读取和维护整个实例的数据；正式
+> 环境仍应使用 HTTPS，并限制为组织成员可访问。
 
 外部 PostgreSQL、TLS、镜像参数、数据卷与升级说明见
 [`docs/architecture/deployment.md`](docs/architecture/deployment.md)。
@@ -91,8 +98,9 @@ POST http://localhost:3100/mcp
 ```
 
 不同 AI Harness 的 MCP 配置格式各不相同，只需将上述地址作为远程 MCP 服务
-地址。MCP 提供自描述的单项查询与写入工具；写入仍经过与 Web 相同的业务规则
-和历史记录。调用方必须能够访问 FlowTrace 所在的可信网络。
+地址，并在 `Authorization: Bearer <个人密钥>` 或 `X-API-Key` 请求头中携带
+“AI 接入”页面创建的个人密钥。MCP 提供自描述的单项查询与写入工具；写入仍
+经过与 Web 相同的身份、业务规则和历史记录。
 
 官方 FlowTrace Skill 提供项目管理判断、对象消歧和写入安全策略：
 
@@ -131,7 +139,8 @@ npm run build -w @flowtrace/shared
 npm run dev -w @flowtrace/mcp
 ```
 
-可通过 `FLOWTRACE_API_URL` 覆盖 API 地址。提交 Issue 或 Pull Request 前请阅读
+可通过 `FLOWTRACE_API_URL` 覆盖 API 地址，并通过 `FLOWTRACE_API_KEY` 提供个人
+访问密钥。提交 Issue 或 Pull Request 前请阅读
 [`CONTRIBUTING.md`](CONTRIBUTING.md)；安全问题请按
 [`SECURITY.md`](SECURITY.md) 私下报告，不要创建公开 Issue。
 
@@ -153,9 +162,11 @@ docs/
 - [领域模型](docs/architecture/domain-model.md)
 - [HTTP API](docs/architecture/http-api.md)
 - [MCP 接口](docs/architecture/mcp.md)
+- [身份认证](docs/architecture/authentication.md)
 - [正式部署](docs/architecture/deployment.md)
 - [产品需求 v0.2](docs/product/requirements-v0.2.md)
 - [AI 接入需求 v0.2](docs/product/ai-integration-v0.2.md)
+- [身份接入需求 v0.3](docs/product/authentication-v0.3.md)
 
 面向 Coding Agent 的工程约束位于 [`AGENTS.md`](AGENTS.md)，不属于用户使用
 文档。

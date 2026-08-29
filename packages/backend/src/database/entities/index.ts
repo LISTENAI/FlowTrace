@@ -1,4 +1,5 @@
 export { BugEntity } from '@/database/entities/bug.entity';
+export { AuthPersonBindingEntity } from '@/database/entities/auth-person-binding.entity';
 export { ChangeEventEntity } from '@/database/entities/change-event.entity';
 export { DependencyEntity } from '@/database/entities/dependency.entity';
 export { PersonEntity } from '@/database/entities/person.entity';
@@ -12,6 +13,7 @@ export { VersionEntity } from '@/database/entities/version.entity';
 export { VersionHistoryEntity } from '@/database/entities/version-history.entity';
 
 import { BugEntity } from '@/database/entities/bug.entity';
+import { AuthPersonBindingEntity } from '@/database/entities/auth-person-binding.entity';
 import { ChangeEventEntity } from '@/database/entities/change-event.entity';
 import { DependencyEntity } from '@/database/entities/dependency.entity';
 import { PersonEntity } from '@/database/entities/person.entity';
@@ -25,6 +27,7 @@ import { VersionEntity } from '@/database/entities/version.entity';
 import { VersionHistoryEntity } from '@/database/entities/version-history.entity';
 
 export const entities = [
+  AuthPersonBindingEntity,
   ProjectEntity,
   ProjectRhythmEntity,
   PersonEntity,

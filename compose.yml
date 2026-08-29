@@ -24,6 +24,10 @@ services:
       FLOWTRACE_HOST: 0.0.0.0
       FLOWTRACE_PORT: 3100
       FLOWTRACE_SEED_DEMO: "true"
+      FLOWTRACE_AUTH_SECRET: local-development-only-secret-change-me
+      FLOWTRACE_AUTH_BASE_URL: http://localhost:5173
+      FLOWTRACE_AUTH_TRUSTED_ORIGINS: http://localhost:5173
+      FLOWTRACE_AUTH_PROVIDER: local
     ports:
       - "3100:3100"
     volumes:
