@@ -4,6 +4,14 @@
   "private": true,
   "license": "Apache-2.0",
   "description": "AI 友好的研发项目进度管理工具",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LISTENAI/FlowTrace.git"
+  },
+  "homepage": "https://github.com/LISTENAI/FlowTrace#readme",
+  "bugs": {
+    "url": "https://github.com/LISTENAI/FlowTrace/issues"
+  },
   "workspaces": [
     "packages/*"
   ],
