@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/LISTENAI/FlowTrace/actions/workflows/ci.yml/badge.svg)](https://github.com/LISTENAI/FlowTrace/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A522-339933?logo=node.js&logoColor=white)](package.json)
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A524-339933?logo=node.js&logoColor=white)](package.json)
 
 FlowTrace 是面向研发团队、AI 友好的自部署项目过程追踪工具。它不是另一套
 通用 Jira，而是围绕“一个需求是怎样被真正做完的”来组织信息：负责人、计划
@@ -106,8 +106,8 @@ Skill 与 MCP 各司其职：Skill 指导 Agent 如何工作，MCP 负责访问�
 
 ## 参与开发
 
-本地开发推荐直接使用上面的开发 Compose。也可以在主机安装 Node.js 22、
-npm 10 和可用的 PostgreSQL，然后运行：
+本地开发推荐直接使用上面的开发 Compose。也可以在主机安装 Node.js 24、
+npm 10 或更高版本，以及可用的 PostgreSQL，然后运行：
 
 ```bash
 npm ci

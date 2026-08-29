@@ -24,7 +24,7 @@
     "typecheck": "npm run build -w @flowtrace/shared && npm run build -w @flowtrace/mcp && npm run typecheck --workspaces --if-present"
   },
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=24.0.0",
     "npm": ">=10.0.0"
   },
   "devDependencies": {

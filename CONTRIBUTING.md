@@ -23,7 +23,7 @@ Web 默认位于 <http://localhost:5173>，API 和 OpenAPI UI 位于
 <http://localhost:3100> 与 <http://localhost:3100/api/docs>。开发环境仅在
 空库中注入一次虚构演示数据。
 
-也可以使用 Node.js 22、npm 10 和 PostgreSQL 在主机运行：
+也可以使用 Node.js 24、npm 10 或更高版本和 PostgreSQL 在主机运行：
 
 ```bash
 npm ci
