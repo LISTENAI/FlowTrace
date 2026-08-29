@@ -6,7 +6,7 @@ import { BaseEntity } from '@/database/entities/base';
 @Index(['projectId', 'name'], { unique: true })
 export class VersionEntity extends BaseEntity {
   @Index()
-  @Column('text')
+  @Column('uuid')
   projectId!: string;
 
   @Column('text')
@@ -18,13 +18,13 @@ export class VersionEntity extends BaseEntity {
   @Column('integer', { default: 0 })
   sortOrder!: number;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   plannedStartAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   plannedReleaseAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   actualReleaseAt!: Date | null;
 
   @Column('text', { nullable: true })

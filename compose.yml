@@ -1,4 +1,18 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: flowtrace
+      POSTGRES_USER: flowtrace
+      POSTGRES_PASSWORD: flowtrace
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowtrace -d flowtrace"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - flowtrace_postgres_data:/var/lib/postgresql/data
+
   backend:
     build:
       context: .
@@ -6,16 +20,18 @@ services:
     working_dir: /app
     command: sh -c "npm run build -w @flowtrace/shared && npm run build -w @flowtrace/mcp && npm run dev -w @flowtrace/backend"
     environment:
-      FLOWTRACE_DATABASE_PATH: /data/flowtrace.db
+      FLOWTRACE_DATABASE_URL: postgresql://flowtrace:flowtrace@postgres:5432/flowtrace
       FLOWTRACE_HOST: 0.0.0.0
       FLOWTRACE_PORT: 3100
       FLOWTRACE_SEED_DEMO: "true"
     ports:
       - "3100:3100"
     volumes:
-      - .:/app
-      - flowtrace_node_modules:/app/node_modules
-      - flowtrace_data:/data
+      - ./packages:/app/packages
+      - ./tsconfig.base.json:/app/tsconfig.base.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   web:
     build:
@@ -28,11 +44,11 @@ services:
     ports:
       - "5173:5173"
     volumes:
-      - .:/app
-      - flowtrace_node_modules:/app/node_modules
+      - ./packages:/app/packages
+      - ./tsconfig.base.json:/app/tsconfig.base.json:ro
     depends_on:
-      - backend
+      backend:
+        condition: service_started
 
 volumes:
-  flowtrace_data:
-  flowtrace_node_modules:
+  flowtrace_postgres_data:

@@ -11,19 +11,19 @@ import {
 @Index(['successorType', 'successorId'])
 @Index(['predecessorType', 'predecessorId'])
 export class DependencyEntity {
-  @PrimaryColumn('text')
+  @PrimaryColumn('uuid')
   id!: string;
 
   @Column('text')
   successorType!: DependencyTargetType;
 
-  @Column('text')
+  @Column('uuid')
   successorId!: string;
 
   @Column('text')
   predecessorType!: DependencyTargetType;
 
-  @Column('text')
+  @Column('uuid')
   predecessorId!: string;
 
   @Column('text', { nullable: true })
@@ -38,9 +38,9 @@ export class DependencyEntity {
   @Column('text', { nullable: true })
   agentName!: string | null;
 
-  @CreateDateColumn({ type: 'datetime' })
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   resolvedAt!: Date | null;
 }

@@ -12,7 +12,7 @@ FlowTrace 是面向内部研发团队的轻量项目进度管理工具。它要�
 ## 工程结构
 
 - `packages/shared`：前后端和 MCP 共用的类型、枚举与 API 数据结构。
-- `packages/backend`：NestJS HTTP API、领域服务和 SQLite 持久化。
+- `packages/backend`：NestJS HTTP API、领域服务和 PostgreSQL 持久化。
 - `packages/web`：Vite + Vue SFC + Tailwind 的 Web 界面。
 - `packages/mcp`：第一方 MCP Server，只调用 HTTP API，不直接访问数据库。
 - `docs/product`：产品需求等不会随实现细节漂移的原始产品档案。
@@ -54,7 +54,7 @@ Web 支持跟随系统、浅色和深色三种外观偏好，统一由 `state/th
 在后续启动时补回用户已删除的演示内容。开发 Compose 可以显式开启该选项。
 
 正式交付物是一个同时提供 Web 与 API 的应用镜像，容器内部监听 3100 端口，
-并只将 SQLite 所在的 `/data` 目录挂载到外部。生产部署规则见
+并连接独立的 PostgreSQL 实例。生产部署规则见
 `docs/architecture/deployment.md`。当前版本没有身份认证，不得直接暴露到公网。
 
 不要提交数据库文件、构建产物、依赖目录或本地环境文件。

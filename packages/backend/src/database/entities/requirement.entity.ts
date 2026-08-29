@@ -4,7 +4,7 @@ import { BaseEntity } from '@/database/entities/base';
 
 @Entity('requirements')
 export class RequirementEntity extends BaseEntity {
-  @DeleteDateColumn({ type: 'datetime', nullable: true })
+  @DeleteDateColumn({ type: 'timestamptz', nullable: true })
   deletedAt!: Date | null;
 
   @Index({ unique: true })
@@ -12,11 +12,11 @@ export class RequirementEntity extends BaseEntity {
   key!: string;
 
   @Index()
-  @Column('text')
+  @Column('uuid')
   projectId!: string;
 
   @Index()
-  @Column('text', { nullable: true })
+  @Column('uuid', { nullable: true })
   versionId!: string | null;
 
   @Column('text')
@@ -25,27 +25,27 @@ export class RequirementEntity extends BaseEntity {
   @Column('text', { nullable: true })
   description!: string | null;
 
-  @Column('simple-json', { default: '[]' })
+  @Column('jsonb', { default: () => "'[]'::jsonb" })
   ownerIds!: string[];
 
   @Column('text', { default: 'not_started' })
   lifecycle!: RequirementLifecycle;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   baselineStartAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   baselineEndAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   plannedStartAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   plannedEndAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   actualStartAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   actualEndAt!: Date | null;
 }

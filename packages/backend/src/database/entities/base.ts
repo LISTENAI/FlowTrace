@@ -1,12 +1,12 @@
 import { CreateDateColumn, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
 export abstract class BaseEntity {
-  @PrimaryColumn('text')
+  @PrimaryColumn('uuid')
   id!: string;
 
-  @CreateDateColumn({ type: 'datetime' })
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 
-  @UpdateDateColumn({ type: 'datetime' })
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt!: Date;
 }

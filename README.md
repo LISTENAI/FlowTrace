@@ -15,8 +15,8 @@ FlowTrace 是面向研发团队的自部署项目进度管理工具。它以需�
 
 ## 快速开始
 
-正式环境使用一个镜像提供 Web、HTTP API、OpenAPI 文档和远程 MCP，SQLite
-数据库单独保存在 Docker 数据卷中：
+正式环境由 FlowTrace 应用和 PostgreSQL 组成。应用镜像同时提供 Web、HTTP
+API、OpenAPI 文档和远程 MCP：
 
 ```bash
 docker compose -f compose.production.yml up -d --build
@@ -30,9 +30,9 @@ docker compose -f compose.production.yml up -d --build
 - MCP Endpoint：`POST http://localhost:3100/mcp`
 
 可通过 `FLOWTRACE_PUBLISH_PORT` 修改宿主机端口。正式环境空库只会创建软件、
-固件和硬件三套可编辑的基础节奏，不会创建演示项目、人员、需求或 Bug。数据
-保存在 `flowtrace_data` 卷的 `/data/flowtrace.db` 中，升级前应备份该文件或
-整个数据卷。
+固件和硬件三套可编辑的基础节奏，不会创建演示项目、人员、需求或 Bug。
+Compose 默认把 PostgreSQL 数据保存在 `flowtrace_postgres_data` 卷中；正式使用
+前应设置 `FLOWTRACE_POSTGRES_PASSWORD`，升级前应使用 `pg_dump` 备份数据库。
 
 > [!WARNING]
 > 当前版本没有账号、登录和权限隔离，只能部署在可信内网或受控私有网络中，
@@ -109,7 +109,7 @@ npm run dev -w @flowtrace/mcp
 ```text
 packages/
 ├── web/       Vite、Vue SFC 与 Tailwind Web 界面
-├── backend/   NestJS HTTP API、领域服务与 SQLite 持久化
+├── backend/   NestJS HTTP API、领域服务与 PostgreSQL 持久化
 ├── shared/    前后端和 MCP 共用的类型与 API 数据结构
 └── mcp/       只通过 HTTP API 访问业务能力的第一方 MCP Server
 skills/

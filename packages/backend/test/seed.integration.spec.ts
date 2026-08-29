@@ -1,18 +1,12 @@
 import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { TypeOrmModule, type TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
-import { entities } from '@/database/entities';
-import { InitialSchema1724428800000 } from '@/database/migrations/1724428800000-initial-schema';
-import { ProjectRhythms1724515200000 } from '@/database/migrations/1724515200000-project-rhythms';
-import { SoftDeleteWorkItems1724601600000 } from '@/database/migrations/1724601600000-soft-delete-work-items';
-import { VersionSortOrder1724688000000 } from '@/database/migrations/1724688000000-version-sort-order';
-import { AiChangeContext1724774400000 } from '@/database/migrations/1724774400000-ai-change-context';
-import { StageWorkDomains1724860800000 } from '@/database/migrations/1724860800000-stage-work-domains';
 import { DomainModule } from '@/domain/domain.module';
 import { WorkService } from '@/domain/work.service';
 import { SeedService } from '@/seed/seed.service';
+import { createTestDataSource } from './support/database';
 
 describe.sequential('SeedService experience data', () => {
   const originalSeedMode = process.env.FLOWTRACE_SEED_DEMO;
@@ -22,22 +16,12 @@ describe.sequential('SeedService experience data', () => {
 
   beforeAll(async () => {
     delete process.env.FLOWTRACE_SEED_DEMO;
+    dataSource = await createTestDataSource();
     const module = await Test.createTestingModule({
       imports: [
-        TypeOrmModule.forRoot({
-          type: 'better-sqlite3',
-          database: ':memory:',
-          entities,
-          migrations: [
-            InitialSchema1724428800000,
-            ProjectRhythms1724515200000,
-            SoftDeleteWorkItems1724601600000,
-            VersionSortOrder1724688000000,
-            AiChangeContext1724774400000,
-            StageWorkDomains1724860800000,
-          ],
-          migrationsRun: true,
-          synchronize: false,
+        TypeOrmModule.forRootAsync({
+          useFactory: () => dataSource.options as TypeOrmModuleOptions,
+          dataSourceFactory: async () => dataSource,
         }),
         DomainModule,
       ],

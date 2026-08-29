@@ -13,7 +13,7 @@ POST /mcp
 ```
 
 Endpoint 使用无会话状态的请求/响应模式。MCP 协议层不保留 Agent
-会话，业务数据仍由应用的 SQLite 数据卷持久化。当 FlowTrace 通过
+会话，业务数据仍由应用连接的 PostgreSQL 持久化。当 FlowTrace 通过
 多个 Host 访问时，可用逗号分隔的 `FLOWTRACE_MCP_ALLOWED_HOSTS`
 启用 Host 白名单校验。
 

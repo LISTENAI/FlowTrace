@@ -10,13 +10,13 @@ import {
 @Entity('status_history')
 @Index(['entityType', 'entityId', 'effectiveAt'])
 export class StatusHistoryEntity {
-  @PrimaryColumn('text')
+  @PrimaryColumn('uuid')
   id!: string;
 
   @Column('text')
   entityType!: 'stage' | 'bug';
 
-  @Column('text')
+  @Column('uuid')
   entityId!: string;
 
   @Column('text', { nullable: true })
@@ -25,7 +25,7 @@ export class StatusHistoryEntity {
   @Column('text')
   toStatus!: ExecutionStatus;
 
-  @Column('datetime')
+  @Column('timestamptz')
   effectiveAt!: Date;
 
   @Column('text', { nullable: true })
@@ -34,7 +34,7 @@ export class StatusHistoryEntity {
   @Column('text', { nullable: true })
   reason!: string | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   expectedResumeAt!: Date | null;
 
   @Column('text')
@@ -43,6 +43,6 @@ export class StatusHistoryEntity {
   @Column('text', { nullable: true })
   agentName!: string | null;
 
-  @CreateDateColumn({ type: 'datetime' })
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 }

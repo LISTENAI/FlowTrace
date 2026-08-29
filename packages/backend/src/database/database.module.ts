@@ -1,30 +1,34 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { entities } from '@/database/entities';
-import { InitialSchema1724428800000 } from '@/database/migrations/1724428800000-initial-schema';
-import { ProjectRhythms1724515200000 } from '@/database/migrations/1724515200000-project-rhythms';
-import { SoftDeleteWorkItems1724601600000 } from '@/database/migrations/1724601600000-soft-delete-work-items';
-import { VersionSortOrder1724688000000 } from '@/database/migrations/1724688000000-version-sort-order';
-import { AiChangeContext1724774400000 } from '@/database/migrations/1724774400000-ai-change-context';
-import { StageWorkDomains1724860800000 } from '@/database/migrations/1724860800000-stage-work-domains';
+import { migrations } from '@/database/migrations';
+
+const connection = process.env.FLOWTRACE_DATABASE_URL
+  ? { url: process.env.FLOWTRACE_DATABASE_URL }
+  : {
+      host: process.env.FLOWTRACE_DATABASE_HOST ?? '127.0.0.1',
+      port: Number(process.env.FLOWTRACE_DATABASE_PORT ?? 5432),
+      username: process.env.FLOWTRACE_DATABASE_USER ?? 'flowtrace',
+      password: process.env.FLOWTRACE_DATABASE_PASSWORD ?? 'flowtrace',
+      database: process.env.FLOWTRACE_DATABASE_NAME ?? 'flowtrace',
+    };
+const sslMode = process.env.FLOWTRACE_DATABASE_SSL;
 
 @Module({
   imports: [
     TypeOrmModule.forRoot({
-      type: 'better-sqlite3',
-      database: process.env.FLOWTRACE_DATABASE_PATH ?? 'data/flowtrace.db',
+      type: 'postgres',
+      ...connection,
+      ssl:
+        sslMode === 'require'
+          ? { rejectUnauthorized: false }
+          : sslMode === 'verify-full'
+            ? { rejectUnauthorized: true }
+            : false,
       entities,
-      migrations: [
-        InitialSchema1724428800000,
-        ProjectRhythms1724515200000,
-        SoftDeleteWorkItems1724601600000,
-        VersionSortOrder1724688000000,
-        AiChangeContext1724774400000,
-        StageWorkDomains1724860800000,
-      ],
+      migrations,
       migrationsRun: true,
       synchronize: false,
-      enableWAL: true,
     }),
   ],
 })

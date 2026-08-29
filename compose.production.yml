@@ -1,4 +1,23 @@
 services:
+  postgres:
+    image: ${FLOWTRACE_POSTGRES_IMAGE:-postgres:16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${FLOWTRACE_POSTGRES_DATABASE:-flowtrace}
+      POSTGRES_USER: ${FLOWTRACE_POSTGRES_USER:-flowtrace}
+      POSTGRES_PASSWORD: ${FLOWTRACE_POSTGRES_PASSWORD:-flowtrace}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${FLOWTRACE_POSTGRES_USER:-flowtrace} -d ${FLOWTRACE_POSTGRES_DATABASE:-flowtrace}",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - flowtrace_postgres_data:/var/lib/postgresql/data
+
   flowtrace:
     image: ${FLOWTRACE_IMAGE:-flowtrace:local}
     build:
@@ -7,14 +26,18 @@ services:
     init: true
     restart: unless-stopped
     environment:
-      FLOWTRACE_DATABASE_PATH: /data/flowtrace.db
+      FLOWTRACE_DATABASE_HOST: postgres
+      FLOWTRACE_DATABASE_NAME: ${FLOWTRACE_POSTGRES_DATABASE:-flowtrace}
+      FLOWTRACE_DATABASE_USER: ${FLOWTRACE_POSTGRES_USER:-flowtrace}
+      FLOWTRACE_DATABASE_PASSWORD: ${FLOWTRACE_POSTGRES_PASSWORD:-flowtrace}
       FLOWTRACE_HOST: 0.0.0.0
       FLOWTRACE_PORT: 3100
       FLOWTRACE_SEED_DEMO: "false"
     ports:
       - "${FLOWTRACE_PUBLISH_PORT:-3100}:3100"
-    volumes:
-      - flowtrace_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
-  flowtrace_data:
+  flowtrace_postgres_data:

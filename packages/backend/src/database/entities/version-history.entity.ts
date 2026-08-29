@@ -10,16 +10,16 @@ import {
 @Entity('version_history')
 @Index(['requirementId', 'changedAt'])
 export class VersionHistoryEntity {
-  @PrimaryColumn('text')
+  @PrimaryColumn('uuid')
   id!: string;
 
-  @Column('text')
+  @Column('uuid')
   requirementId!: string;
 
-  @Column('text', { nullable: true })
+  @Column('uuid', { nullable: true })
   fromVersionId!: string | null;
 
-  @Column('text', { nullable: true })
+  @Column('uuid', { nullable: true })
   toVersionId!: string | null;
 
   @Column('text', { nullable: true })
@@ -31,9 +31,9 @@ export class VersionHistoryEntity {
   @Column('text', { nullable: true })
   agentName!: string | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   effectiveAt!: Date | null;
 
-  @CreateDateColumn({ type: 'datetime' })
+  @CreateDateColumn({ type: 'timestamptz' })
   changedAt!: Date;
 }

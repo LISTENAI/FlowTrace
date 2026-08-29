@@ -5,19 +5,19 @@ import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 @Index(['occurredAt'])
 @Index(['projectId', 'occurredAt'])
 export class ChangeEventEntity {
-  @PrimaryColumn('text')
+  @PrimaryColumn('uuid')
   id!: string;
 
   @Column('text')
   entityType!: string;
 
-  @Column('text')
+  @Column('uuid')
   entityId!: string;
 
-  @Column('text', { nullable: true })
+  @Column('uuid', { nullable: true })
   projectId!: string | null;
 
-  @Column('text', { nullable: true })
+  @Column('uuid', { nullable: true })
   requirementId!: string | null;
 
   @Column('text')
@@ -26,7 +26,7 @@ export class ChangeEventEntity {
   @Column('text')
   summary!: string;
 
-  @Column('simple-json', { nullable: true })
+  @Column('jsonb', { nullable: true })
   details!: Record<string, unknown> | null;
 
   @Column('text', { nullable: true })
@@ -38,6 +38,6 @@ export class ChangeEventEntity {
   @Column('text', { nullable: true })
   agentName!: string | null;
 
-  @Column('datetime')
+  @Column('timestamptz')
   occurredAt!: Date;
 }

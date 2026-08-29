@@ -45,6 +45,7 @@ import {
   selectNextStages,
 } from '@flowtrace/shared';
 import { randomUUID } from 'node:crypto';
+import { isUUID } from 'class-validator';
 import {
   DataSource,
   EntityManager,
@@ -677,8 +678,9 @@ export class WorkService {
     }
     const requirementId = await this.dataSource.transaction(async (manager) => {
       const projectRepository = manager.getRepository(ProjectEntity);
-      const project = await projectRepository.findOneBy({
-        id: input.projectId,
+      const project = await projectRepository.findOne({
+        where: { id: input.projectId },
+        lock: { mode: 'pessimistic_write' },
       });
       if (!project) throw new NotFoundException('未找到项目');
       if (input.versionId)
@@ -1140,8 +1142,9 @@ export class WorkService {
       );
     }
     const bugId = await this.dataSource.transaction(async (manager) => {
-      const project = await manager.getRepository(ProjectEntity).findOneBy({
-        id: requirement.projectId,
+      const project = await manager.getRepository(ProjectEntity).findOne({
+        where: { id: requirement.projectId },
+        lock: { mode: 'pessimistic_write' },
       });
       if (!project) throw new NotFoundException('未找到项目');
       project.bugSequence += 1;
@@ -2656,7 +2659,9 @@ export class WorkService {
 
   private async findProject(idOrKey: string): Promise<ProjectEntity> {
     const project = await this.projects.findOne({
-      where: [{ id: idOrKey }, { key: idOrKey.toUpperCase() }],
+      where: isUUID(idOrKey)
+        ? [{ id: idOrKey }, { key: idOrKey.toUpperCase() }]
+        : { key: idOrKey.toUpperCase() },
     });
     if (!project) throw new NotFoundException('未找到项目');
     return project;
@@ -2664,7 +2669,9 @@ export class WorkService {
 
   private async findRequirement(idOrKey: string): Promise<RequirementEntity> {
     const requirement = await this.requirements.findOne({
-      where: [{ id: idOrKey }, { key: idOrKey.toUpperCase() }],
+      where: isUUID(idOrKey)
+        ? [{ id: idOrKey }, { key: idOrKey.toUpperCase() }]
+        : { key: idOrKey.toUpperCase() },
     });
     if (!requirement) throw new NotFoundException('未找到需求');
     return requirement;
@@ -2678,7 +2685,9 @@ export class WorkService {
 
   private async findBug(idOrKey: string): Promise<BugEntity> {
     const bug = await this.bugs.findOne({
-      where: [{ id: idOrKey }, { key: idOrKey.toUpperCase() }],
+      where: isUUID(idOrKey)
+        ? [{ id: idOrKey }, { key: idOrKey.toUpperCase() }]
+        : { key: idOrKey.toUpperCase() },
     });
     if (!bug) throw new NotFoundException('未找到 Bug');
     return bug;

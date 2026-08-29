@@ -4,7 +4,7 @@ import { BaseEntity } from '@/database/entities/base';
 
 @Entity('bugs')
 export class BugEntity extends BaseEntity {
-  @DeleteDateColumn({ type: 'datetime', nullable: true })
+  @DeleteDateColumn({ type: 'timestamptz', nullable: true })
   deletedAt!: Date | null;
 
   @Index({ unique: true })
@@ -12,7 +12,7 @@ export class BugEntity extends BaseEntity {
   key!: string;
 
   @Index()
-  @Column('text')
+  @Column('uuid')
   requirementId!: string;
 
   @Column('text')
@@ -21,7 +21,7 @@ export class BugEntity extends BaseEntity {
   @Column('text', { nullable: true })
   description!: string | null;
 
-  @Column('simple-json', { default: '[]' })
+  @Column('jsonb', { default: () => "'[]'::jsonb" })
   ownerIds!: string[];
 
   @Column('text', { default: 'not_started' })
@@ -30,33 +30,33 @@ export class BugEntity extends BaseEntity {
   @Column('text', { nullable: true })
   statusReason!: string | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   expectedResumeAt!: Date | null;
 
-  @Column('text', { nullable: true })
+  @Column('uuid', { nullable: true })
   discoveredStageId!: string | null;
 
-  @Column('text', { nullable: true })
+  @Column('uuid', { nullable: true })
   discoveredVersionId!: string | null;
 
-  @Column('text', { nullable: true })
+  @Column('uuid', { nullable: true })
   targetVersionId!: string | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   baselineStartAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   baselineEndAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   plannedStartAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   plannedEndAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   actualStartAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   actualEndAt!: Date | null;
 }

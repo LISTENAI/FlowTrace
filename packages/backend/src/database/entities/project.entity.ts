@@ -14,7 +14,7 @@ export class ProjectEntity extends BaseEntity {
   @Column('text', { nullable: true })
   description!: string | null;
 
-  @Column('simple-json', { default: '[]' })
+  @Column('jsonb', { default: () => "'[]'::jsonb" })
   templateStages!: TemplateStage[];
 
   @Column('integer', { default: 0 })

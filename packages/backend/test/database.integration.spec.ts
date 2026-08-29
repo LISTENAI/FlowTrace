@@ -1,13 +1,7 @@
 import 'reflect-metadata';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DataSource } from 'typeorm';
-import { entities } from '@/database/entities';
-import { InitialSchema1724428800000 } from '@/database/migrations/1724428800000-initial-schema';
-import { ProjectRhythms1724515200000 } from '@/database/migrations/1724515200000-project-rhythms';
-import { SoftDeleteWorkItems1724601600000 } from '@/database/migrations/1724601600000-soft-delete-work-items';
-import { VersionSortOrder1724688000000 } from '@/database/migrations/1724688000000-version-sort-order';
-import { AiChangeContext1724774400000 } from '@/database/migrations/1724774400000-ai-change-context';
-import { StageWorkDomains1724860800000 } from '@/database/migrations/1724860800000-stage-work-domains';
+import type { DataSource } from 'typeorm';
+import { createTestDataSource } from './support/database';
 
 let dataSource: DataSource | undefined;
 
@@ -17,24 +11,12 @@ afterEach(async () => {
 
 describe('initial database migration', () => {
   it('creates every domain and history table', async () => {
-    dataSource = new DataSource({
-      type: 'better-sqlite3',
-      database: ':memory:',
-      entities,
-      migrations: [
-        InitialSchema1724428800000,
-        ProjectRhythms1724515200000,
-        SoftDeleteWorkItems1724601600000,
-        VersionSortOrder1724688000000,
-        AiChangeContext1724774400000,
-        StageWorkDomains1724860800000,
-      ],
-    });
-    await dataSource.initialize();
-    await dataSource.runMigrations();
+    dataSource = await createTestDataSource();
 
     const rows = (await dataSource.query(
-      "SELECT name FROM sqlite_master WHERE type = 'table'",
+      `SELECT table_name AS "name"
+       FROM information_schema.tables
+       WHERE table_schema = 'public'`,
     )) as Array<{ name: string }>;
     const tables = rows.map((row) => row.name);
 
@@ -54,13 +36,16 @@ describe('initial database migration', () => {
     );
 
     const versionHistoryColumns = (await dataSource.query(
-      'PRAGMA table_info("version_history")',
+      `SELECT column_name AS "name" FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'version_history'`,
     )) as Array<{ name: string }>;
     const changeColumns = (await dataSource.query(
-      'PRAGMA table_info("change_events")',
+      `SELECT column_name AS "name" FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'change_events'`,
     )) as Array<{ name: string }>;
     const stageColumns = (await dataSource.query(
-      'PRAGMA table_info("stages")',
+      `SELECT column_name AS "name" FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'stages'`,
     )) as Array<{ name: string }>;
     expect(versionHistoryColumns.map((column) => column.name)).toContain(
       'effectiveAt',

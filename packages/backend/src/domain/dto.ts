@@ -8,6 +8,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
   MinLength,
@@ -89,7 +90,7 @@ export class UpdatePersonDto {
 export class TemplateStageDto {
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsUUID()
   id?: string;
 
   @ApiProperty({ example: '开发' })
@@ -105,7 +106,7 @@ export class TemplateStageDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID(undefined, { each: true })
   dependsOnTemplateStageIds?: string[];
 }
 
@@ -258,7 +259,7 @@ export class CreateRequirementStageDto {
     description: '来源项目模板阶段；提供时保留仍然有效的模板依赖',
   })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   templateStageId?: string;
 
   @ApiProperty({ example: '板上验证' })
@@ -274,7 +275,7 @@ export class CreateRequirementStageDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID(undefined, { each: true })
   ownerIds?: string[];
 
   @ApiPropertyOptional()
@@ -295,12 +296,12 @@ export class CreateRequirementStageDto {
 
 export class CreateRequirementDto extends ChangeContextDto {
   @ApiProperty()
-  @IsString()
+  @IsUUID()
   projectId!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsUUID()
   versionId?: string;
 
   @ApiProperty({ example: '优化蓝牙配网稳定性' })
@@ -316,7 +317,7 @@ export class CreateRequirementDto extends ChangeContextDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID(undefined, { each: true })
   ownerIds?: string[];
 
   @ApiPropertyOptional()
@@ -355,7 +356,7 @@ export class UpdateRequirementDto extends ChangeContextDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID(undefined, { each: true })
   ownerIds?: string[];
 
   @ApiPropertyOptional({
@@ -369,7 +370,7 @@ export class UpdateRequirementDto extends ChangeContextDto {
 export class MoveVersionDto extends ChangeContextDto {
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   versionId?: string | null;
 
   @ApiPropertyOptional({ description: '版本迁移实际生效时间，允许补录' })
@@ -392,7 +393,7 @@ export class CreateStageDto extends ChangeContextDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID(undefined, { each: true })
   ownerIds?: string[];
 
   @ApiPropertyOptional()
@@ -431,7 +432,7 @@ export class UpdateStageDto extends ChangeContextDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID(undefined, { each: true })
   ownerIds?: string[];
 
   @ApiPropertyOptional()
@@ -454,7 +455,7 @@ export class UpdateStatusDto extends ChangeContextDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID(undefined, { each: true })
   ownerIds?: string[];
 
   @ApiPropertyOptional({ description: '状态实际生效时间，允许补录' })
@@ -546,22 +547,22 @@ export class CreateBugDto extends ChangeContextDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID(undefined, { each: true })
   ownerIds?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsUUID()
   discoveredStageId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsUUID()
   discoveredVersionId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsUUID()
   targetVersionId?: string;
 
   @ApiPropertyOptional()
@@ -589,12 +590,12 @@ export class UpdateBugDto extends ChangeContextDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID(undefined, { each: true })
   ownerIds?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsUUID()
   targetVersionId?: string;
 }
 
@@ -604,7 +605,7 @@ export class CreateDependencyDto extends ChangeContextDto {
   successorType!: DependencyTargetType;
 
   @ApiProperty()
-  @IsString()
+  @IsUUID()
   successorId!: string;
 
   @ApiProperty({ enum: ['requirement', 'stage', 'bug'] })
@@ -612,7 +613,7 @@ export class CreateDependencyDto extends ChangeContextDto {
   predecessorType!: DependencyTargetType;
 
   @ApiProperty()
-  @IsString()
+  @IsUUID()
   predecessorId!: string;
 
   @ApiPropertyOptional()
@@ -635,7 +636,7 @@ export class BatchOperationDto {
   type!: string;
 
   @ApiProperty()
-  @IsString()
+  @IsUUID()
   targetId!: string;
 
   @ApiProperty({ type: 'object', additionalProperties: true })

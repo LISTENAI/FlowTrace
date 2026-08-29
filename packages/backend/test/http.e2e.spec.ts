@@ -2,24 +2,17 @@ import 'reflect-metadata';
 import type { INestApplication } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { TypeOrmModule, type TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DataSource } from 'typeorm';
 import { configureApp } from '@/configure-app';
 import { configureStaticWeb } from '@/configure-static-web';
-import { entities } from '@/database/entities';
-import { InitialSchema1724428800000 } from '@/database/migrations/1724428800000-initial-schema';
-import { ProjectRhythms1724515200000 } from '@/database/migrations/1724515200000-project-rhythms';
-import { SoftDeleteWorkItems1724601600000 } from '@/database/migrations/1724601600000-soft-delete-work-items';
-import { VersionSortOrder1724688000000 } from '@/database/migrations/1724688000000-version-sort-order';
-import { AiChangeContext1724774400000 } from '@/database/migrations/1724774400000-ai-change-context';
-import { StageWorkDomains1724860800000 } from '@/database/migrations/1724860800000-stage-work-domains';
 import { DomainModule } from '@/domain/domain.module';
 import { McpController } from '@/mcp/mcp.controller';
+import { createTestDataSource } from './support/database';
 
 describe.sequential('HTTP API', () => {
   const originalWebRoot = process.env.FLOWTRACE_WEB_ROOT;
@@ -42,21 +35,12 @@ describe.sequential('HTTP API', () => {
       'window.flowtrace = true;',
     );
     process.env.FLOWTRACE_WEB_ROOT = webRoot;
+    const dataSource = await createTestDataSource();
     const module = await Test.createTestingModule({
       imports: [
-        TypeOrmModule.forRoot({
-          type: 'better-sqlite3',
-          database: ':memory:',
-          entities,
-          migrations: [
-            InitialSchema1724428800000,
-            ProjectRhythms1724515200000,
-            SoftDeleteWorkItems1724601600000,
-            VersionSortOrder1724688000000,
-            AiChangeContext1724774400000,
-            StageWorkDomains1724860800000,
-          ],
-          migrationsRun: true,
+        TypeOrmModule.forRootAsync({
+          useFactory: () => dataSource.options as TypeOrmModuleOptions,
+          dataSourceFactory: async () => dataSource,
         }),
         DomainModule,
       ],
@@ -191,6 +175,7 @@ describe.sequential('HTTP API', () => {
       .send({ title: '' })
       .expect(400);
 
+    const ownerId = '11111111-1111-4111-8111-111111111111';
     const customResponse = await request(app.getHttpServer())
       .post('/api/requirements')
       .send({
@@ -199,7 +184,7 @@ describe.sequential('HTTP API', () => {
         stages: [
           {
             name: '物料报价',
-            ownerIds: ['owner-a'],
+            ownerIds: [ownerId],
             plannedEndAt: '2026-08-28T10:00:00.000Z',
           },
           { name: '采购下单' },
@@ -211,7 +196,7 @@ describe.sequential('HTTP API', () => {
     expect(customResponse.body.stages).toEqual([
       expect.objectContaining({
         name: '物料报价',
-        ownerIds: ['owner-a'],
+        ownerIds: [ownerId],
         plannedEndAt: '2026-08-28T10:00:00.000Z',
       }),
       expect.objectContaining({ name: '采购下单' }),

@@ -10,25 +10,25 @@ import {
 @Entity('schedule_history')
 @Index(['entityType', 'entityId', 'changedAt'])
 export class ScheduleHistoryEntity {
-  @PrimaryColumn('text')
+  @PrimaryColumn('uuid')
   id!: string;
 
   @Column('text')
   entityType!: 'requirement' | 'stage' | 'bug';
 
-  @Column('text')
+  @Column('uuid')
   entityId!: string;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   oldStartAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   oldEndAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   newStartAt!: Date | null;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamptz', { nullable: true })
   newEndAt!: Date | null;
 
   @Column('text', { nullable: true })
@@ -40,6 +40,6 @@ export class ScheduleHistoryEntity {
   @Column('text', { nullable: true })
   agentName!: string | null;
 
-  @CreateDateColumn({ type: 'datetime' })
+  @CreateDateColumn({ type: 'timestamptz' })
   changedAt!: Date;
 }

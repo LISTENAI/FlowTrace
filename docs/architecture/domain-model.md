@@ -1,8 +1,9 @@
 # 领域模型与持久化
 
-FlowTrace 使用 TypeORM 管理 SQLite 数据库，数据库结构只通过迁移演进，运行
-环境禁用 `synchronize`。当前 schema 将可变的当前状态与不可变的历史事实
-分开保存。
+FlowTrace 使用 TypeORM 管理 PostgreSQL 数据库，数据库结构只通过迁移演进，
+运行环境禁用 `synchronize`。PostgreSQL baseline 表示当前完整结构，后续版本
+只追加真实执行过的 PostgreSQL schema migration。当前 schema 将可变的当前
+状态与不可变的历史事实分开保存。
 
 ## 聚合边界
 
@@ -32,6 +33,6 @@ FlowTrace 使用 TypeORM 管理 SQLite 数据库，数据库结构只通过迁�
 
 ## 数据库选择
 
-MVP 使用 SQLite 和 `better-sqlite3`，适合可信内部环境的单实例自部署。应用层
-不依赖 SQLite 特有的业务语义，后续需要并发写入或高可用时可通过新迁移和
-适配切换到 PostgreSQL。
+FlowTrace 以 PostgreSQL 作为唯一受支持的数据库。JSON 快照使用 `jsonb`，时间
+字段使用 `timestamptz`，内部实体标识使用 UUID。部署方可以使用 Compose 自带
+的 PostgreSQL，也可以通过连接参数接入已有的托管或企业数据库。
