@@ -31,6 +31,7 @@ COPY packages/shared/package.json ./packages/shared/
 COPY packages/backend/package.json ./packages/backend/
 COPY packages/mcp/package.json ./packages/mcp/
 COPY --from=production-dependencies /app/node_modules ./node_modules
+COPY --from=production-dependencies /app/packages/backend/node_modules ./packages/backend/node_modules
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/mcp/dist ./packages/mcp/dist
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
