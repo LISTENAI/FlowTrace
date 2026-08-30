@@ -16,9 +16,17 @@ export interface FlowTraceAuthRuntime {
   setupRequired(): Promise<boolean>;
 }
 
+type AuthBaseURL =
+  | string
+  | {
+      allowedHosts: string[];
+      protocol: 'http' | 'https' | 'auto';
+      fallback?: string;
+    };
+
 export interface FlowTraceAuthOptions {
   secret: string;
-  baseURL: string;
+  baseURL: AuthBaseURL;
   pool: Pool;
   provider: AuthProviderInfo;
   oauthProvider?: AuthProviderAdapter;
@@ -129,6 +137,37 @@ const localProvider: AuthProviderInfo = {
   emailAuthority: 'account',
 };
 
+export function resolveAuthBaseURL(
+  environment: NodeJS.ProcessEnv = process.env,
+): AuthBaseURL {
+  const staticURL = environment.FLOWTRACE_AUTH_BASE_URL?.trim();
+  const allowedHosts = environment.FLOWTRACE_AUTH_ALLOWED_HOSTS?.split(',')
+    .map((host) => host.trim())
+    .filter(Boolean);
+  if (staticURL && allowedHosts?.length) {
+    throw new Error(
+      'FLOWTRACE_AUTH_BASE_URL 与 FLOWTRACE_AUTH_ALLOWED_HOSTS 只能配置一个',
+    );
+  }
+  if (staticURL) return staticURL;
+  if (!allowedHosts?.length) {
+    throw new Error(
+      '必须配置 FLOWTRACE_AUTH_BASE_URL 或 FLOWTRACE_AUTH_ALLOWED_HOSTS',
+    );
+  }
+
+  const protocol = environment.FLOWTRACE_AUTH_PROTOCOL?.trim() || 'https';
+  if (protocol !== 'http' && protocol !== 'https' && protocol !== 'auto') {
+    throw new Error('FLOWTRACE_AUTH_PROTOCOL 必须是 http、https 或 auto');
+  }
+  const fallback = environment.FLOWTRACE_AUTH_FALLBACK_URL?.trim();
+  return {
+    allowedHosts,
+    protocol,
+    ...(fallback ? { fallback } : {}),
+  };
+}
+
 export function getAuthRuntime(): FlowTraceAuthRuntime {
   if (runtime) return runtime;
 
@@ -136,8 +175,7 @@ export function getAuthRuntime(): FlowTraceAuthRuntime {
   if (!secret || secret.length < 32) {
     throw new Error('FLOWTRACE_AUTH_SECRET 必须至少为 32 个字符');
   }
-  const baseURL = process.env.FLOWTRACE_AUTH_BASE_URL;
-  if (!baseURL) throw new Error('必须配置 FLOWTRACE_AUTH_BASE_URL');
+  const baseURL = resolveAuthBaseURL();
 
   const providerId = process.env.FLOWTRACE_AUTH_PROVIDER;
   let provider: AuthProviderInfo;

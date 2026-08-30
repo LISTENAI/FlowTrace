@@ -30,6 +30,18 @@ FLOWTRACE_AUTH_BASE_URL=https://flowtrace.example.com
 FLOWTRACE_AUTH_TRUSTED_ORIGINS=https://flowtrace.example.com
 ```
 
+同一实例需要通过多个明确域名访问时，不要依赖任意请求头推断回调地址，而是用
+主机白名单替代静态 `FLOWTRACE_AUTH_BASE_URL`：
+
+```text
+FLOWTRACE_AUTH_ALLOWED_HOSTS=staging.example.com,flowtrace.example.com
+FLOWTRACE_AUTH_PROTOCOL=https
+```
+
+两种 URL 配置只能选择一种。动态模式按当前请求中命中的白名单主机构造回调地址，
+未知主机默认拒绝；确有无请求上下文的调用时可以另外设置
+`FLOWTRACE_AUTH_FALLBACK_URL`。白名单主机同时由 Better Auth 纳入可信来源。
+
 OIDC 模式配置为：
 
 ```text

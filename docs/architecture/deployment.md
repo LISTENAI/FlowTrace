@@ -45,7 +45,8 @@ TLS，可将 `FLOWTRACE_DATABASE_SSL` 设为 `require` 或 `verify-full`。
 身份认证是必需能力，未选择登录适配器时应用会拒绝启动。生产环境支持本地
 账号、标准 OIDC 和企业微信适配器，详细变量、回调地址和人员关联规则见
 [身份认证](authentication.md)。`FLOWTRACE_AUTH_BASE_URL` 必须是用户实际访问
-的 HTTPS 地址。
+的 HTTPS 地址；需要同时服务多个明确域名时改用
+`FLOWTRACE_AUTH_ALLOWED_HOSTS` 和 `FLOWTRACE_AUTH_PROTOCOL`。
 
 当前版本尚无 RBAC，登录后的组织成员可以读取和维护整个实例的数据。升级前应
 使用 `pg_dump` 创建一致性备份并验证可恢复；不得仅复制正在运行的 PostgreSQL
