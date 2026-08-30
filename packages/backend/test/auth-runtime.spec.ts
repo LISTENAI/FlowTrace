@@ -1,8 +1,33 @@
+import { Pool } from 'pg';
 import { describe, expect, it } from 'vitest';
 import {
+  createFlowTraceAuth,
   resolveAuthBaseURL,
   resolveAuthIPAddress,
 } from '@/auth/auth-runtime';
+
+const createDynamicAuth = () => {
+  const pool = new Pool({
+    connectionString: 'postgres://flowtrace:flowtrace@127.0.0.1:1/flowtrace',
+    connectionTimeoutMillis: 50,
+  });
+  const auth = createFlowTraceAuth({
+    secret: 'test-secret-that-is-at-least-32-characters',
+    baseURL: {
+      allowedHosts: ['flowtrace.example.com'],
+      protocol: 'https',
+    },
+    pool,
+    provider: {
+      id: 'local',
+      name: '本地账号',
+      kind: 'local',
+      nameAuthority: 'flowtrace',
+      emailAuthority: 'account',
+    },
+  });
+  return { auth, pool };
+};
 
 describe('resolveAuthBaseURL', () => {
   it('uses one canonical URL for a single-domain deployment', () => {
@@ -42,6 +67,42 @@ describe('resolveAuthBaseURL', () => {
         FLOWTRACE_AUTH_PROTOCOL: 'ftp',
       }),
     ).toThrow('必须是 http、https 或 auto');
+  });
+});
+
+describe('dynamic auth request host', () => {
+  it('accepts an allowed forwarded host for an internal request', async () => {
+    const { auth, pool } = createDynamicAuth();
+
+    try {
+      await expect(
+        auth.api.getSession({
+          headers: new Headers({
+            host: '127.0.0.1',
+            'x-forwarded-host': 'flowtrace.example.com',
+          }),
+        }),
+      ).resolves.toBeNull();
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('still rejects a forwarded host outside the allowlist', async () => {
+    const { auth, pool } = createDynamicAuth();
+
+    try {
+      await expect(
+        auth.api.getSession({
+          headers: new Headers({
+            host: '127.0.0.1',
+            'x-forwarded-host': 'attacker.example.com',
+          }),
+        }),
+      ).rejects.toThrow('not in the allowed hosts list');
+    } finally {
+      await pool.end();
+    }
   });
 });
 

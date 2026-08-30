@@ -49,7 +49,10 @@ export function createFlowTraceAuth(options: FlowTraceAuthOptions) {
     baseURL: options.baseURL,
     secret: options.secret,
     trustedOrigins: options.trustedOrigins,
-    advanced: options.ipAddress ? { ipAddress: options.ipAddress } : undefined,
+    advanced: {
+      trustedProxyHeaders: typeof options.baseURL !== 'string',
+      ...(options.ipAddress ? { ipAddress: options.ipAddress } : {}),
+    },
     database: options.pool,
     emailAndPassword: { enabled: options.provider.kind === 'local' },
     user: {
