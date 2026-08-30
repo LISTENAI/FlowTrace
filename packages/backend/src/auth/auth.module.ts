@@ -1,6 +1,5 @@
 import { Module, OnApplicationShutdown } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   AuthConfigController,
   CurrentIdentityController,
@@ -9,7 +8,6 @@ import { FlowTraceAuthGuard } from '@/auth/auth.guard';
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import { IdentityService } from '@/auth/identity.service';
 import { FLOWTRACE_AUTH_PROVIDER } from '@/auth/provider';
-import { AuthPersonBindingEntity, PersonEntity } from '@/database/entities';
 
 class AuthLifecycle implements OnApplicationShutdown {
   async onApplicationShutdown() {
@@ -18,7 +16,6 @@ class AuthLifecycle implements OnApplicationShutdown {
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([AuthPersonBindingEntity, PersonEntity])],
   controllers: [AuthConfigController, CurrentIdentityController],
   providers: [
     IdentityService,

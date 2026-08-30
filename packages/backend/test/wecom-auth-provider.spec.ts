@@ -1,7 +1,27 @@
 import { describe, expect, it, vi } from 'vitest';
 import { WeComAuthProvider } from '@/auth/wecom-auth-provider';
+import { publicAuthProviderInfo } from '@/auth/provider';
 
 describe('WeComAuthProvider', () => {
+  it('only exposes public provider metadata to API consumers', () => {
+    const provider = new WeComAuthProvider({
+      corpId: 'ww-example',
+      agentId: '1000001',
+      secret: 'must-not-leak',
+    });
+
+    expect(publicAuthProviderInfo(provider)).toEqual({
+      id: 'wecom',
+      name: '企业微信',
+      kind: 'external',
+      nameAuthority: 'provider',
+      emailAuthority: 'provider',
+    });
+    expect(JSON.stringify(publicAuthProviderInfo(provider))).not.toContain(
+      'must-not-leak',
+    );
+  });
+
   it('exchanges a WeCom code without exposing the application token', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = new URL(String(input));

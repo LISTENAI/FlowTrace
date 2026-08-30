@@ -54,12 +54,7 @@ async function insertAuthAccount(
 }
 
 function service(provider: AuthProviderInfo) {
-  return new IdentityService(
-    dataSource!.getRepository(AuthPersonBindingEntity),
-    dataSource!.getRepository(PersonEntity),
-    dataSource!,
-    provider,
-  );
+  return new IdentityService(dataSource!, provider);
 }
 
 describe('IdentityService', () => {
@@ -94,6 +89,26 @@ describe('IdentityService', () => {
       emailAuthority: 'provider',
     });
     expect(await bindings.count()).toBe(1);
+  });
+
+  it('keeps repeated first identity resolution idempotent', async () => {
+    dataSource = await createTestDataSource();
+    const user = {
+      id: 'concurrent-auth-user',
+      name: '并发成员',
+      email: 'concurrent@example.com',
+      emailVerified: true,
+    };
+    await insertAuthAccount(user, 'wecom');
+
+    const first = await service(wecomProvider).current(user);
+    const second = await service(wecomProvider).current(user);
+
+    expect(second.person.id).toBe(first.person.id);
+    expect(await dataSource.getRepository(PersonEntity).count()).toBe(1);
+    expect(
+      await dataSource.getRepository(AuthPersonBindingEntity).count(),
+    ).toBe(1);
   });
 
   it('creates and binds a person when an external provider has no email', async () => {

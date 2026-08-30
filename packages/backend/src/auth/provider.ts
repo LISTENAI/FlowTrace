@@ -15,3 +15,15 @@ export interface ExternalIdentity {
 export interface AuthProviderAdapter extends AuthProviderInfo {
   genericOAuthConfig(): GenericOAuthConfig;
 }
+
+export function publicAuthProviderInfo(
+  provider: AuthProviderInfo,
+): AuthProviderInfo {
+  return {
+    id: provider.id,
+    name: provider.name,
+    kind: provider.kind,
+    nameAuthority: provider.nameAuthority,
+    emailAuthority: provider.emailAuthority,
+  };
+}

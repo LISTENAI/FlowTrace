@@ -2,6 +2,7 @@ import { Controller, Get, Req, UnauthorizedException } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import { PublicAuth } from '@/auth/auth-public';
+import { publicAuthProviderInfo } from '@/auth/provider';
 import type { AuthenticatedRequest } from '@/auth/auth-session';
 
 @ApiTags('认证')
@@ -12,7 +13,7 @@ export class AuthConfigController {
   async get() {
     const runtime = getAuthRuntime();
     return {
-      provider: runtime.provider,
+      provider: publicAuthProviderInfo(runtime.provider),
       setupRequired: await runtime.setupRequired(),
     };
   }

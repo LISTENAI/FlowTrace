@@ -42,6 +42,16 @@ FLOWTRACE_AUTH_PROTOCOL=https
 未知主机默认拒绝；确有无请求上下文的调用时可以另外设置
 `FLOWTRACE_AUTH_FALLBACK_URL`。白名单主机同时由 Better Auth 纳入可信来源。
 
+若应用位于反向代理之后，可通过 `FLOWTRACE_AUTH_IP_HEADERS` 指定可信的客户端
+地址头。包含多级 `X-Forwarded-For` 时，还必须通过
+`FLOWTRACE_AUTH_TRUSTED_PROXIES` 精确列出代理地址或 CIDR；不要把客户端也能
+直接访问的宽泛内网段设为可信代理。部署方应根据入口实际写入的头选择，例如：
+
+```env
+FLOWTRACE_AUTH_IP_HEADERS=x-real-ip,x-forwarded-for
+FLOWTRACE_AUTH_TRUSTED_PROXIES=192.0.2.10,192.0.2.0/28
+```
+
 OIDC 模式配置为：
 
 ```text
@@ -65,6 +75,11 @@ FLOWTRACE_WECOM_AGENT_ID=...
 FLOWTRACE_WECOM_SECRET=...
 FLOWTRACE_WECOM_SCOPE=snsapi_privateinfo
 ```
+
+企业微信客户端内使用网页授权；Chrome、Safari 等普通系统浏览器使用企业微信
+扫码登录，两条路径共用同一个回调和人员身份。除应用可信域名外，还需在自建
+应用的「企业微信授权登录」中为 Web 网页配置完全一致的授权回调域，并将服务
+出口 IP 加入企业微信可信 IP。
 
 不能只填写某组配置的一部分；适配器缺失、取值未知或配置不完整时应用会拒绝
 启动。

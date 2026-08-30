@@ -5,7 +5,10 @@ import { genericOAuth } from 'better-auth/plugins';
 import { Pool } from 'pg';
 import type { AuthProviderInfo } from '@flowtrace/shared';
 import { OidcAuthProvider } from '@/auth/oidc-auth-provider';
-import type { AuthProviderAdapter } from '@/auth/provider';
+import {
+  publicAuthProviderInfo,
+  type AuthProviderAdapter,
+} from '@/auth/provider';
 import { WeComAuthProvider } from '@/auth/wecom-auth-provider';
 import { postgresPoolConfig } from '@/database/config';
 
@@ -31,6 +34,10 @@ export interface FlowTraceAuthOptions {
   provider: AuthProviderInfo;
   oauthProvider?: AuthProviderAdapter;
   trustedOrigins?: string[];
+  ipAddress?: {
+    ipAddressHeaders?: string[];
+    trustedProxies?: string[];
+  };
 }
 
 export function createFlowTraceAuth(options: FlowTraceAuthOptions) {
@@ -42,6 +49,7 @@ export function createFlowTraceAuth(options: FlowTraceAuthOptions) {
     baseURL: options.baseURL,
     secret: options.secret,
     trustedOrigins: options.trustedOrigins,
+    advanced: options.ipAddress ? { ipAddress: options.ipAddress } : undefined,
     database: options.pool,
     emailAndPassword: { enabled: options.provider.kind === 'local' },
     user: {
@@ -168,6 +176,29 @@ export function resolveAuthBaseURL(
   };
 }
 
+function commaSeparated(value?: string) {
+  return value
+    ?.split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+export function resolveAuthIPAddress(
+  environment: NodeJS.ProcessEnv = process.env,
+): FlowTraceAuthOptions['ipAddress'] {
+  const ipAddressHeaders = commaSeparated(
+    environment.FLOWTRACE_AUTH_IP_HEADERS,
+  );
+  const trustedProxies = commaSeparated(
+    environment.FLOWTRACE_AUTH_TRUSTED_PROXIES,
+  );
+  if (!ipAddressHeaders?.length && !trustedProxies?.length) return undefined;
+  return {
+    ...(ipAddressHeaders?.length ? { ipAddressHeaders } : {}),
+    ...(trustedProxies?.length ? { trustedProxies } : {}),
+  };
+}
+
 export function getAuthRuntime(): FlowTraceAuthRuntime {
   if (runtime) return runtime;
 
@@ -200,7 +231,7 @@ export function getAuthRuntime(): FlowTraceAuthRuntime {
           ? 'snsapi_base'
           : 'snsapi_privateinfo',
     });
-    provider = oauthProvider;
+    provider = publicAuthProviderInfo(oauthProvider);
   } else if (providerId === 'oidc') {
     const issuer = process.env.FLOWTRACE_OIDC_ISSUER;
     const clientId = process.env.FLOWTRACE_OIDC_CLIENT_ID;
@@ -216,7 +247,7 @@ export function getAuthRuntime(): FlowTraceAuthRuntime {
       clientSecret,
       name: process.env.FLOWTRACE_OIDC_NAME,
     });
-    provider = oauthProvider;
+    provider = publicAuthProviderInfo(oauthProvider);
   } else {
     throw new Error(
       'FLOWTRACE_AUTH_PROVIDER 必须明确设置为 local、oidc 或 wecom',
@@ -234,6 +265,7 @@ export function getAuthRuntime(): FlowTraceAuthRuntime {
       trustedOrigins: process.env.FLOWTRACE_AUTH_TRUSTED_ORIGINS?.split(',')
         .map((origin) => origin.trim())
         .filter(Boolean),
+      ipAddress: resolveAuthIPAddress(),
     }),
     pool,
     provider,

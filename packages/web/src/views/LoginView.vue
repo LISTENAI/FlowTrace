@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router';
 import type { AuthConfig } from '@flowtrace/shared';
 import { request } from '@/api/client';
 import { authClient } from '@/auth';
+import { weComAuthorizationURL } from '@/auth/wecom';
 import ThemeMenu from '@/components/ThemeMenu.vue';
 
 const route = useRoute();
@@ -37,9 +38,26 @@ async function providerLogin(provider: string) {
   const result = await authClient.signIn.social({
     provider,
     callbackURL: callbackURL.value,
+    disableRedirect: true,
   });
   if (result.error) {
     error.value = result.error.message ?? '无法发起登录';
+    loading.value = false;
+    return;
+  }
+  if (!result.data?.url) {
+    error.value = '登录服务没有返回授权地址';
+    loading.value = false;
+    return;
+  }
+  try {
+    window.location.assign(
+      provider === 'wecom'
+        ? weComAuthorizationURL(result.data.url, navigator.userAgent)
+        : result.data.url,
+    );
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '无法发起登录';
     loading.value = false;
   }
 }

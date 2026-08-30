@@ -1,13 +1,15 @@
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import type {
   AuthProviderInfo,
   CurrentIdentity,
   Person,
 } from '@flowtrace/shared';
-import { FLOWTRACE_AUTH_PROVIDER } from '@/auth/provider';
+import {
+  FLOWTRACE_AUTH_PROVIDER,
+  publicAuthProviderInfo,
+} from '@/auth/provider';
 import { AuthPersonBindingEntity, PersonEntity } from '@/database/entities';
 
 interface AuthUser {
@@ -40,10 +42,6 @@ function displayName(user: AuthUser) {
 @Injectable()
 export class IdentityService {
   constructor(
-    @InjectRepository(AuthPersonBindingEntity)
-    private readonly bindings: Repository<AuthPersonBindingEntity>,
-    @InjectRepository(PersonEntity)
-    private readonly people: Repository<PersonEntity>,
     @Inject(DataSource)
     private readonly dataSource: DataSource,
     @Inject(FLOWTRACE_AUTH_PROVIDER)
@@ -51,8 +49,20 @@ export class IdentityService {
   ) {}
 
   async current(user: AuthUser): Promise<CurrentIdentity> {
-    const account = await this.accountForUser(user.id);
-    const binding = await this.bindings.findOneBy({ authUserId: user.id });
+    return this.dataSource.transaction(async (manager) => {
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtext($1))',
+        [`flowtrace:identity:${user.id}`],
+      );
+      return this.currentLocked(user, manager);
+    });
+  }
+
+  private async currentLocked(user: AuthUser, manager: EntityManager) {
+    const bindings = manager.getRepository(AuthPersonBindingEntity);
+    const people = manager.getRepository(PersonEntity);
+    const account = await this.accountForUser(user.id, manager);
+    const binding = await bindings.findOneBy({ authUserId: user.id });
     if (binding) {
       if (
         binding.providerId !== account.providerId ||
@@ -62,19 +72,19 @@ export class IdentityService {
           '登录账号的身份来源与既有人员关联不一致，请联系管理员处理',
         );
       }
-      const person = await this.people.findOneBy({ id: binding.personId });
+      const person = await people.findOneBy({ id: binding.personId });
       if (!person) {
         throw new ConflictException('登录账号关联的人员档案已经不存在');
       }
-      await this.syncManagedProfile(user, person, binding);
-      await this.people.save(person);
+      await this.syncManagedProfile(user, person, binding, people);
+      await people.save(person);
       return this.result(user, person, binding);
     }
 
     const email = realEmail(user, this.provider);
-    let person = email ? await this.people.findOneBy({ email }) : null;
+    let person = email ? await people.findOneBy({ email }) : null;
     if (!person) {
-      person = this.people.create({
+      person = people.create({
         id: randomUUID(),
         name: displayName(user),
         email: email ?? null,
@@ -82,14 +92,14 @@ export class IdentityService {
         active: true,
       });
     }
-    const claimed = await this.bindings.findOneBy({ personId: person.id });
+    const claimed = await bindings.findOneBy({ personId: person.id });
     if (claimed && claimed.authUserId !== user.id) {
       throw new ConflictException(
         '该企业标识已经关联其他登录账号，请联系管理员核对人员档案',
       );
     }
 
-    const createdBinding = this.bindings.create({
+    const createdBinding = bindings.create({
       id: randomUUID(),
       authUserId: user.id,
       personId: person.id,
@@ -98,16 +108,16 @@ export class IdentityService {
       nameAuthority: this.provider.nameAuthority,
       emailAuthority: this.provider.emailAuthority,
     });
-    await this.syncManagedProfile(user, person, createdBinding);
-    person = await this.people.save(person);
-    await this.bindings.save(createdBinding);
+    await this.syncManagedProfile(user, person, createdBinding, people);
+    person = await people.save(person);
+    await bindings.save(createdBinding);
     return this.result(user, person, createdBinding);
   }
 
-  private async accountForUser(userId: string) {
+  private async accountForUser(userId: string, manager: EntityManager) {
     const expectedProvider =
       this.provider.kind === 'local' ? 'credential' : this.provider.id;
-    const rows = (await this.dataSource.query(
+    const rows = (await manager.query(
       `SELECT account."accountId", account."providerId"
        FROM "auth_account" account
        JOIN "auth_user" auth_user ON auth_user."id" = account."userId"
@@ -131,6 +141,7 @@ export class IdentityService {
     user: AuthUser,
     person: PersonEntity,
     binding: AuthPersonBindingEntity,
+    people: Repository<PersonEntity>,
   ) {
     if (binding.nameAuthority !== 'flowtrace') {
       person.name = displayName(user);
@@ -141,7 +152,7 @@ export class IdentityService {
     ) {
       const email = realEmail(user, this.provider);
       if (email && email !== person.email) {
-        const claimed = await this.people.findOneBy({ email });
+        const claimed = await people.findOneBy({ email });
         if (claimed && claimed.id !== person.id) {
           throw new ConflictException(
             '身份提供方返回的邮箱已经被其他人员使用，请联系管理员处理',
@@ -165,7 +176,7 @@ export class IdentityService {
         emailVerified: user.emailVerified,
       },
       person: this.toPerson(person, binding),
-      provider: this.provider,
+      provider: publicAuthProviderInfo(this.provider),
     };
   }
 
