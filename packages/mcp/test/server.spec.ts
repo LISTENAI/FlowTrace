@@ -90,6 +90,10 @@ describe('FlowTrace MCP Server', () => {
     expect(
       tools.tools.find((tool) => tool.name === 'search')?.annotations,
     ).toMatchObject({ readOnlyHint: true });
+    expect(
+      tools.tools.find((tool) => tool.name === 'create_requirement')
+        ?.description,
+    ).toContain('放入需求池');
 
     const search = await client.callTool({
       name: 'search',
@@ -272,6 +276,26 @@ describe('FlowTrace MCP Server', () => {
         ],
       }),
     });
+    const latestRequirementBody = () =>
+      request.mock.calls
+        .filter(([path]) => path === '/requirements')
+        .at(-1)?.[1]?.body;
+    const omittedVersionBody = latestRequirementBody();
+    expect(omittedVersionBody).not.toHaveProperty('versionId');
+
+    for (const version_id of [null, '', '   ']) {
+      await client.callTool({
+        name: 'create_requirement',
+        arguments: {
+          project_id: 'project-1',
+          version_id,
+          title: '需求池事项',
+          agent_name: '验收调用方',
+        },
+      });
+      const backlogBody = latestRequirementBody();
+      expect(backlogBody).not.toHaveProperty('versionId');
+    }
 
     const resources = await client.listResources();
     expect(resources.resources.map((resource) => resource.uri)).toEqual([

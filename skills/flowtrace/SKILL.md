@@ -23,8 +23,9 @@ read path that can answer it:
   `search`, then call its Snapshot Tool.
 - For an existing Requirement, Stage, Bug, or write, resolve only the named
   targets with `search`, then call `get_requirement` to verify the current
-  facts and stable IDs. For creation, resolve and inspect the target Project
-  and Version first.
+  facts and stable IDs. For creation, always resolve and inspect the target
+  Project. Resolve a Version only when the source or user actually chose one;
+  a Requirement may instead be created in the Project backlog.
 
 If more than one search result could match, show the candidates with Project
 and Version context and ask the user to choose. Never pick by list order. Apply
@@ -78,8 +79,10 @@ plans, reason in this order before the first write:
    IDs, or sheet row IDs for existing work. Reuse verified objects instead of
    creating duplicates, and preserve useful identifiers in Requirement
    descriptions or Stage notes so a later reconciliation can find them.
-3. Confirm the containing Project and Version. Create a missing Version only
-   when the user's write request covers establishing that delivery boundary.
+3. Confirm the containing Project. Confirm a Version only when the source or
+   user identifies a real delivery boundary. Otherwise create the Requirement
+   in the Project backlog by omitting `version_id`; never invent a Version to
+   satisfy creation, and never use an empty string as a missing ID.
 4. Group source rows by independently reviewable outcome into Requirements;
    model execution steps as Stages and independently actionable defects as
    Bugs. Do not mirror rows mechanically.
@@ -93,11 +96,13 @@ plans, reason in this order before the first write:
    `assign_owners`, `reschedule_stage`, and `update_stage_status` for their
    separate concerns; do not replace an existing Stage merely to change its
    metadata.
-7. Apply writes in container-first order: Version, Requirements with Stages,
-   owners and plans, statuses, Bugs, then dependencies. Stop on failure.
-8. Re-read the affected Version Snapshot and report both progress exceptions
-   and every `reviewItem`. Do not call an import complete while required facts
-   remain missing unless the source genuinely omitted them.
+7. Apply writes in container-first order: an explicitly requested Version,
+   Requirements with Stages, owners and plans, statuses, Bugs, then
+   dependencies. Stop on failure.
+8. Re-read the affected Version Snapshot for versioned work, or the Project
+   Snapshot for backlog work, and report both progress exceptions and every
+   `reviewItem`. Do not call an import complete while required facts remain
+   missing unless the source genuinely omitted them.
 
 Before applying a large source with materially ambiguous grouping or target
 container, show the proposed Project → Version → Requirement → Stage mapping
@@ -128,6 +133,8 @@ request. Stop after any failed step; do not improvise a compensating write.
 
 - Project is a long-lived engineering object. Version is one planned delivery
   inside a Project. Do not create a new Project merely to represent a release.
+- A Requirement must belong to a Project, but its Version is optional. Work
+  without a confirmed delivery boundary belongs in the Project backlog.
 - Requirement is a trackable deliverable. Stage is a real work phase inside a
   Requirement. Status describes how a Stage or Bug is progressing.
 - Do not add a Stage named after a status. Use `update_stage_status` for waiting,
@@ -166,6 +173,9 @@ request. Stop after any failed step; do not improvise a compensating write.
   of the exact Requirement key, Stage name, or Bug key.
 - If a Tool rejects input, report the error in business language. Do not retry
   with guessed IDs, altered dates, another status, or a broader deletion.
+- An empty optional ID is not evidence that the business operation is
+  unsupported. Check the actual arguments, omit the field, and do not turn an
+  ID validation error into a claim that backlog creation is unavailable.
 
 ## Reference routing
 

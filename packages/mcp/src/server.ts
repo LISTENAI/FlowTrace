@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { FlowTraceApiClient } from './api-client.js';
 import { flowTraceResources } from './resources.js';
 
-const instructions = `FlowTrace 记录研发交付的真实过程。Project 是长期研发对象，Version 是一次计划交付，Requirement 下有 Stage 和 Bug。Stage 是工作环节，Status 是执行状态，两者不可混用。Baseline 不得被后续排期覆盖，状态和排期修改必须保留历史。独立缺陷优先创建 Bug。Waiting 表示恢复条件明确，Blocked 表示恢复条件不明确，二者都必须记录原因。查询整体状态优先 Snapshot；其中 activeStages 是全部并行活跃阶段，reviewItems 是待补全项，currentStage 只用于兼容摘要，不能代表全部事实。查询近期变化优先 Changes Since。名称搜索有多个结果时不得猜测。所有写入必须经由业务 Tool。`;
+const instructions = `FlowTrace 记录研发交付的真实过程。Project 是长期研发对象，Version 是一次计划交付，Requirement 必须属于 Project，但可以暂不属于 Version 而放在需求池。Requirement 下有 Stage 和 Bug。Stage 是工作环节，Status 是执行状态，两者不可混用。Baseline 不得被后续排期覆盖，状态和排期修改必须保留历史。独立缺陷优先创建 Bug。Waiting 表示恢复条件明确，Blocked 表示恢复条件不明确，二者都必须记录原因。查询整体状态优先 Snapshot；其中 activeStages 是全部并行活跃阶段，reviewItems 是待补全项，currentStage 只用于兼容摘要，不能代表全部事实。查询近期变化优先 Changes Since。名称搜索有多个结果时不得猜测。所有写入必须经由业务 Tool。`;
 
 const readAnnotations = {
   readOnlyHint: true,
@@ -74,6 +74,10 @@ const collectionOf = (type: 'requirement' | 'stage' | 'bug') =>
   ({ requirement: 'requirements', stage: 'stages', bug: 'bugs' })[type];
 const latest = (value: unknown) =>
   Array.isArray(value) && value.length ? value.at(-1) : undefined;
+const optionalId = (value: string | null | undefined) => {
+  const normalized = value?.trim();
+  return normalized || undefined;
+};
 
 function historySummary(entity: unknown): JsonObject {
   if (!entity || typeof entity !== 'object') return {};
@@ -345,10 +349,14 @@ export function createFlowTraceMcpServer(
     'create_requirement',
     {
       description:
-        '在明确项目和版本中创建需求。stages 省略时复制项目模板；来源已给出真实工作分解时直接传 stages，避免先复制再取消。',
+        '在项目中创建需求。version_id 不传、传 null 或空白值时放入需求池，不要为了创建需求而虚构版本。stages 省略时复制项目模板；来源已给出真实工作分解时直接传 stages。',
       inputSchema: {
         project_id: z.string().describe('项目稳定 ID'),
-        version_id: z.string().optional().describe('省略则放入需求池'),
+        version_id: z
+          .string()
+          .nullable()
+          .optional()
+          .describe('可选的版本稳定 ID；不传、null 或空白值表示需求池'),
         title: z.string().min(1),
         description: z.string().optional(),
         owner_ids: z.array(z.string()).default([]),
@@ -371,14 +379,15 @@ export function createFlowTraceMcpServer(
       },
       annotations: writeAnnotations,
     },
-    async (input) =>
-      writeResult(
+    async (input) => {
+      const versionId = optionalId(input.version_id);
+      return writeResult(
         api,
         await api.request('/requirements', {
           method: 'POST',
           body: {
             projectId: input.project_id,
-            versionId: input.version_id,
+            ...(versionId ? { versionId } : {}),
             title: input.title,
             description: input.description,
             ownerIds: input.owner_ids,
@@ -395,7 +404,8 @@ export function createFlowTraceMcpServer(
             ...writeBody(input),
           },
         }),
-      ),
+      );
+    },
   );
 
   server.registerTool(
@@ -474,21 +484,23 @@ export function createFlowTraceMcpServer(
       },
       annotations: writeAnnotations,
     },
-    async (input) =>
-      writeResult(
+    async (input) => {
+      const versionId = optionalId(input.version_id) ?? null;
+      return writeResult(
         api,
         await api.request(
           `/requirements/${encodeURIComponent(input.requirement_id)}/move-version`,
           {
             method: 'POST',
             body: {
-              versionId: input.version_id,
+              versionId,
               effectiveAt: input.effective_at,
               ...writeBody(input),
             },
           },
         ),
-      ),
+      );
+    },
   );
 
   server.registerTool(

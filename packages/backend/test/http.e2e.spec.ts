@@ -336,6 +336,22 @@ describe.sequential('HTTP API', () => {
         .expect(201),
     ]);
 
+    const backlogRequirement = await callTool('create_requirement', {
+      project_id: mcpProjectId,
+      version_id: '',
+      title: '待确认交付版本',
+      stages: [],
+      agent_name: '端到端验收',
+    });
+    expect(backlogRequirement).toMatchObject({
+      success: true,
+      entity: {
+        projectId: mcpProjectId,
+        title: '待确认交付版本',
+      },
+    });
+    expect(backlogRequirement.entity).not.toHaveProperty('versionId');
+
     const addedStage = await callTool('add_stage', {
       requirement_id: mcpRequirementId,
       name: '板上验证',
