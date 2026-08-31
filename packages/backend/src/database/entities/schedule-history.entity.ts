@@ -40,6 +40,9 @@ export class ScheduleHistoryEntity {
   @Column('text', { nullable: true })
   agentName!: string | null;
 
+  @Column('text', { nullable: true })
+  agentModel!: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   changedAt!: Date;
 }

@@ -38,6 +38,7 @@ export type SearchEntityType = (typeof searchEntityTypes)[number];
 export interface ChangeContext {
   source?: ChangeSource;
   agentName?: string;
+  agentModel?: string;
   reason?: string;
 }
 
@@ -102,6 +103,29 @@ export interface Project {
   metrics?: ProjectMetrics;
 }
 
+export interface ProjectAgentHandoff {
+  projectId: string;
+  content: string;
+  revision: number;
+  source?: ChangeSource;
+  agentName?: string;
+  agentModel?: string;
+  reason?: string;
+  updatedAt?: string;
+}
+
+export interface ProjectAgentHandoffRevision {
+  id: string;
+  projectId: string;
+  content: string;
+  revision: number;
+  source: ChangeSource;
+  agentName?: string;
+  agentModel?: string;
+  reason?: string;
+  createdAt: string;
+}
+
 export interface ProjectRhythm {
   id: string;
   name: string;
@@ -143,6 +167,7 @@ export interface StatusHistory {
   expectedResumeAt?: string;
   source: ChangeSource;
   agentName?: string;
+  agentModel?: string;
   createdAt: string;
 }
 
@@ -155,6 +180,7 @@ export interface ScheduleHistory {
   reason?: string;
   source: ChangeSource;
   agentName?: string;
+  agentModel?: string;
   changedAt: string;
 }
 
@@ -210,6 +236,7 @@ export interface VersionHistory {
   reason?: string;
   source: ChangeSource;
   agentName?: string;
+  agentModel?: string;
   effectiveAt: string;
   changedAt: string;
 }
@@ -241,6 +268,7 @@ export interface Dependency {
   active: boolean;
   source: ChangeSource;
   agentName?: string;
+  agentModel?: string;
   createdAt: string;
   resolvedAt?: string;
   predecessor?: DependencyTargetSummary;
@@ -271,6 +299,7 @@ export interface ChangeEvent {
   reason?: string;
   source: ChangeSource;
   agentName?: string;
+  agentModel?: string;
   occurredAt: string;
   project?: Pick<Project, 'id' | 'key' | 'name'>;
   version?: Pick<Version, 'id' | 'name'>;
@@ -341,6 +370,7 @@ export interface SnapshotMetrics {
 
 export interface ProjectSnapshot {
   project: Project;
+  agentHandoff: ProjectAgentHandoff;
   versions: Version[];
   metrics: SnapshotMetrics;
   requirements: RequirementSummary[];

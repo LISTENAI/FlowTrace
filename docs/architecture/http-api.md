@@ -7,6 +7,8 @@
 
 - `/project-rhythms`：维护新建项目可选的节奏及其默认环节。
 - `/projects`、`/people`、`/versions`：维护项目边界、负责人目录和交付版本。
+- `/projects/:id/agent-handoff`：独立于项目说明维护跨 Agent 会话交底；使用
+  修订号拒绝并发覆盖，并通过 `/history` 保留完整修订。
 - `/requirements`：创建需求时可复制项目当前模板，也可直接提交按顺序排列的
   真实阶段，并支持排期和版本迁移。
 - `/stages`、`/bugs`：维护独立工作项、计划和可补录的状态历史。
@@ -28,12 +30,15 @@
 {
   "source": "agent",
   "agentName": "PM Assistant",
+  "agentModel": "openai/gpt-5.6-sol",
   "reason": "根据项目例会结论调整"
 }
 ```
 
 `source` 可选值为 `manual`、`api`、`agent`。Agent 修改状态、排期和目标版本
 仍调用正常业务接口，因此会产生与 Web 操作相同的历史和增量事件。
+`agentModel` 是可选的自报模型标识与版本；调用方无法准确获知时应省略，服务端
+不会根据 `agentName` 或请求来源猜测。
 
 ## 状态值
 

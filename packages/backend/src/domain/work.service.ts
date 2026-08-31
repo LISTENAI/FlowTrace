@@ -17,6 +17,8 @@ import type {
   HealthStatus,
   Person,
   Project,
+  ProjectAgentHandoff,
+  ProjectAgentHandoffRevision,
   ProjectRhythm,
   ProjectSnapshot,
   Requirement,
@@ -63,6 +65,7 @@ import {
   DependencyEntity,
   PersonEntity,
   ProjectEntity,
+  ProjectAgentHandoffRevisionEntity,
   ProjectRhythmEntity,
   RequirementEntity,
   ScheduleHistoryEntity,
@@ -89,6 +92,7 @@ import type {
   UpdateBugDto,
   UpdatePersonDto,
   UpdateProjectDto,
+  UpdateProjectAgentHandoffDto,
   UpdateProjectRhythmDto,
   UpdateRequirementDto,
   UpdateStageDto,
@@ -116,6 +120,7 @@ const context = (
 ): Required<Pick<ChangeContext, 'source'>> & ChangeContext => ({
   source: value.source ?? 'manual',
   agentName: value.agentName,
+  agentModel: value.agentModel,
   reason: value.reason,
 });
 const normalizeSearchText = (value: string) =>
@@ -135,6 +140,8 @@ export class WorkService {
     private readonly dataSource: DataSource,
     @InjectRepository(ProjectEntity)
     private readonly projects: Repository<ProjectEntity>,
+    @InjectRepository(ProjectAgentHandoffRevisionEntity)
+    private readonly projectAgentHandoffHistory: Repository<ProjectAgentHandoffRevisionEntity>,
     @InjectRepository(ProjectRhythmEntity)
     private readonly projectRhythms: Repository<ProjectRhythmEntity>,
     @InjectRepository(PersonEntity)
@@ -259,6 +266,100 @@ export class WorkService {
       project.description = input.description || null;
     await this.projects.save(project);
     return this.toProject(project, true);
+  }
+
+  async getProjectAgentHandoff(id: string): Promise<ProjectAgentHandoff> {
+    return this.toProjectAgentHandoff(await this.findProject(id));
+  }
+
+  async listProjectAgentHandoffHistory(
+    id: string,
+  ): Promise<ProjectAgentHandoffRevision[]> {
+    await this.findProject(id);
+    const rows = await this.projectAgentHandoffHistory.find({
+      where: { projectId: id },
+      order: { revision: 'DESC' },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      projectId: row.projectId,
+      content: row.content,
+      revision: row.revision,
+      source: row.source,
+      agentName: row.agentName ?? undefined,
+      agentModel: row.agentModel ?? undefined,
+      reason: row.reason ?? undefined,
+      createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
+  async updateProjectAgentHandoff(
+    id: string,
+    input: UpdateProjectAgentHandoffDto,
+  ): Promise<ProjectAgentHandoff> {
+    const project = await this.findProject(id);
+    if (project.agentHandoffRevision !== input.expectedRevision) {
+      throw new ConflictException(
+        `Agent 交底已更新到修订 ${project.agentHandoffRevision}，请重新读取后再保存`,
+      );
+    }
+
+    const revision = input.expectedRevision + 1;
+    const content = input.content.trim();
+    const changedAt = new Date();
+    const change = context(input);
+    await this.dataSource.transaction(async (manager) => {
+      const result = await manager.update(
+        ProjectEntity,
+        { id, agentHandoffRevision: input.expectedRevision },
+        {
+          agentHandoff: content || null,
+          agentHandoffRevision: revision,
+          agentHandoffSource: change.source,
+          agentHandoffAgentName: change.agentName ?? null,
+          agentHandoffAgentModel: change.agentModel ?? null,
+          agentHandoffReason: change.reason ?? null,
+          agentHandoffUpdatedAt: changedAt,
+        },
+      );
+      if (result.affected !== 1) {
+        throw new ConflictException(
+          'Agent 交底已被其他会话更新，请重新读取后再保存',
+        );
+      }
+
+      await manager.save(ProjectAgentHandoffRevisionEntity, {
+        id: randomUUID(),
+        projectId: id,
+        revision,
+        content,
+        source: change.source,
+        agentName: change.agentName ?? null,
+        agentModel: change.agentModel ?? null,
+        reason: change.reason ?? null,
+        createdAt: changedAt,
+      });
+      await this.recordChange(manager, {
+        entityType: 'project',
+        entityId: id,
+        projectId: id,
+        type: 'project_agent_handoff_updated',
+        summary: `更新「${project.name}」的 Agent 交底至修订 ${revision}`,
+        details: { revision },
+        ...change,
+      });
+    });
+
+    return {
+      projectId: id,
+      content,
+      revision,
+      source: change.source,
+      agentName: change.agentName,
+      agentModel: change.agentModel,
+      reason: change.reason,
+      updatedAt: changedAt.toISOString(),
+    };
   }
 
   async updateTemplate(id: string, input: UpdateTemplateDto): Promise<Project> {
@@ -843,6 +944,7 @@ export class WorkService {
               active: true,
               source: context(input).source,
               agentName: input.agentName ?? null,
+              agentModel: input.agentModel ?? null,
               resolvedAt: null,
             }),
           );
@@ -973,6 +1075,7 @@ export class WorkService {
           reason: input.reason ?? null,
           source: context(input).source,
           agentName: input.agentName ?? null,
+          agentModel: input.agentModel ?? null,
           effectiveAt: date(input.effectiveAt) ?? new Date(),
         }),
       );
@@ -1460,6 +1563,7 @@ export class WorkService {
       active: true,
       source: context(input).source,
       agentName: input.agentName ?? null,
+      agentModel: input.agentModel ?? null,
       resolvedAt: null,
     });
     await this.dependencyRepository.save(dependency);
@@ -1726,6 +1830,7 @@ export class WorkService {
             expectedResumeAt: date(input.expectedResumeAt),
             source: context(input).source,
             agentName: input.agentName ?? null,
+            agentModel: input.agentModel ?? null,
             createdAt: takeHistoryCreatedAt(),
           }),
         );
@@ -1840,6 +1945,7 @@ export class WorkService {
             expectedResumeAt: null,
             source: context(input).source,
             agentName: input.agentName ?? null,
+            agentModel: input.agentModel ?? null,
             createdAt,
           }),
         );
@@ -1864,6 +1970,7 @@ export class WorkService {
             expectedResumeAt: null,
             source: context(input).source,
             agentName: input.agentName ?? null,
+            agentModel: input.agentModel ?? null,
             createdAt,
           }),
         );
@@ -1920,6 +2027,7 @@ export class WorkService {
           reason: input.reason ?? null,
           source: context(input).source,
           agentName: input.agentName ?? null,
+          agentModel: input.agentModel ?? null,
         }),
       );
       if (!entity.baselineStartAt && nextStart)
@@ -2225,6 +2333,7 @@ export class WorkService {
     });
     return {
       project: await this.toProject(project, true),
+      agentHandoff: this.toProjectAgentHandoff(project),
       versions,
       metrics: {
         total: requirements.length,
@@ -2354,6 +2463,19 @@ export class WorkService {
     };
   }
 
+  private toProjectAgentHandoff(row: ProjectEntity): ProjectAgentHandoff {
+    return {
+      projectId: row.id,
+      content: row.agentHandoff ?? '',
+      revision: row.agentHandoffRevision,
+      source: row.agentHandoffSource ?? undefined,
+      agentName: row.agentHandoffAgentName ?? undefined,
+      agentModel: row.agentHandoffAgentModel ?? undefined,
+      reason: row.agentHandoffReason ?? undefined,
+      updatedAt: iso(row.agentHandoffUpdatedAt),
+    };
+  }
+
   private toProjectRhythm(row: ProjectRhythmEntity): ProjectRhythm {
     return {
       id: row.id,
@@ -2476,6 +2598,7 @@ export class WorkService {
       expectedResumeAt: iso(row.expectedResumeAt),
       source: row.source,
       agentName: row.agentName ?? undefined,
+      agentModel: row.agentModel ?? undefined,
       createdAt: row.createdAt.toISOString(),
     };
   }
@@ -2512,6 +2635,7 @@ export class WorkService {
       reason: row.reason ?? undefined,
       source: row.source,
       agentName: row.agentName ?? undefined,
+      agentModel: row.agentModel ?? undefined,
       changedAt: row.changedAt.toISOString(),
     };
   }
@@ -2524,6 +2648,7 @@ export class WorkService {
       reason: row.reason ?? undefined,
       source: row.source,
       agentName: row.agentName ?? undefined,
+      agentModel: row.agentModel ?? undefined,
       effectiveAt: (row.effectiveAt ?? row.changedAt).toISOString(),
       changedAt: row.changedAt.toISOString(),
     };
@@ -2544,6 +2669,7 @@ export class WorkService {
       active: row.active,
       source: row.source,
       agentName: row.agentName ?? undefined,
+      agentModel: row.agentModel ?? undefined,
       createdAt: row.createdAt.toISOString(),
       resolvedAt: iso(row.resolvedAt),
       successor,
@@ -2636,6 +2762,7 @@ export class WorkService {
       reason: row.reason ?? undefined,
       source: row.source,
       agentName: row.agentName ?? undefined,
+      agentModel: row.agentModel ?? undefined,
       occurredAt: row.occurredAt.toISOString(),
     };
   }
@@ -2796,6 +2923,7 @@ export class WorkService {
       reason?: string;
       source: 'manual' | 'api' | 'agent';
       agentName?: string;
+      agentModel?: string;
     },
   ): Promise<void> {
     await manager.save(
@@ -2811,6 +2939,7 @@ export class WorkService {
         reason: input.reason ?? null,
         source: input.source,
         agentName: input.agentName ?? null,
+        agentModel: input.agentModel ?? null,
         occurredAt: new Date(),
       }),
     );

@@ -37,6 +37,7 @@ import {
   UpdateBugDto,
   UpdatePersonDto,
   UpdateProjectDto,
+  UpdateProjectAgentHandoffDto,
   UpdateProjectRhythmDto,
   UpdateRequirementDto,
   UpdateStageDto,
@@ -73,6 +74,27 @@ export class ProjectsController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() input: UpdateProjectDto) {
     return this.work.updateProject(id, input);
+  }
+
+  @Get(':id/agent-handoff')
+  @ApiOperation({ summary: '读取供不同 Agent 会话接手项目使用的交底' })
+  getAgentHandoff(@Param('id') id: string) {
+    return this.work.getProjectAgentHandoff(id);
+  }
+
+  @Put(':id/agent-handoff')
+  @ApiOperation({ summary: '保存 Agent 交底并创建不可变修订历史' })
+  updateAgentHandoff(
+    @Param('id') id: string,
+    @Body() input: UpdateProjectAgentHandoffDto,
+  ) {
+    return this.work.updateProjectAgentHandoff(id, input);
+  }
+
+  @Get(':id/agent-handoff/history')
+  @ApiOperation({ summary: '列出 Agent 交底修订历史' })
+  getAgentHandoffHistory(@Param('id') id: string) {
+    return this.work.listProjectAgentHandoffHistory(id);
   }
 
   @Put(':id/template')

@@ -31,6 +31,9 @@ export class VersionHistoryEntity {
   @Column('text', { nullable: true })
   agentName!: string | null;
 
+  @Column('text', { nullable: true })
+  agentModel!: string | null;
+
   @Column('timestamptz', { nullable: true })
   effectiveAt!: Date | null;
 

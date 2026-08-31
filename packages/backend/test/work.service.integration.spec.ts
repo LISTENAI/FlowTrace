@@ -49,6 +49,56 @@ describe.sequential('WorkService business rules', () => {
     expect(await work.listProjectRhythms()).toHaveLength(0);
   });
 
+  it('versions project Agent handoffs and rejects stale session updates', async () => {
+    const project = await work.createProject({
+      key: 'HANDOFF',
+      name: '跨会话交底',
+    });
+
+    expect(await work.getProjectAgentHandoff(project.id)).toMatchObject({
+      projectId: project.id,
+      content: '',
+      revision: 0,
+    });
+
+    const first = await work.updateProjectAgentHandoff(project.id, {
+      content: '## 当前重点\n\n完成 Agent 交底能力。',
+      expectedRevision: 0,
+      source: 'agent',
+      agentName: 'Codex',
+      agentModel: 'openai/gpt-5.6-sol',
+      reason: '记录后续会话需要继承的目标',
+    });
+    expect(first).toMatchObject({
+      revision: 1,
+      source: 'agent',
+      agentName: 'Codex',
+      agentModel: 'openai/gpt-5.6-sol',
+    });
+    expect((await work.getProjectSnapshot(project.id)).agentHandoff).toEqual(
+      first,
+    );
+    expect(await work.listProjectAgentHandoffHistory(project.id)).toEqual([
+      expect.objectContaining({
+        revision: 1,
+        content: '## 当前重点\n\n完成 Agent 交底能力。',
+        agentModel: 'openai/gpt-5.6-sol',
+      }),
+    ]);
+
+    await expect(
+      work.updateProjectAgentHandoff(project.id, {
+        content: '过期会话的内容',
+        expectedRevision: 0,
+        source: 'agent',
+        agentName: '旧会话',
+      }),
+    ).rejects.toThrow('请重新读取后再保存');
+    expect((await work.getProjectAgentHandoff(project.id)).content).toContain(
+      '完成 Agent 交底能力',
+    );
+  });
+
   it('keeps provider-managed person fields read-only', async () => {
     const person = await work.createPerson({
       name: '企业成员',

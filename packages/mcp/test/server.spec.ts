@@ -28,6 +28,25 @@ describe('FlowTrace MCP Server', () => {
           },
         ];
       }
+      if (path === '/projects/project-1/agent-handoff/history') {
+        return [
+          {
+            id: 'handoff-1',
+            projectId: 'project-1',
+            revision: 1,
+            content: '先确认版本边界。',
+            source: 'agent',
+          },
+        ];
+      }
+      if (path === '/projects/project-1/agent-handoff') {
+        return {
+          projectId: 'project-1',
+          revision: 1,
+          content: '先确认版本边界。',
+          source: 'agent',
+        };
+      }
       return {
         id: 'stage-1',
         requirementId: 'requirement-1',
@@ -52,11 +71,14 @@ describe('FlowTrace MCP Server', () => {
     ]);
 
     const tools = await client.listTools();
-    expect(tools.tools).toHaveLength(22);
+    expect(tools.tools).toHaveLength(25);
     expect(tools.tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
         'search',
         'get_project_snapshot',
+        'get_project_handoff',
+        'update_project_handoff',
+        'get_project_handoff_history',
         'get_version_snapshot',
         'get_requirement',
         'get_changes_since',
@@ -112,6 +134,42 @@ describe('FlowTrace MCP Server', () => {
     });
     expect(request).toHaveBeenCalledWith(
       expect.stringMatching(/^\/search\?q=&types=project&limit=20$/),
+    );
+
+    const handoff = await client.callTool({
+      name: 'get_project_handoff',
+      arguments: { project_id: 'project-1' },
+    });
+    expect(handoff.structuredContent).toEqual({
+      success: true,
+      data: expect.objectContaining({ revision: 1 }),
+    });
+    await client.callTool({
+      name: 'update_project_handoff',
+      arguments: {
+        project_id: 'project-1',
+        content: '先确认版本边界。',
+        expected_revision: 1,
+        agent_name: '验收调用方',
+        agent_model: 'openai/gpt-5.6-sol',
+        reason: '补充跨会话约定',
+      },
+    });
+    expect(request).toHaveBeenCalledWith('/projects/project-1/agent-handoff', {
+      method: 'PUT',
+      body: expect.objectContaining({
+        expectedRevision: 1,
+        source: 'agent',
+        agentName: '验收调用方',
+        agentModel: 'openai/gpt-5.6-sol',
+      }),
+    });
+    await client.callTool({
+      name: 'get_project_handoff_history',
+      arguments: { project_id: 'project-1' },
+    });
+    expect(request).toHaveBeenCalledWith(
+      '/projects/project-1/agent-handoff/history',
     );
 
     const response = await client.callTool({

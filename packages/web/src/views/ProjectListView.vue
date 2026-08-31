@@ -17,6 +17,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@/api';
 import AppModal from '@/components/AppModal.vue';
+import AuditAttribution from '@/components/AuditAttribution.vue';
 import AvatarStack from '@/components/AvatarStack.vue';
 import PlanningDialog from '@/components/PlanningDialog.vue';
 import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
@@ -649,6 +650,12 @@ async function createProject() {
                 class="mt-0.5 block text-[10px] text-slate-400"
                 >{{ event.reason }}</span
               >
+              <AuditAttribution
+                class="mt-1"
+                :source="event.source"
+                :agent-name="event.agentName"
+                :agent-model="event.agentModel"
+              />
             </button>
           </div>
           <p v-else class="px-5 py-12 text-center text-xs text-slate-400">

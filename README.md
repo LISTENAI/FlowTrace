@@ -35,6 +35,8 @@ FlowTrace 是面向研发团队、AI 友好的自部署项目过程追踪工具�
   而是可修正、可追溯的真实记录。
 - **AI 看到的不是一张过时的任务表。** Web、MCP 和官方 Skill 共享同一套业务
   语义，AI Agent 可以查询变化、总结风险并在授权后更新项目。
+- **换一个 Agent 会话也不用从头交代。** 每个项目可以维护独立、可追溯的
+  Agent 交底，保留长期约定、关键决策、未决问题和接手建议。
 - **轻量、自部署、数据留在团队手中。** 无需引入一套庞大的通用项目平台，即可
   建立适合研发团队的推进工作台。
 
@@ -100,7 +102,8 @@ POST http://localhost:3100/mcp
 不同 AI Harness 的 MCP 配置格式各不相同，只需将上述地址作为远程 MCP 服务
 地址，并在 `Authorization: Bearer <个人密钥>` 或 `X-API-Key` 请求头中携带
 “AI 接入”页面创建的个人密钥。MCP 提供自描述的单项查询与写入工具；写入仍
-经过与 Web 相同的身份、业务规则和历史记录。
+经过与 Web 相同的身份、业务规则和历史记录，并可记录调用方自报的模型版本。
+项目快照同时提供独立于项目说明的 Agent 交底，供不同会话连续工作。
 
 官方 FlowTrace Skill 提供项目管理判断、对象消歧和写入安全策略：
 
@@ -167,6 +170,7 @@ docs/
 - [产品需求 v0.2](docs/product/requirements-v0.2.md)
 - [AI 接入需求 v0.2](docs/product/ai-integration-v0.2.md)
 - [身份接入需求 v0.3](docs/product/authentication-v0.3.md)
+- [Agent 交底与来源审计增量](docs/product/agent-handoff-v0.4.md)
 
 面向 Coding Agent 的工程约束位于 [`AGENTS.md`](AGENTS.md)，不属于用户使用
 文档。

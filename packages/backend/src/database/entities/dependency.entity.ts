@@ -38,6 +38,9 @@ export class DependencyEntity {
   @Column('text', { nullable: true })
   agentName!: string | null;
 
+  @Column('text', { nullable: true })
+  agentModel!: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 

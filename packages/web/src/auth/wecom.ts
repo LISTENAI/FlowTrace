@@ -10,8 +10,7 @@ export function weComAuthorizationURL(url: string, userAgent: string) {
 
   const mobile = new URL(url);
   const appId =
-    mobile.searchParams.get('appid') ??
-    mobile.searchParams.get('client_id');
+    mobile.searchParams.get('appid') ?? mobile.searchParams.get('client_id');
   const agentId = mobile.searchParams.get('agentid');
   const redirectURI = mobile.searchParams.get('redirect_uri');
   const state = mobile.searchParams.get('state');

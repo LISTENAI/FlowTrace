@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type {
   Bug,
+  ChangeSource,
   Dependency,
   Requirement,
   Stage,
@@ -32,6 +33,7 @@ import { api } from '@/api';
 import AppDateTimeField from '@/components/AppDateTimeField.vue';
 import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
+import AuditAttribution from '@/components/AuditAttribution.vue';
 import AvatarStack from '@/components/AvatarStack.vue';
 import DeleteWorkItemDialog from '@/components/DeleteWorkItemDialog.vue';
 import OwnerPicker from '@/components/OwnerPicker.vue';
@@ -174,6 +176,9 @@ const events = computed(() => {
     title: string;
     detail?: string;
     tone: string;
+    source?: ChangeSource;
+    agentName?: string;
+    agentModel?: string;
     correction?: { history: StatusHistory; itemName: string };
   }> = [];
   for (const stage of requirement.value.stages) {
@@ -184,6 +189,9 @@ const events = computed(() => {
         title: `${stage.name} → ${statusLabels[history.toStatus]}`,
         detail: history.reason || history.note,
         tone: statusDot[history.toStatus],
+        source: history.source,
+        agentName: history.agentName,
+        agentModel: history.agentModel,
         correction: { history, itemName: stage.name },
       });
     }
@@ -194,6 +202,9 @@ const events = computed(() => {
         title: `${stage.name} 调整排期`,
         detail: history.reason,
         tone: 'bg-violet-400',
+        source: history.source,
+        agentName: history.agentName,
+        agentModel: history.agentModel,
       });
     }
   }
@@ -212,6 +223,9 @@ const events = computed(() => {
         title: `${bug.key} → ${statusLabels[history.toStatus]}`,
         detail: history.reason || history.note,
         tone: statusDot[history.toStatus],
+        source: history.source,
+        agentName: history.agentName,
+        agentModel: history.agentModel,
         correction: { history, itemName: `${bug.key} ${bug.title}` },
       });
     }
@@ -223,6 +237,9 @@ const events = computed(() => {
       title: '调整目标版本',
       detail: history.reason,
       tone: 'bg-cyan-400',
+      source: history.source,
+      agentName: history.agentName,
+      agentModel: history.agentModel,
     });
   }
   return result.sort(
@@ -1297,9 +1314,17 @@ watch(id, load);
                     >
                       {{ event.detail }}
                     </p>
-                    <p class="mt-1 text-[9px] text-slate-300">
-                      {{ formatDateTime(event.time) }}
-                    </p>
+                    <div class="mt-1 flex flex-wrap items-center gap-2">
+                      <span class="text-[9px] text-slate-300">{{
+                        formatDateTime(event.time)
+                      }}</span>
+                      <AuditAttribution
+                        v-if="event.source"
+                        :source="event.source"
+                        :agent-name="event.agentName"
+                        :agent-model="event.agentModel"
+                      />
+                    </div>
                   </div>
                   <button
                     v-if="event.correction"

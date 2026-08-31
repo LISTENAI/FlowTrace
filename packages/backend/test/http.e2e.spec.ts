@@ -91,6 +91,12 @@ describe.sequential('HTTP API', () => {
     expect(response.body.paths).toHaveProperty(
       '/api/snapshots/requirements/{id}',
     );
+    expect(response.body.paths).toHaveProperty(
+      '/api/projects/{id}/agent-handoff',
+    );
+    expect(response.body.paths).toHaveProperty(
+      '/api/projects/{id}/agent-handoff/history',
+    );
   });
 
   it('serves the stateless remote MCP endpoint outside the API prefix', async () => {
@@ -123,7 +129,7 @@ describe.sequential('HTTP API', () => {
       .set('accept', 'application/json, text/event-stream')
       .send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
       .expect(200);
-    expect(tools.body.result.tools).toHaveLength(22);
+    expect(tools.body.result.tools).toHaveLength(25);
     expect(tools.body.result.tools).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'search' }),
@@ -170,6 +176,34 @@ describe.sequential('HTTP API', () => {
       title: '搭建项目概览',
       description: '让团队快速了解当前研发进展。',
     });
+
+    const handoff = await request(app.getHttpServer())
+      .put(`/api/projects/${projectResponse.body.id}/agent-handoff`)
+      .send({
+        content: '## 接手建议\n\n先查看项目快照。',
+        expectedRevision: 0,
+        source: 'agent',
+        agentName: 'HTTP 验收 Agent',
+        agentModel: 'openai/gpt-5.6-sol',
+        reason: '建立第一版项目交底',
+      })
+      .expect(200);
+    expect(handoff.body).toMatchObject({
+      projectId: projectResponse.body.id,
+      revision: 1,
+      source: 'agent',
+      agentModel: 'openai/gpt-5.6-sol',
+    });
+    const handoffHistory = await request(app.getHttpServer())
+      .get(`/api/projects/${projectResponse.body.id}/agent-handoff/history`)
+      .expect(200);
+    expect(handoffHistory.body).toEqual([
+      expect.objectContaining({ revision: 1, agentName: 'HTTP 验收 Agent' }),
+    ]);
+    await request(app.getHttpServer())
+      .put(`/api/projects/${projectResponse.body.id}/agent-handoff`)
+      .send({ content: '过期内容', expectedRevision: 0 })
+      .expect(409);
     await request(app.getHttpServer())
       .patch(`/api/requirements/${requirementResponse.body.id}`)
       .send({ title: '' })

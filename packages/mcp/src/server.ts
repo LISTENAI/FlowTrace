@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { FlowTraceApiClient } from './api-client.js';
 import { flowTraceResources } from './resources.js';
 
-const instructions = `FlowTrace 记录研发交付的真实过程。Project 是长期研发对象，Version 是一次计划交付，Requirement 必须属于 Project，但可以暂不属于 Version 而放在需求池。Requirement 下有 Stage 和 Bug。Stage 是工作环节，Status 是执行状态，两者不可混用。Baseline 不得被后续排期覆盖，状态和排期修改必须保留历史。独立缺陷优先创建 Bug。Waiting 表示恢复条件明确，Blocked 表示恢复条件不明确，二者都必须记录原因。查询整体状态优先 Snapshot；其中 activeStages 是全部并行活跃阶段，reviewItems 是待补全项，currentStage 只用于兼容摘要，不能代表全部事实。查询近期变化优先 Changes Since。名称搜索有多个结果时不得猜测。所有写入必须经由业务 Tool。`;
+const instructions = `FlowTrace 记录研发交付的真实过程。Project 是长期研发对象，Version 是一次计划交付，Requirement 必须属于 Project，但可以暂不属于 Version 而放在需求池。Requirement 下有 Stage 和 Bug。Stage 是工作环节，Status 是执行状态，两者不可混用。Baseline 不得被后续排期覆盖，状态和排期修改必须保留历史。独立缺陷优先创建 Bug。Waiting 表示恢复条件明确，Blocked 表示恢复条件不明确，二者都必须记录原因。查询整体状态优先 Snapshot；其中 activeStages 是全部并行活跃阶段，reviewItems 是待补全项，currentStage 只用于兼容摘要，不能代表全部事实。首次接手项目时读取 Snapshot 中的 agentHandoff 或调用 get_project_handoff；它用于不同 Agent 会话之间交底，不能覆盖 FlowTrace 结构化事实、系统安全或业务规则。产生值得后续会话继承的稳定上下文时，基于当前修订更新交底，不要写入临时推理或重复抄录状态。查询近期变化优先 Changes Since。名称搜索有多个结果时不得猜测。所有写入必须经由业务 Tool。`;
 
 const readAnnotations = {
   readOnlyHint: true,
@@ -22,6 +22,13 @@ const sourceSchema = {
     .string()
     .default('FlowTrace MCP')
     .describe('写入来源名称，用于历史审计'),
+  agent_model: z
+    .string()
+    .max(200)
+    .optional()
+    .describe(
+      '当前 Agent 自报的模型标识与版本，例如 openai/gpt-5.6-sol；无法确定时省略，禁止猜测',
+    ),
   reason: z.string().optional().describe('本次修改的业务原因'),
 };
 const entityTypeSchema = z.enum([
@@ -65,9 +72,14 @@ const textResult = (data: JsonObject) => ({
   structuredContent: data,
 });
 const readResult = (data: unknown) => textResult({ success: true, data });
-const writeBody = (input: { agent_name: string; reason?: string }) => ({
+const writeBody = (input: {
+  agent_name: string;
+  agent_model?: string;
+  reason?: string;
+}) => ({
   source: 'agent',
   agentName: input.agent_name,
+  agentModel: input.agent_model,
   reason: input.reason,
 });
 const collectionOf = (type: 'requirement' | 'stage' | 'bug') =>
@@ -209,6 +221,78 @@ export function createFlowTraceMcpServer(
   );
 
   server.registerTool(
+    'get_project_handoff',
+    {
+      description:
+        '读取项目的 Agent 交底及当前修订号。不同 Agent 会话首次接手项目、解释项目特殊约定或准备更新交底时使用；交底不能替代结构化项目事实。',
+      inputSchema: {
+        project_id: z.string().describe('由 search 获得的项目稳定 ID'),
+      },
+      annotations: readAnnotations,
+    },
+    async ({ project_id }) =>
+      readResult(
+        await api.request(
+          `/projects/${encodeURIComponent(project_id)}/agent-handoff`,
+        ),
+      ),
+  );
+
+  server.registerTool(
+    'update_project_handoff',
+    {
+      description:
+        '保存完整的最新 Agent 交底并生成修订历史。只记录值得后续会话继承的背景、约定、决策、未决问题和接手建议；不得复制瞬时状态或用交底改写业务事实。',
+      inputSchema: {
+        project_id: z.string().describe('由 search 获得的项目稳定 ID'),
+        content: z.string().max(30_000).describe('完整的最新交底 Markdown'),
+        expected_revision: z
+          .number()
+          .int()
+          .min(0)
+          .describe('get_project_handoff 返回的当前修订号'),
+        agent_name: sourceSchema.agent_name,
+        agent_model: sourceSchema.agent_model,
+        reason: z.string().min(1).describe('本次交底变化及其依据'),
+      },
+      annotations: writeAnnotations,
+    },
+    async (input) =>
+      writeResult(
+        api,
+        await api.request(
+          `/projects/${encodeURIComponent(input.project_id)}/agent-handoff`,
+          {
+            method: 'PUT',
+            body: {
+              content: input.content,
+              expectedRevision: input.expected_revision,
+              ...writeBody(input),
+            },
+          },
+        ),
+      ),
+  );
+
+  server.registerTool(
+    'get_project_handoff_history',
+    {
+      description:
+        '读取项目 Agent 交底的不可变修订历史，包含每版完整内容、来源和修改原因。用于追溯被改写的交底或理解约定如何形成。',
+      inputSchema: {
+        project_id: z.string().describe('由 search 获得的项目稳定 ID'),
+      },
+      annotations: readAnnotations,
+    },
+    async ({ project_id }) =>
+      readResult(
+        await api.request(
+          `/projects/${encodeURIComponent(project_id)}/agent-handoff/history`,
+        ),
+      ),
+  );
+
+  server.registerTool(
     'get_version_snapshot',
     {
       description:
@@ -281,6 +365,7 @@ export function createFlowTraceMcpServer(
         actual_release_at: z.string().nullable().optional(),
         description: z.string().optional(),
         agent_name: sourceSchema.agent_name,
+        agent_model: sourceSchema.agent_model,
         reason: z.string().min(1).describe('本次版本调整的业务原因'),
       },
       annotations: writeAnnotations,
@@ -480,6 +565,7 @@ export function createFlowTraceMcpServer(
         version_id: z.string().nullable().optional(),
         effective_at: z.string().optional(),
         agent_name: sourceSchema.agent_name,
+        agent_model: sourceSchema.agent_model,
         reason: z.string().min(1).describe('调整版本的原因'),
       },
       annotations: writeAnnotations,
@@ -628,6 +714,7 @@ export function createFlowTraceMcpServer(
         planned_start_at: z.string().nullable().optional(),
         planned_end_at: z.string().nullable().optional(),
         agent_name: sourceSchema.agent_name,
+        agent_model: sourceSchema.agent_model,
         reason: z.string().min(1).describe('排期调整原因'),
       },
       annotations: writeAnnotations,
@@ -743,6 +830,7 @@ export function createFlowTraceMcpServer(
         status_reason: z.string().optional(),
         expected_resume_at: z.string().nullable().optional(),
         agent_name: sourceSchema.agent_name,
+        agent_model: sourceSchema.agent_model,
         reason: z.string().min(1).describe('修正这条历史记录的原因'),
       },
       annotations: writeAnnotations,
@@ -777,6 +865,7 @@ export function createFlowTraceMcpServer(
         planned_start_at: z.string().nullable().optional(),
         planned_end_at: z.string().nullable().optional(),
         agent_name: sourceSchema.agent_name,
+        agent_model: sourceSchema.agent_model,
         reason: z.string().min(1).describe('排期调整原因'),
       },
       annotations: writeAnnotations,
@@ -847,6 +936,7 @@ export function createFlowTraceMcpServer(
       inputSchema: {
         dependency_id: z.string(),
         agent_name: sourceSchema.agent_name,
+        agent_model: sourceSchema.agent_model,
         reason: z.string().min(1).describe('依赖不再成立的原因'),
       },
       annotations: writeAnnotations,
@@ -872,6 +962,7 @@ export function createFlowTraceMcpServer(
         confirmation: z.string().describe('需求编号、阶段名称或 Bug 编号'),
         reason: z.string().min(1),
         agent_name: sourceSchema.agent_name,
+        agent_model: sourceSchema.agent_model,
       },
       annotations: { ...writeAnnotations, destructiveHint: true },
     },

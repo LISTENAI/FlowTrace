@@ -28,13 +28,13 @@ Authorization: Bearer ft_...
 
 ## Tool 与返回值
 
-MCP 提供 22 个有明确业务语义的 Tool：
+MCP 提供 25 个有明确业务语义的 Tool：
 
 - 查询：对象搜索，项目和版本快照，需求完整详情，按时间的
-  增量变化。
+  增量变化，以及当前 Agent 交底与交底修订历史。
 - 写入：创建和修改版本，创建和修改需求，独立分配负责人，移动版本，增加
   阶段，修改阶段资料与顺序，更新阶段或 Bug 状态，调整排期，报告 Bug，
-  建立和解除依赖，审计式删除误建事项。
+  建立和解除依赖，维护 Agent 交底，审计式删除误建事项。
 
 `create_requirement` 可省略 `stages` 以复制项目模板，也可直接提供
 按顺序排列的真实阶段。后者用于外部计划已经给出实际工作分解的
@@ -52,6 +52,10 @@ Project / Version Snapshot 中，每个需求的 `activeStages` 给出全部并�
 补负责人、排期或目标版本等管理缺口。`currentStage` 仅保留为兼容的
 注意力提示，不代表需求的全部当前工作。
 
+Project / Version Snapshot 同时返回 `agentHandoff`。它是跨 Agent 会话的项目
+交底，与人类项目说明和结构化业务事实分离。专门的 Tool 可读取、按当前修订号
+更新和追溯历史；并发修订冲突必须重新读取，不能盲目覆盖。
+
 读 Tool 返回 `success` 和结构化 `data`。写 Tool 至少返回：
 
 ```text
@@ -63,8 +67,8 @@ warnings
 
 依赖未满足时操作仍然成功，具体问题放入 `warnings`，不会被
 当成工具失败。所有 MCP 写入自动附带 `source = agent`、调用方
-名称和可选原因，并产生与 Web 操作相同的状态、排期、版本或变化
-历史。
+名称、可选的自报模型标识与原因，并产生与 Web 操作相同的状态、排期、版本或
+变化历史。模型标识只能在运行时准确提供时填写，不能猜测。
 
 Server Instructions 只保留 MCP-only 调用方必须知道的核心规则。
 `flowtrace://guide` 以及 `flowtrace://concepts/*` 资源按需提供对象、

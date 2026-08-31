@@ -38,6 +38,12 @@ export class ChangeContextDto {
   @IsString()
   agentName?: string;
 
+  @ApiPropertyOptional({ example: 'openai/gpt-5.6-sol' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  agentModel?: string;
+
   @ApiPropertyOptional({ example: '根据项目例会结论调整' })
   @IsOptional()
   @IsString()
@@ -192,6 +198,18 @@ export class UpdateProjectDto {
   @IsOptional()
   @IsString()
   description?: string;
+}
+
+export class UpdateProjectAgentHandoffDto extends ChangeContextDto {
+  @ApiProperty({ description: '完整的最新交底内容，使用 Markdown 编写' })
+  @IsString()
+  @MaxLength(30_000)
+  content!: string;
+
+  @ApiProperty({ description: '客户端读取到的修订号；首次保存为 0' })
+  @IsInt()
+  @Min(0)
+  expectedRevision!: number;
 }
 
 export class UpdateTemplateDto extends ChangeContextDto {

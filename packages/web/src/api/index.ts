@@ -5,6 +5,8 @@ import type {
   ExecutionStatus,
   Person,
   Project,
+  ProjectAgentHandoff,
+  ProjectAgentHandoffRevision,
   ProjectRhythm,
   ProjectSnapshot,
   Requirement,
@@ -47,6 +49,27 @@ export const api = {
   }) => request<Project>('/projects', { method: 'POST', body: input }),
   updateProject: (id: string, input: { name?: string; description?: string }) =>
     request<Project>(`/projects/${id}`, { method: 'PATCH', body: input }),
+  projectAgentHandoff: (id: string) =>
+    request<ProjectAgentHandoff>(`/projects/${id}/agent-handoff`),
+  projectAgentHandoffHistory: (id: string) =>
+    request<ProjectAgentHandoffRevision[]>(
+      `/projects/${id}/agent-handoff/history`,
+    ),
+  updateProjectAgentHandoff: (
+    id: string,
+    input: {
+      content: string;
+      expectedRevision: number;
+      reason?: string;
+      source?: 'manual' | 'api' | 'agent';
+      agentName?: string;
+      agentModel?: string;
+    },
+  ) =>
+    request<ProjectAgentHandoff>(`/projects/${id}/agent-handoff`, {
+      method: 'PUT',
+      body: input,
+    }),
   updateTemplate: (id: string, stages: TemplateStage[]) =>
     request<Project>(`/projects/${id}/template`, {
       method: 'PUT',

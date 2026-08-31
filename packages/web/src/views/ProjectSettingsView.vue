@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import type { Project, TemplateStage, Version } from '@flowtrace/shared';
+import type {
+  Project,
+  ProjectAgentHandoff,
+  ProjectAgentHandoffRevision,
+  TemplateStage,
+  Version,
+} from '@flowtrace/shared';
 import {
   ArrowLeftIcon,
   Bars3Icon,
   CheckIcon,
+  ClockIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   PlusIcon,
+  PencilSquareIcon,
   TrashIcon,
 } from '@heroicons/vue/24/outline';
 import { computed, onMounted, reactive, ref } from 'vue';
@@ -15,9 +23,11 @@ import { api } from '@/api';
 import AppDateTimeField from '@/components/AppDateTimeField.vue';
 import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
+import AuditAttribution from '@/components/AuditAttribution.vue';
 import { createLocalId } from '@/lib/local-id';
 import {
   formatDate,
+  formatDateTime,
   stageWorkDomainOptions,
   versionLabels,
 } from '@/lib/presentation';
@@ -28,10 +38,16 @@ const route = useRoute();
 const projectId = computed(() => route.params.projectId as string);
 const project = ref<Project>();
 const versions = ref<Version[]>([]);
+const agentHandoff = ref<ProjectAgentHandoff>();
+const agentHandoffHistory = ref<ProjectAgentHandoffRevision[]>([]);
 const stages = ref<TemplateStage[]>([]);
 const saving = ref(false);
 const versionOpen = ref(false);
 const versionOrderSaving = ref(false);
+const handoffOpen = ref(false);
+const handoffSaving = ref(false);
+const handoffContent = ref('');
+const handoffReason = ref('');
 const projectForm = reactive({ name: '', description: '' });
 const versionForm = reactive({
   name: '',
@@ -45,15 +61,57 @@ const versionStatusOptions = [
 ];
 
 async function load() {
-  const [projectResult, versionResult] = await Promise.all([
-    api.project(projectId.value),
-    api.versions(projectId.value),
-  ]);
+  const [projectResult, versionResult, handoffResult, handoffHistoryResult] =
+    await Promise.all([
+      api.project(projectId.value),
+      api.versions(projectId.value),
+      api.projectAgentHandoff(projectId.value),
+      api.projectAgentHandoffHistory(projectId.value),
+    ]);
   project.value = projectResult;
   versions.value = versionResult;
+  agentHandoff.value = handoffResult;
+  agentHandoffHistory.value = handoffHistoryResult;
   stages.value = projectResult.templateStages.map((item) => ({ ...item }));
   projectForm.name = projectResult.name;
   projectForm.description = projectResult.description ?? '';
+}
+
+const handoffPreview = computed(() => {
+  const content = agentHandoff.value?.content.trim() ?? '';
+  return content.length > 700 ? `${content.slice(0, 700)}…` : content;
+});
+
+function openHandoffEditor() {
+  handoffContent.value = agentHandoff.value?.content ?? '';
+  handoffReason.value = '';
+  handoffOpen.value = true;
+}
+
+async function saveAgentHandoff() {
+  if (!agentHandoff.value || handoffSaving.value) return;
+  handoffSaving.value = true;
+  try {
+    agentHandoff.value = await api.updateProjectAgentHandoff(projectId.value, {
+      content: handoffContent.value,
+      expectedRevision: agentHandoff.value.revision,
+      reason: handoffReason.value.trim() || undefined,
+      source: 'manual',
+    });
+    agentHandoffHistory.value = await api.projectAgentHandoffHistory(
+      projectId.value,
+    );
+    handoffOpen.value = false;
+    toasts.show('Agent 交底已保存', `修订 ${agentHandoff.value.revision}`);
+  } catch (error) {
+    toasts.show(
+      '交底保存失败',
+      error instanceof Error ? error.message : undefined,
+      'error',
+    );
+  } finally {
+    handoffSaving.value = false;
+  }
 }
 
 function addStage() {
@@ -208,6 +266,88 @@ onMounted(async () => {
 
       <section class="surface overflow-hidden">
         <div
+          class="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 dark:border-slate-800 sm:px-6"
+        >
+          <div class="flex min-w-0 items-center gap-2">
+            <h2 class="text-sm font-semibold text-slate-900 dark:text-white">
+              Agent 交底
+            </h2>
+            <span
+              v-if="agentHandoff?.revision"
+              class="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300"
+              >修订 {{ agentHandoff.revision }}</span
+            >
+          </div>
+          <button
+            type="button"
+            class="focus-ring section-action shrink-0"
+            @click="openHandoffEditor"
+          >
+            <PencilSquareIcon class="h-3.5 w-3.5" />
+            {{ agentHandoff?.revision ? '修正' : '补充' }}
+          </button>
+        </div>
+        <div class="px-5 py-4 sm:px-6">
+          <div
+            v-if="handoffPreview"
+            class="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3.5 dark:border-slate-700 dark:bg-slate-800/60"
+          >
+            <p
+              class="whitespace-pre-wrap text-sm leading-6 text-slate-600 dark:text-slate-300"
+            >
+              {{ handoffPreview }}
+            </p>
+          </div>
+          <p v-else class="py-1 text-xs text-slate-400">暂无交底</p>
+          <div
+            v-if="agentHandoff?.updatedAt"
+            class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1"
+          >
+            <span
+              class="inline-flex items-center gap-1 text-[11px] text-slate-400"
+            >
+              <ClockIcon class="h-3.5 w-3.5" />
+              {{ formatDateTime(agentHandoff.updatedAt) }}
+            </span>
+            <AuditAttribution
+              :source="agentHandoff.source"
+              :agent-name="agentHandoff.agentName"
+              :agent-model="agentHandoff.agentModel"
+            />
+            <span
+              v-if="agentHandoff.reason"
+              class="text-[11px] text-slate-400"
+              >{{ agentHandoff.reason }}</span
+            >
+          </div>
+          <div
+            v-if="agentHandoffHistory.length > 1"
+            class="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800"
+          >
+            <p class="text-[10px] font-semibold text-slate-400">最近修订</p>
+            <div class="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+              <div
+                v-for="revision in agentHandoffHistory.slice(1, 4)"
+                :key="revision.id"
+                class="flex items-center gap-2 text-[10px] text-slate-400"
+              >
+                <span class="font-medium text-slate-500"
+                  >修订 {{ revision.revision }}</span
+                >
+                <span>{{ formatDateTime(revision.createdAt) }}</span>
+                <AuditAttribution
+                  :source="revision.source"
+                  :agent-name="revision.agentName"
+                  :agent-model="revision.agentModel"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="surface overflow-hidden">
+        <div
           class="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:items-center sm:px-6"
         >
           <div class="min-w-0">
@@ -351,6 +491,58 @@ onMounted(async () => {
         </div>
       </section>
     </div>
+
+    <AppModal
+      :open="handoffOpen"
+      :title="agentHandoff?.revision ? '修正 Agent 交底' : '补充 Agent 交底'"
+      width="lg"
+      @close="handoffOpen = false"
+    >
+      <form class="space-y-4" @submit.prevent="saveAgentHandoff">
+        <label class="block">
+          <span
+            class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300"
+            >交底内容</span
+          >
+          <textarea
+            v-model="handoffContent"
+            rows="15"
+            maxlength="30000"
+            placeholder="写下需要 AI 延续的约定或注意事项"
+            class="focus-ring w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-mono text-sm leading-6 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          />
+        </label>
+        <label class="block">
+          <span
+            class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300"
+            >修改说明（可选）</span
+          >
+          <input
+            v-model="handoffReason"
+            maxlength="500"
+            placeholder="例如：修正项目约定"
+            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          />
+        </label>
+        <div class="flex justify-end gap-3 pt-1">
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class="rounded-xl px-4 py-2 text-sm text-slate-500"
+              @click="handoffOpen = false"
+            >
+              取消
+            </button>
+            <button
+              :disabled="handoffSaving"
+              class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50 dark:bg-indigo-500"
+            >
+              {{ handoffSaving ? '保存中…' : '保存' }}
+            </button>
+          </div>
+        </div>
+      </form>
+    </AppModal>
 
     <AppModal
       :open="versionOpen"

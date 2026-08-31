@@ -38,6 +38,9 @@ export class ChangeEventEntity {
   @Column('text', { nullable: true })
   agentName!: string | null;
 
+  @Column('text', { nullable: true })
+  agentModel!: string | null;
+
   @Column('timestamptz')
   occurredAt!: Date;
 }
