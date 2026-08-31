@@ -111,7 +111,7 @@ describe('IdentityService', () => {
     ).toBe(1);
   });
 
-  it('creates and binds a person when an external provider has no email', async () => {
+  it('rejects first-time external identity resolution without a verified email', async () => {
     dataSource = await createTestDataSource();
     const user = {
       id: 'auth-user-without-email',
@@ -121,13 +121,55 @@ describe('IdentityService', () => {
     };
     await insertAuthAccount(user, 'wecom');
 
-    const identity = await service(wecomProvider).current(user);
-
-    expect(identity.person).toMatchObject({ name: '企业成员' });
-    expect(identity.person.email).toBeUndefined();
+    await expect(service(wecomProvider).current(user)).rejects.toThrow(
+      '企业微信未返回已验证邮箱',
+    );
+    expect(await dataSource.getRepository(PersonEntity).count()).toBe(0);
     expect(
       await dataSource.getRepository(AuthPersonBindingEntity).count(),
-    ).toBe(1);
+    ).toBe(0);
+  });
+
+  it('keeps an existing legacy binding usable when the provider omits email', async () => {
+    dataSource = await createTestDataSource();
+    const people = dataSource.getRepository(PersonEntity);
+    const bindings = dataSource.getRepository(AuthPersonBindingEntity);
+    const user = {
+      id: 'legacy-auth-user-without-email',
+      name: '企业成员',
+      email: 'wecom-anonymous@flowtrace.invalid',
+      emailVerified: false,
+    };
+    await insertAuthAccount(user, 'wecom');
+    const person = await people.save(
+      people.create({
+        id: 'db3e7f86-c5d0-4daf-9015-e70e3fd57ced',
+        name: '企业成员',
+        email: 'member@example.com',
+        note: null,
+        active: true,
+      }),
+    );
+    await bindings.save(
+      bindings.create({
+        id: '77bc5945-e2e2-42dc-95cf-0726ba79a818',
+        authUserId: user.id,
+        personId: person.id,
+        providerId: 'wecom',
+        providerSubject: `subject-${user.id}`,
+        nameAuthority: 'provider',
+        emailAuthority: 'provider',
+      }),
+    );
+
+    const identity = await service(wecomProvider).current(user);
+
+    expect(identity.person).toMatchObject({
+      id: person.id,
+      email: 'member@example.com',
+    });
+    expect(await people.count()).toBe(1);
+    expect(await bindings.count()).toBe(1);
   });
 
   it('trusts the local owner email and keeps the display name editable', async () => {

@@ -75,4 +75,32 @@ describe('WeComAuthProvider', () => {
       ),
     ).toHaveLength(1);
   });
+
+  it('does not hide failures while reading explicitly authorized profile fields', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      const payload = url.pathname.endsWith('/gettoken')
+        ? { errcode: 0, access_token: 'application-secret-token' }
+        : url.pathname.endsWith('/auth/getuserinfo')
+          ? { errcode: 0, userid: 'zhangsan', user_ticket: 'ticket' }
+          : url.pathname.endsWith('/auth/getuserdetail')
+            ? { errcode: 50001, errmsg: 'redirect uri invalid' }
+            : { errcode: 0, userid: 'zhangsan', name: '张三' };
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    const provider = new WeComAuthProvider({
+      corpId: 'corp-id',
+      agentId: '10001',
+      secret: 'application-secret',
+      apiBaseUrl: 'https://wecom.example.test',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await expect(provider.exchangeCode('login-code')).rejects.toThrow(
+      '企业微信获取成员授权资料失败：redirect uri invalid',
+    );
+  });
 });

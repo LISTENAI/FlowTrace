@@ -50,10 +50,9 @@ export class IdentityService {
 
   async current(user: AuthUser): Promise<CurrentIdentity> {
     return this.dataSource.transaction(async (manager) => {
-      await manager.query(
-        'SELECT pg_advisory_xact_lock(hashtext($1))',
-        [`flowtrace:identity:${user.id}`],
-      );
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `flowtrace:identity:${user.id}`,
+      ]);
       return this.currentLocked(user, manager);
     });
   }
@@ -82,6 +81,11 @@ export class IdentityService {
     }
 
     const email = realEmail(user, this.provider);
+    if (this.provider.kind === 'external' && !email) {
+      throw new ConflictException(
+        `${this.provider.name}未返回已验证邮箱，无法自动关联人员档案。请确认企业账号已配置邮箱，并授权应用读取后重新登录`,
+      );
+    }
     let person = email ? await people.findOneBy({ email }) : null;
     if (!person) {
       person = people.create({

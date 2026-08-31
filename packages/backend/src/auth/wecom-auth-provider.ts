@@ -131,7 +131,7 @@ export class WeComAuthProvider implements AuthProviderAdapter {
             { access_token: accessToken },
             { user_ticket: login.user_ticket },
             '获取成员授权资料',
-          ).catch(() => undefined)
+          )
         : undefined,
       this.getJson<WeComProfileResponse>(
         '/cgi-bin/user/get',
