@@ -32,6 +32,14 @@ and Version context and ask the user to choose. Never pick by list order. Apply
 the domain rules below and ask one concise question only when a missing choice
 would change the result.
 
+Person search returns active records by default and includes email for real
+same-name disambiguation. Set `include_inactive_people=true` only for explicit
+historical review, correction, or reactivation. In routine current-work
+assignment, inactive records are not candidates. If a legacy server returns
+one active match together with inactive same-name records, select the sole
+active match without asking the user. Ask for email-based disambiguation only
+when two or more active records still match.
+
 A single lexical search result is still only a candidate when the source uses
 an external product name, build tag, batch name, meeting shorthand, or issue
 number. Verify its Project purpose, neighboring Versions, and current Snapshot

@@ -46,8 +46,13 @@ or blocked interval; the Tool appends history.
 - Stage owners execute that phase.
 - Bug owners resolve that defect.
 - An empty owner list means unassigned; it is not an error.
-- A person's stable ID survives rename and inactive status. Search includes
-  inactive people, so check `active` before a new assignment.
+- A person's stable ID survives rename and inactive status. Routine search
+  returns active people only. Include inactive people explicitly for historical
+  review, correction, or reactivation, and use email to distinguish genuinely
+  same-name active people. If an older server returns inactive same-name rows
+  during a routine assignment, ignore them; one remaining active row is a
+  resolved target, while multiple active rows require email-based
+  disambiguation.
 
 If the user says “assign this requirement to someone” and the intended phase is
 unclear, ask whether they mean overall coordination or a specific Stage. Do not

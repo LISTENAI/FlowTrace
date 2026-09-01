@@ -371,10 +371,17 @@ export class InsightsController {
 
   @Get('search')
   @ApiOperation({ summary: '跨项目搜索可被 Agent 稳定引用的业务对象' })
+  @ApiQuery({
+    name: 'includeInactivePeople',
+    required: false,
+    type: Boolean,
+  })
   search(
     @Query('q') query?: string,
     @Query('types') types?: string,
     @Query('limit') limit?: string,
+    @Query('includeInactivePeople', new ParseBoolPipe({ optional: true }))
+    includeInactivePeople?: boolean,
   ) {
     const selected = types
       ? types.split(',').filter(Boolean)
@@ -393,6 +400,7 @@ export class InsightsController {
       query ?? '',
       selected as SearchEntityType[],
       parsedLimit,
+      includeInactivePeople,
     );
   }
 

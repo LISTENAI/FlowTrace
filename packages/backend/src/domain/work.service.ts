@@ -394,6 +394,7 @@ export class WorkService {
     query: string,
     types: SearchEntityType[] = [...searchEntityTypes],
     limit = 20,
+    includeInactivePeople = false,
   ): Promise<SearchResult[]> {
     const needle = query.trim().normalize('NFKC').toLocaleLowerCase();
     const compactNeedle = normalizeSearchText(query);
@@ -418,7 +419,12 @@ export class WorkService {
       needsRequirements ? this.requirements.find() : [],
       selected.has('stage') ? this.stages.find() : [],
       selected.has('bug') ? this.bugs.find() : [],
-      selected.has('person') ? this.people.find() : [],
+      selected.has('person')
+        ? this.people.find({
+            where: includeInactivePeople ? {} : { active: true },
+            order: { active: 'DESC', name: 'ASC' },
+          })
+        : [],
     ]);
     const projects = new Map(projectRows.map((item) => [item.id, item]));
     const versions = new Map(versionRows.map((item) => [item.id, item]));
@@ -612,8 +618,9 @@ export class WorkService {
             id: person.id,
             name: person.name,
             active: person.active,
+            email: person.email ?? undefined,
           },
-          [person.name, person.note],
+          [person.name, person.email, person.note],
         );
       }
     }

@@ -175,7 +175,7 @@ export function createFlowTraceMcpServer(
     'search',
     {
       description:
-        '搜索或列举业务对象，返回稳定 ID 和项目、版本消歧上下文。query 留空可按类型列举；多个结果时必须让用户消歧，不得猜测。',
+        '搜索或列举业务对象，返回稳定 ID 和项目、版本消歧上下文；人员默认只返回启用档案并携带邮箱，只有历史审计才应包含已停用人员。query 留空可按类型列举；多个结果时必须让用户消歧，不得猜测。',
       inputSchema: {
         query: z.string().default('').describe('名称、可读编号或关键词'),
         types: z
@@ -189,15 +189,22 @@ export function createFlowTraceMcpServer(
             'person',
           ]),
         limit: z.number().int().min(1).max(50).default(20),
+        include_inactive_people: z
+          .boolean()
+          .default(false)
+          .describe('仅在历史审计或明确查找已停用人员时启用'),
       },
       annotations: readAnnotations,
     },
-    async ({ query, types, limit }) => {
+    async ({ query, types, limit, include_inactive_people }) => {
       const queryString = new URLSearchParams({
         q: query,
         types: types.join(','),
         limit: String(limit),
       });
+      if (include_inactive_people) {
+        queryString.set('includeInactivePeople', 'true');
+      }
       return readResult(await api.request(`/search?${queryString}`));
     },
   );

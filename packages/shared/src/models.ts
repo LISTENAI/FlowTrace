@@ -319,6 +319,7 @@ export interface SearchResult {
   requirementKey?: string;
   status?: ExecutionStatus | RequirementLifecycle | VersionStatus;
   active?: boolean;
+  email?: string;
 }
 
 export interface RequirementSummary extends Omit<

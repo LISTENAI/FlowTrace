@@ -792,6 +792,10 @@ describe.sequential('WorkService business rules', () => {
       work.createPerson({ name: '暂停协作者' }),
     ]);
     await work.updatePerson(inactivePerson.id, { active: false });
+    const activePerson = await work.createPerson({
+      name: '暂停协作者',
+      email: 'active-search@example.com',
+    });
     await Promise.all([
       work.createVersion(firstProject.id, { name: '试运行' }),
       work.createVersion(secondProject.id, { name: '试运行' }),
@@ -813,7 +817,24 @@ describe.sequential('WorkService business rules', () => {
         expect.objectContaining({ id: secondProject.id, type: 'project' }),
       ]),
     );
-    expect(await work.search('', ['person'], 50)).toEqual(
+    expect(await work.search('', ['person'], 50)).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: inactivePerson.id,
+          type: 'person',
+          active: false,
+        }),
+      ]),
+    );
+    expect(await work.search('暂停协作者', ['person'], 50)).toEqual([
+      expect.objectContaining({
+        id: activePerson.id,
+        type: 'person',
+        active: true,
+        email: 'active-search@example.com',
+      }),
+    ]);
+    expect(await work.search('', ['person'], 50, true)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: inactivePerson.id,

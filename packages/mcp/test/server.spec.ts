@@ -135,6 +135,19 @@ describe('FlowTrace MCP Server', () => {
     expect(request).toHaveBeenCalledWith(
       expect.stringMatching(/^\/search\?q=&types=project&limit=20$/),
     );
+    await client.callTool({
+      name: 'search',
+      arguments: {
+        query: '历史人员',
+        types: ['person'],
+        include_inactive_people: true,
+      },
+    });
+    expect(request).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^\/search\?q=%E5%8E%86%E5%8F%B2%E4%BA%BA%E5%91%98&types=person&limit=20&includeInactivePeople=true$/,
+      ),
+    );
 
     const handoff = await client.callTool({
       name: 'get_project_handoff',
