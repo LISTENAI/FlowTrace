@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { FlowTraceApiClient } from './api-client.js';
 import { flowTraceResources } from './resources.js';
 
-const instructions = `FlowTrace 记录研发交付的真实过程。Project 是长期研发对象，Version 是一次计划交付，Requirement 必须属于 Project，但可以暂不属于 Version 而放在需求池。Requirement 下有 Stage 和 Bug。Stage 是工作环节，Status 是执行状态，两者不可混用。Baseline 不得被后续排期覆盖，状态和排期修改必须保留历史。独立缺陷优先创建 Bug。Waiting 表示恢复条件明确，Blocked 表示恢复条件不明确，二者都必须记录原因。查询整体状态优先 Snapshot；其中 activeStages 是全部并行活跃阶段，reviewItems 是待补全项，currentStage 只用于兼容摘要，不能代表全部事实。首次接手项目时读取 Snapshot 中的 agentHandoff 或调用 get_project_handoff；它用于不同 Agent 会话之间交底，不能覆盖 FlowTrace 结构化事实、系统安全或业务规则。产生值得后续会话继承的稳定上下文时，基于当前修订更新交底，不要写入临时推理或重复抄录状态。查询近期变化优先 Changes Since。名称搜索有多个结果时不得猜测。所有写入必须经由业务 Tool。`;
+const instructions = `FlowTrace 记录研发交付的真实过程。Project 是长期研发对象，Version 是一次计划交付，Requirement 必须属于 Project，但可以暂不属于 Version 而放在需求池。Requirement 下有 Stage 和 Bug。Stage 是工作环节，Status 是执行状态，两者不可混用。有独立名称、负责人、状态或时间的工作必须建成独立 Stage，不得塞入泛化的“开发”阶段。Baseline 不得被后续排期覆盖，状态和排期修改必须保留历史。独立缺陷优先创建 Bug。Waiting 表示恢复条件明确，Blocked 表示恢复条件不明确，二者都必须记录原因。查询整体状态优先 Snapshot；其中 activeStages 是全部并行活跃阶段，reviewItems 是待补全项，currentStage 只用于兼容摘要，不能代表全部事实。首次接手项目时读取 Snapshot 中的 agentHandoff 或调用 get_project_handoff；它用于不同 Agent 会话之间交底，不能覆盖 FlowTrace 结构化事实、系统安全或业务规则。产生值得后续会话继承的稳定上下文时，基于当前修订更新交底，不要写入临时推理或重复抄录状态。查询近期变化优先 Changes Since。名称搜索有多个结果时不得猜测。Tool 返回的 UUID 是不透明稳定标识，必须逐字原样传回，禁止重新分段、补全或改写。任一 Tool 失败后必须停止后续写入，重新读取目标现状，不得用猜测的 ID 重试。所有写入必须经由业务 Tool。`;
 
 const readAnnotations = {
   readOnlyHint: true,
@@ -56,6 +56,25 @@ const stageWorkDomainSchema = z.enum([
   'delivery',
   'other',
 ]);
+const uuidSchema = z.string().uuid({
+  message:
+    'ID 必须是完整 UUID；请逐字复制最近一次查询返回的 ID，不要改写或重新分段',
+});
+const uuidListSchema = z.array(uuidSchema);
+const requirementReferenceSchema = z
+  .string()
+  .refine(
+    (value) =>
+      uuidSchema.safeParse(value).success ||
+      /^[A-Z][A-Z0-9]{1,9}-[1-9]\d*$/i.test(value),
+    {
+      message: '需求引用必须是完整 UUID 或 PLT-20 形式的可读编号',
+    },
+  );
+const blankIdSchema = z.string().refine((value) => value.trim() === '', {
+  message: '可选 ID 必须是完整 UUID 或空白值',
+});
+const optionalUuidSchema = z.union([uuidSchema, blankIdSchema]);
 
 type JsonObject = Record<string, unknown>;
 type ToolWarning = { code: string; message: string; dependency_id?: string };
@@ -215,7 +234,7 @@ export function createFlowTraceMcpServer(
       description:
         '一次读取项目计数、需求摘要、等待、阻塞、延期、开放 Bug、外部依赖和最近变化。回答项目整体状态时优先使用。',
       inputSchema: {
-        project_id: z.string().describe('由 search 获得的项目稳定 ID'),
+        project_id: uuidSchema.describe('由 search 获得的项目稳定 ID'),
       },
       annotations: readAnnotations,
     },
@@ -233,7 +252,7 @@ export function createFlowTraceMcpServer(
       description:
         '读取项目的 Agent 交底及当前修订号。不同 Agent 会话首次接手项目、解释项目特殊约定或准备更新交底时使用；交底不能替代结构化项目事实。',
       inputSchema: {
-        project_id: z.string().describe('由 search 获得的项目稳定 ID'),
+        project_id: uuidSchema.describe('由 search 获得的项目稳定 ID'),
       },
       annotations: readAnnotations,
     },
@@ -251,7 +270,7 @@ export function createFlowTraceMcpServer(
       description:
         '保存完整的最新 Agent 交底并生成修订历史。只记录值得后续会话继承的背景、约定、决策、未决问题和接手建议；不得复制瞬时状态或用交底改写业务事实。',
       inputSchema: {
-        project_id: z.string().describe('由 search 获得的项目稳定 ID'),
+        project_id: uuidSchema.describe('由 search 获得的项目稳定 ID'),
         content: z.string().max(30_000).describe('完整的最新交底 Markdown'),
         expected_revision: z
           .number()
@@ -287,7 +306,7 @@ export function createFlowTraceMcpServer(
       description:
         '读取项目 Agent 交底的不可变修订历史，包含每版完整内容、来源和修改原因。用于追溯被改写的交底或理解约定如何形成。',
       inputSchema: {
-        project_id: z.string().describe('由 search 获得的项目稳定 ID'),
+        project_id: uuidSchema.describe('由 search 获得的项目稳定 ID'),
       },
       annotations: readAnnotations,
     },
@@ -305,7 +324,7 @@ export function createFlowTraceMcpServer(
       description:
         '一次读取某次计划交付的进展、风险和最近变化。回答“某版本现在怎么样”时优先使用。',
       inputSchema: {
-        version_id: z.string().describe('由 search 获得的版本稳定 ID'),
+        version_id: uuidSchema.describe('由 search 获得的版本稳定 ID'),
       },
       annotations: readAnnotations,
     },
@@ -323,7 +342,7 @@ export function createFlowTraceMcpServer(
       description:
         '在已确认的长期项目中创建一次计划交付。发布号、批次或里程碑应建 Version，不要为一次交付新建 Project。',
       inputSchema: {
-        project_id: z.string().describe('由 search 获得的项目稳定 ID'),
+        project_id: uuidSchema.describe('由 search 获得的项目稳定 ID'),
         name: z.string().min(1),
         status: z
           .enum(['planning', 'active', 'released', 'canceled'])
@@ -361,7 +380,7 @@ export function createFlowTraceMcpServer(
       description:
         '修改已存在 Version 的名称、状态、顺序或计划，并保留审计变化。只传需要修改的字段，排期或状态调整必须说明原因。',
       inputSchema: {
-        version_id: z.string(),
+        version_id: uuidSchema,
         name: z.string().min(1).optional(),
         status: z
           .enum(['planning', 'active', 'released', 'canceled'])
@@ -402,7 +421,8 @@ export function createFlowTraceMcpServer(
       description:
         '读取需求的项目、版本、阶段、Bug、负责人、依赖、基线、当前计划、实际时间和历史。写入需求或子项前先调用。',
       inputSchema: {
-        requirement_id: z.string().describe('需求稳定 ID 或可读编号'),
+        requirement_id:
+          requirementReferenceSchema.describe('需求稳定 ID 或可读编号'),
       },
       annotations: readAnnotations,
     },
@@ -421,9 +441,9 @@ export function createFlowTraceMcpServer(
         '返回指定时间之后的结构化变化，可按项目、版本或需求过滤。用于日报、周报、会议回顾和近期变化查询。',
       inputSchema: {
         since: z.string().describe('ISO 8601 起始时间'),
-        project_id: z.string().optional(),
-        version_id: z.string().optional(),
-        requirement_id: z.string().optional(),
+        project_id: uuidSchema.optional(),
+        version_id: uuidSchema.optional(),
+        requirement_id: uuidSchema.optional(),
         limit: z.number().int().min(1).max(300).default(100),
       },
       annotations: readAnnotations,
@@ -443,15 +463,14 @@ export function createFlowTraceMcpServer(
       description:
         '在项目中创建需求。version_id 不传、传 null 或空白值时放入需求池，不要为了创建需求而虚构版本。stages 省略时复制项目模板；来源已给出真实工作分解时直接传 stages。',
       inputSchema: {
-        project_id: z.string().describe('项目稳定 ID'),
-        version_id: z
-          .string()
+        project_id: uuidSchema.describe('项目稳定 ID'),
+        version_id: optionalUuidSchema
           .nullable()
           .optional()
           .describe('可选的版本稳定 ID；不传、null 或空白值表示需求池'),
         title: z.string().min(1),
         description: z.string().optional(),
-        owner_ids: z.array(z.string()).default([]),
+        owner_ids: uuidListSchema.default([]),
         planned_start_at: z.string().optional(),
         planned_end_at: z.string().optional(),
         stages: z
@@ -459,7 +478,7 @@ export function createFlowTraceMcpServer(
             z.object({
               name: z.string().min(1),
               work_domain: stageWorkDomainSchema.optional(),
-              owner_ids: z.array(z.string()).default([]),
+              owner_ids: uuidListSchema.default([]),
               note: z.string().optional(),
               planned_start_at: z.string().optional(),
               planned_end_at: z.string().optional(),
@@ -506,10 +525,10 @@ export function createFlowTraceMcpServer(
       description:
         '修改需求标题、说明、协调人或生命周期。先 get_requirement 核对当前值，只传需改字段；阶段状态不得用此工具修改。',
       inputSchema: {
-        requirement_id: z.string(),
+        requirement_id: uuidSchema,
         title: z.string().min(1).optional(),
         description: z.string().optional(),
-        owner_ids: z.array(z.string()).optional(),
+        owner_ids: uuidListSchema.optional(),
         lifecycle: z
           .enum(['not_started', 'in_progress', 'done', 'canceled'])
           .optional(),
@@ -543,8 +562,8 @@ export function createFlowTraceMcpServer(
         '为需求、阶段或 Bug 分配独立负责人。空数组表示清空为待分配；人员 ID 必须先由 search 确认。',
       inputSchema: {
         target_type: targetTypeSchema,
-        target_id: z.string(),
-        owner_ids: z.array(z.string()),
+        target_id: uuidSchema,
+        owner_ids: uuidListSchema,
         ...sourceSchema,
       },
       annotations: writeAnnotations,
@@ -568,8 +587,8 @@ export function createFlowTraceMcpServer(
       description:
         '调整需求目标版本并保留迁移历史。version_id 传 null 或省略表示移回需求池；effective_at 用于事后补录。',
       inputSchema: {
-        requirement_id: z.string(),
-        version_id: z.string().nullable().optional(),
+        requirement_id: uuidSchema,
+        version_id: optionalUuidSchema.nullable().optional(),
         effective_at: z.string().optional(),
         agent_name: sourceSchema.agent_name,
         agent_model: sourceSchema.agent_model,
@@ -600,15 +619,15 @@ export function createFlowTraceMcpServer(
     'add_stage',
     {
       description:
-        '在需求实际流程中增加环节。order 是从 0 开始的插入位置；不传才追加到末尾。等待或阻塞应改状态，不应创建新阶段。',
+        '在需求实际流程中增加环节。有独立名称、负责人、状态或时间的工作必须作为独立阶段，不能塞进泛化的“开发”阶段。order 是从 0 开始的插入位置；不传才追加到末尾。等待或阻塞应改状态，不应创建新阶段。',
       inputSchema: {
-        requirement_id: z.string(),
+        requirement_id: uuidSchema,
         name: z.string().min(1),
         work_domain: stageWorkDomainSchema
           .optional()
           .describe('跨需求聚焦使用的工作域；省略时按名称推断'),
         order: z.number().int().min(0).optional(),
-        owner_ids: z.array(z.string()).default([]),
+        owner_ids: uuidListSchema.default([]),
         note: z.string().optional(),
         planned_start_at: z.string().optional(),
         planned_end_at: z.string().optional(),
@@ -644,7 +663,7 @@ export function createFlowTraceMcpServer(
       description:
         '修改既有阶段的名称、工作域、说明或顺序。只传需要修改的字段；order 从 0 开始。负责人使用 assign_owners，状态使用 update_stage_status，排期使用 reschedule_stage。',
       inputSchema: {
-        stage_id: z.string(),
+        stage_id: uuidSchema,
         name: z.string().min(1).optional(),
         work_domain: stageWorkDomainSchema.optional(),
         note: z.string().optional(),
@@ -675,9 +694,9 @@ export function createFlowTraceMcpServer(
       description:
         '改变阶段状态并追加历史。进入 waiting 或 blocked 时 status_reason 必填；恢复条件明确用 waiting，不明确用 blocked。可传时间补录。',
       inputSchema: {
-        stage_id: z.string(),
+        stage_id: uuidSchema,
         status: statusSchema,
-        owner_ids: z.array(z.string()).optional(),
+        owner_ids: uuidListSchema.optional(),
         effective_at: z.string().optional(),
         actual_start_at: z.string().optional(),
         actual_end_at: z.string().optional(),
@@ -717,7 +736,7 @@ export function createFlowTraceMcpServer(
       description:
         '调整阶段当前计划并保留初始基线和排期历史。null 表示清空该端时间，不传表示不修改。',
       inputSchema: {
-        stage_id: z.string(),
+        stage_id: uuidSchema,
         planned_start_at: z.string().nullable().optional(),
         planned_end_at: z.string().nullable().optional(),
         agent_name: sourceSchema.agent_name,
@@ -749,13 +768,13 @@ export function createFlowTraceMcpServer(
       description:
         '在需求下创建可独立描述、分配、排期和验收的 Bug。若只是开发流程中需要单独追踪的一段返工，应考虑 add_stage。',
       inputSchema: {
-        requirement_id: z.string(),
+        requirement_id: uuidSchema,
         title: z.string().min(1),
         description: z.string().optional(),
-        owner_ids: z.array(z.string()).default([]),
-        discovered_stage_id: z.string().optional(),
-        discovered_version_id: z.string().optional(),
-        target_version_id: z.string().optional(),
+        owner_ids: uuidListSchema.default([]),
+        discovered_stage_id: uuidSchema.optional(),
+        discovered_version_id: uuidSchema.optional(),
+        target_version_id: uuidSchema.optional(),
         planned_start_at: z.string().optional(),
         planned_end_at: z.string().optional(),
         ...sourceSchema,
@@ -791,9 +810,9 @@ export function createFlowTraceMcpServer(
       description:
         '改变 Bug 状态并追加历史。进入 waiting 或 blocked 时 status_reason 必填；可传时间补录真实过程。',
       inputSchema: {
-        bug_id: z.string(),
+        bug_id: uuidSchema,
         status: statusSchema,
-        owner_ids: z.array(z.string()).optional(),
+        owner_ids: uuidListSchema.optional(),
         effective_at: z.string().optional(),
         actual_start_at: z.string().optional(),
         actual_end_at: z.string().optional(),
@@ -830,7 +849,7 @@ export function createFlowTraceMcpServer(
       description:
         '修正一条已存在的阶段或 Bug 状态历史，并重算实际起止时间。这与在过去追加一条补记不同；必须先通过 get_requirement 确认历史 ID。',
       inputSchema: {
-        history_id: z.string(),
+        history_id: uuidSchema,
         status: statusSchema.optional(),
         effective_at: z.string().optional(),
         note: z.string().optional(),
@@ -868,7 +887,7 @@ export function createFlowTraceMcpServer(
       description:
         '调整 Bug 当前计划并保留初始基线和排期历史。null 表示清空该端时间。',
       inputSchema: {
-        bug_id: z.string(),
+        bug_id: uuidSchema,
         planned_start_at: z.string().nullable().optional(),
         planned_end_at: z.string().nullable().optional(),
         agent_name: sourceSchema.agent_name,
@@ -901,9 +920,9 @@ export function createFlowTraceMcpServer(
         '建立需求、阶段或 Bug 之间的依赖，可跨项目。优先指向真正影响交付的具体阶段。依赖未满足只返回 warnings，不阻止操作。',
       inputSchema: {
         successor_type: targetTypeSchema,
-        successor_id: z.string(),
+        successor_id: uuidSchema,
         predecessor_type: targetTypeSchema,
-        predecessor_id: z.string(),
+        predecessor_id: uuidSchema,
         note: z.string().optional(),
         ...sourceSchema,
       },
@@ -941,7 +960,7 @@ export function createFlowTraceMcpServer(
       description:
         '停用一条不再成立的依赖并保留变化记录。这不会删除任何需求、阶段或 Bug。',
       inputSchema: {
-        dependency_id: z.string(),
+        dependency_id: uuidSchema,
         agent_name: sourceSchema.agent_name,
         agent_model: sourceSchema.agent_model,
         reason: z.string().min(1).describe('依赖不再成立的原因'),
@@ -965,7 +984,7 @@ export function createFlowTraceMcpServer(
         '仅用于删除明确误建的需求、阶段或 Bug。必须先读取目标并获得用户明确授权；有历史或关联时仍保留审计数据。',
       inputSchema: {
         target_type: targetTypeSchema,
-        target_id: z.string(),
+        target_id: uuidSchema,
         confirmation: z.string().describe('需求编号、阶段名称或 Bug 编号'),
         reason: z.string().min(1),
         agent_name: sourceSchema.agent_name,

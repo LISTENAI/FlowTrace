@@ -8,6 +8,7 @@ import {
   Inject,
   Param,
   ParseBoolPipe,
+  ParseUUIDPipe,
   Patch,
   Post,
   Put,
@@ -48,6 +49,17 @@ import {
 import { WorkService } from '@/domain/work.service';
 import { PublicAuth } from '@/auth/auth-public';
 import type { AuthenticatedRequest } from '@/auth/auth-session';
+
+const uuidPipe = new ParseUUIDPipe({
+  exceptionFactory: () =>
+    new BadRequestException('ID 格式无效，请使用完整的 UUID'),
+});
+
+const optionalUuidPipe = new ParseUUIDPipe({
+  optional: true,
+  exceptionFactory: () =>
+    new BadRequestException('ID 格式无效，请使用完整的 UUID'),
+});
 
 @ApiTags('项目')
 @Controller('projects')
@@ -131,13 +143,16 @@ export class ProjectRhythmsController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() input: UpdateProjectRhythmDto) {
+  update(
+    @Param('id', uuidPipe) id: string,
+    @Body() input: UpdateProjectRhythmDto,
+  ) {
     return this.work.updateProjectRhythm(id, input);
   }
 
   @Delete(':id')
   @HttpCode(204)
-  remove(@Param('id') id: string) {
+  remove(@Param('id', uuidPipe) id: string) {
     return this.work.deleteProjectRhythm(id);
   }
 }
@@ -148,7 +163,7 @@ export class VersionsController {
   constructor(@Inject(WorkService) private readonly work: WorkService) {}
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() input: UpdateVersionDto) {
+  update(@Param('id', uuidPipe) id: string, @Body() input: UpdateVersionDto) {
     return this.work.updateVersion(id, input);
   }
 }
@@ -174,7 +189,7 @@ export class PeopleController {
 
   @Patch(':id')
   update(
-    @Param('id') id: string,
+    @Param('id', uuidPipe) id: string,
     @Body() input: UpdatePersonDto,
     @Req() request: AuthenticatedRequest,
   ) {
@@ -199,9 +214,9 @@ export class RequirementsController {
   @ApiQuery({ name: 'health', required: false })
   @ApiQuery({ name: 'overdue', required: false, type: Boolean })
   list(
-    @Query('projectId') projectId?: string,
-    @Query('versionId') versionId?: string,
-    @Query('ownerId') ownerId?: string,
+    @Query('projectId', optionalUuidPipe) projectId?: string,
+    @Query('versionId', optionalUuidPipe) versionId?: string,
+    @Query('ownerId', optionalUuidPipe) ownerId?: string,
     @Query('lifecycle')
     lifecycle?: 'not_started' | 'in_progress' | 'done' | 'canceled',
     @Query('health') health?: 'normal' | 'waiting' | 'blocked',
@@ -268,26 +283,26 @@ export class StagesController {
   constructor(@Inject(WorkService) private readonly work: WorkService) {}
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() input: UpdateStageDto) {
+  update(@Param('id', uuidPipe) id: string, @Body() input: UpdateStageDto) {
     return this.work.updateStage(id, input);
   }
 
   @Post(':id/status')
   @ApiOperation({ summary: '更新阶段状态，支持补录生效时间' })
-  status(@Param('id') id: string, @Body() input: UpdateStatusDto) {
+  status(@Param('id', uuidPipe) id: string, @Body() input: UpdateStatusDto) {
     return this.work.updateStageStatus(id, input);
   }
 
   @Post(':id/reschedule')
   @ApiOperation({ summary: '调整排期并保留基准和变更历史' })
-  reschedule(@Param('id') id: string, @Body() input: RescheduleDto) {
+  reschedule(@Param('id', uuidPipe) id: string, @Body() input: RescheduleDto) {
     return this.work.rescheduleStage(id, input);
   }
 
   @Delete(':id')
   @HttpCode(204)
   @ApiOperation({ summary: '软删除阶段，并保留状态和排期历史' })
-  remove(@Param('id') id: string, @Body() input: DeleteWorkItemDto) {
+  remove(@Param('id', uuidPipe) id: string, @Body() input: DeleteWorkItemDto) {
     return this.work.deleteStage(id, input);
   }
 }
@@ -327,7 +342,7 @@ export class DependenciesController {
   constructor(@Inject(WorkService) private readonly work: WorkService) {}
 
   @Get()
-  list(@Query('requirementId') requirementId?: string) {
+  list(@Query('requirementId', optionalUuidPipe) requirementId?: string) {
     return this.work.listDependencies(requirementId);
   }
 
@@ -338,7 +353,7 @@ export class DependenciesController {
   }
 
   @Post(':id/resolve')
-  resolve(@Param('id') id: string, @Body() input: ChangeContext) {
+  resolve(@Param('id', uuidPipe) id: string, @Body() input: ChangeContext) {
     return this.work.resolveDependency(id, input);
   }
 }
@@ -360,7 +375,7 @@ export class InsightsController {
   }
 
   @Get('snapshots/versions/:id')
-  version(@Param('id') id: string) {
+  version(@Param('id', uuidPipe) id: string) {
     return this.work.getVersionSnapshot(id);
   }
 
@@ -408,9 +423,9 @@ export class InsightsController {
   @ApiOperation({ summary: '获取指定时间之后的结构化增量变化' })
   changes(
     @Query('since') since: string,
-    @Query('projectId') projectId?: string,
-    @Query('versionId') versionId?: string,
-    @Query('requirementId') requirementId?: string,
+    @Query('projectId', optionalUuidPipe) projectId?: string,
+    @Query('versionId', optionalUuidPipe) versionId?: string,
+    @Query('requirementId', optionalUuidPipe) requirementId?: string,
     @Query('limit') limit?: string,
   ) {
     const parsedLimit = limit === undefined ? undefined : Number(limit);
@@ -444,7 +459,7 @@ export class HistoryController {
   @Patch('status/:id')
   @ApiOperation({ summary: '修正状态、原因或生效时间并重算实际时间' })
   correctStatus(
-    @Param('id') id: string,
+    @Param('id', uuidPipe) id: string,
     @Body() input: CorrectStatusHistoryDto,
   ) {
     return this.work.correctStatusHistory(id, input);

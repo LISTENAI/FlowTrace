@@ -175,6 +175,9 @@ request. Stop after any failed step; do not improvise a compensating write.
   without a confirmed delivery boundary belongs in the Project backlog.
 - Requirement is a trackable deliverable. Stage is a real work phase inside a
   Requirement. Status describes how a Stage or Bug is progressing.
+- Work with its own name, owner, status, or time is an independent Stage. Do
+  not hide several such phases inside a generic development Stage merely
+  because they all happen before implementation.
 - Do not add a Stage named after a status. Use `update_stage_status` for waiting,
   blocking, completion, cancellation, or resumption.
 - `waiting` means the recovery condition is known. `blocked` means it is not
@@ -204,6 +207,9 @@ request. Stop after any failed step; do not improvise a compensating write.
   or from a request to review data.
 - Before a write, verify stable target IDs and the current value. Do not submit
   an unchanged write.
+- Treat UUIDs returned by Tools as opaque values. Copy them byte for byte into
+  the next Tool call; never reconstruct, reformat, split, or repair one from
+  memory. If an ID fails validation, re-read the target instead of guessing.
 - Schedule and Version changes require a meaningful reason. Ask for it if the
   user did not provide one.
 - Before `delete_work_item`, read the target, explain that normal views will no

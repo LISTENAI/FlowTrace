@@ -119,6 +119,21 @@ explicitly requested those changes.
 Do not append blindly and do not change the reusable Project rhythm unless the
 user separately asked to change future defaults.
 
+## Spoken progress: “先验证智能体，再由另一人做技术方案”
+
+1. Resolve and read the Requirement before changing anything.
+2. Model “智能体流程验证” and “技术方案” as two Stages when each has its own
+   owner, status, time, or handoff. Do not put either into a generic “开发”
+   Stage.
+3. Preserve the stated sequence with a Stage dependency when the technical
+   solution genuinely uses the validation result.
+4. Record the review completion, validation start and plan with their stated
+   effective dates. Leave implementation unchanged until work on actual
+   implementation begins.
+5. Stop immediately if any Tool fails. Re-read the Requirement and report the
+   partial result; do not continue the remaining writes or retry a hand-edited
+   UUID.
+
 ## Defect: “音量切换后偶发无声，需要单独跟踪”
 
 Create a Bug because it has an independent symptom and tracking need. Resolve

@@ -11,7 +11,7 @@ describe('FlowTrace MCP Server', () => {
         return [
           {
             type: 'project',
-            id: 'project-1',
+            id: '00000000-0000-4000-8000-000000000001',
             key: 'DEMO',
             name: '演示项目',
           },
@@ -20,40 +20,47 @@ describe('FlowTrace MCP Server', () => {
       if (path.startsWith('/dependencies?')) {
         return [
           {
-            id: 'dependency-1',
+            id: '00000000-0000-4000-8000-000000000002',
             active: true,
             satisfied: false,
-            successor: { requirementId: 'requirement-1' },
+            successor: {
+              requirementId: '00000000-0000-4000-8000-000000000003',
+            },
             predecessor: { projectName: '前置项目', name: '准备样件' },
           },
         ];
       }
-      if (path === '/projects/project-1/agent-handoff/history') {
+      if (
+        path ===
+        '/projects/00000000-0000-4000-8000-000000000001/agent-handoff/history'
+      ) {
         return [
           {
-            id: 'handoff-1',
-            projectId: 'project-1',
+            id: '00000000-0000-4000-8000-000000000004',
+            projectId: '00000000-0000-4000-8000-000000000001',
             revision: 1,
             content: '先确认版本边界。',
             source: 'agent',
           },
         ];
       }
-      if (path === '/projects/project-1/agent-handoff') {
+      if (
+        path === '/projects/00000000-0000-4000-8000-000000000001/agent-handoff'
+      ) {
         return {
-          projectId: 'project-1',
+          projectId: '00000000-0000-4000-8000-000000000001',
           revision: 1,
           content: '先确认版本边界。',
           source: 'agent',
         };
       }
       return {
-        id: 'stage-1',
-        requirementId: 'requirement-1',
+        id: '00000000-0000-4000-8000-000000000005',
+        requirementId: '00000000-0000-4000-8000-000000000003',
         status: 'waiting',
         statusHistory: [
           {
-            id: 'status-1',
+            id: '00000000-0000-4000-8000-000000000006',
             toStatus: 'waiting',
             effectiveAt: '2026-08-24T01:00:00.000Z',
           },
@@ -116,6 +123,9 @@ describe('FlowTrace MCP Server', () => {
       tools.tools.find((tool) => tool.name === 'create_requirement')
         ?.description,
     ).toContain('放入需求池');
+    expect(
+      tools.tools.find((tool) => tool.name === 'add_stage')?.description,
+    ).toContain('独立名称');
 
     const search = await client.callTool({
       name: 'search',
@@ -126,7 +136,7 @@ describe('FlowTrace MCP Server', () => {
       data: [
         {
           type: 'project',
-          id: 'project-1',
+          id: '00000000-0000-4000-8000-000000000001',
           key: 'DEMO',
           name: '演示项目',
         },
@@ -151,7 +161,7 @@ describe('FlowTrace MCP Server', () => {
 
     const handoff = await client.callTool({
       name: 'get_project_handoff',
-      arguments: { project_id: 'project-1' },
+      arguments: { project_id: '00000000-0000-4000-8000-000000000001' },
     });
     expect(handoff.structuredContent).toEqual({
       success: true,
@@ -160,7 +170,7 @@ describe('FlowTrace MCP Server', () => {
     await client.callTool({
       name: 'update_project_handoff',
       arguments: {
-        project_id: 'project-1',
+        project_id: '00000000-0000-4000-8000-000000000001',
         content: '先确认版本边界。',
         expected_revision: 1,
         agent_name: '验收调用方',
@@ -168,27 +178,30 @@ describe('FlowTrace MCP Server', () => {
         reason: '补充跨会话约定',
       },
     });
-    expect(request).toHaveBeenCalledWith('/projects/project-1/agent-handoff', {
-      method: 'PUT',
-      body: expect.objectContaining({
-        expectedRevision: 1,
-        source: 'agent',
-        agentName: '验收调用方',
-        agentModel: 'openai/gpt-5.6-sol',
-      }),
-    });
+    expect(request).toHaveBeenCalledWith(
+      '/projects/00000000-0000-4000-8000-000000000001/agent-handoff',
+      {
+        method: 'PUT',
+        body: expect.objectContaining({
+          expectedRevision: 1,
+          source: 'agent',
+          agentName: '验收调用方',
+          agentModel: 'openai/gpt-5.6-sol',
+        }),
+      },
+    );
     await client.callTool({
       name: 'get_project_handoff_history',
-      arguments: { project_id: 'project-1' },
+      arguments: { project_id: '00000000-0000-4000-8000-000000000001' },
     });
     expect(request).toHaveBeenCalledWith(
-      '/projects/project-1/agent-handoff/history',
+      '/projects/00000000-0000-4000-8000-000000000001/agent-handoff/history',
     );
 
     const response = await client.callTool({
       name: 'update_stage_status',
       arguments: {
-        stage_id: 'stage-1',
+        stage_id: '00000000-0000-4000-8000-000000000005',
         status: 'waiting',
         status_reason: '等待样板到货',
         agent_name: '验收调用方',
@@ -198,7 +211,7 @@ describe('FlowTrace MCP Server', () => {
     expect(response.structuredContent).toEqual({
       success: true,
       entity: expect.objectContaining({
-        id: 'stage-1',
+        id: '00000000-0000-4000-8000-000000000005',
         status: 'waiting',
       }),
       history: {
@@ -207,62 +220,71 @@ describe('FlowTrace MCP Server', () => {
       warnings: [
         expect.objectContaining({
           code: 'dependency_not_satisfied',
-          dependency_id: 'dependency-1',
+          dependency_id: '00000000-0000-4000-8000-000000000002',
         }),
       ],
     });
-    expect(request).toHaveBeenCalledWith('/stages/stage-1/status', {
-      method: 'POST',
-      body: expect.objectContaining({
-        source: 'agent',
-        agentName: '验收调用方',
-        statusReason: '等待样板到货',
-        reason: '根据晨会信息补录',
-      }),
-    });
+    expect(request).toHaveBeenCalledWith(
+      '/stages/00000000-0000-4000-8000-000000000005/status',
+      {
+        method: 'POST',
+        body: expect.objectContaining({
+          source: 'agent',
+          agentName: '验收调用方',
+          statusReason: '等待样板到货',
+          reason: '根据晨会信息补录',
+        }),
+      },
+    );
 
     await client.callTool({
       name: 'correct_status_history',
       arguments: {
-        history_id: 'status-1',
+        history_id: '00000000-0000-4000-8000-000000000006',
         effective_at: '2026-08-23T01:00:00.000Z',
         reason: '修正邮件时间',
         agent_name: '验收调用方',
       },
     });
-    expect(request).toHaveBeenCalledWith('/history/status/status-1', {
-      method: 'PATCH',
-      body: expect.objectContaining({
-        effectiveAt: '2026-08-23T01:00:00.000Z',
-        reason: '修正邮件时间',
-        source: 'agent',
-        agentName: '验收调用方',
-      }),
-    });
+    expect(request).toHaveBeenCalledWith(
+      '/history/status/00000000-0000-4000-8000-000000000006',
+      {
+        method: 'PATCH',
+        body: expect.objectContaining({
+          effectiveAt: '2026-08-23T01:00:00.000Z',
+          reason: '修正邮件时间',
+          source: 'agent',
+          agentName: '验收调用方',
+        }),
+      },
+    );
 
     await client.callTool({
       name: 'add_stage',
       arguments: {
-        requirement_id: 'requirement-1',
+        requirement_id: '00000000-0000-4000-8000-000000000003',
         name: '联调',
         work_domain: 'verification',
         order: 2,
         agent_name: '验收调用方',
       },
     });
-    expect(request).toHaveBeenCalledWith('/requirements/requirement-1/stages', {
-      method: 'POST',
-      body: expect.objectContaining({
-        workDomain: 'verification',
-        order: 2,
-        source: 'agent',
-      }),
-    });
+    expect(request).toHaveBeenCalledWith(
+      '/requirements/00000000-0000-4000-8000-000000000003/stages',
+      {
+        method: 'POST',
+        body: expect.objectContaining({
+          workDomain: 'verification',
+          order: 2,
+          source: 'agent',
+        }),
+      },
+    );
 
     await client.callTool({
       name: 'update_stage',
       arguments: {
-        stage_id: 'stage-1',
+        stage_id: '00000000-0000-4000-8000-000000000005',
         name: '板上联调',
         note: '覆盖主从机切换场景。',
         order: 3,
@@ -270,63 +292,72 @@ describe('FlowTrace MCP Server', () => {
         agent_name: '验收调用方',
       },
     });
-    expect(request).toHaveBeenCalledWith('/stages/stage-1', {
-      method: 'PATCH',
-      body: expect.objectContaining({
-        name: '板上联调',
-        note: '覆盖主从机切换场景。',
-        order: 3,
-        reason: '按评审结论细化真实工作',
-        source: 'agent',
-        agentName: '验收调用方',
-      }),
-    });
+    expect(request).toHaveBeenCalledWith(
+      '/stages/00000000-0000-4000-8000-000000000005',
+      {
+        method: 'PATCH',
+        body: expect.objectContaining({
+          name: '板上联调',
+          note: '覆盖主从机切换场景。',
+          order: 3,
+          reason: '按评审结论细化真实工作',
+          source: 'agent',
+          agentName: '验收调用方',
+        }),
+      },
+    );
 
     await client.callTool({
       name: 'create_version',
       arguments: {
-        project_id: 'project-1',
+        project_id: '00000000-0000-4000-8000-000000000001',
         name: '第一批 1500 套',
         status: 'active',
         agent_name: '验收调用方',
       },
     });
-    expect(request).toHaveBeenCalledWith('/projects/project-1/versions', {
-      method: 'POST',
-      body: expect.objectContaining({
-        name: '第一批 1500 套',
-        status: 'active',
-        source: 'agent',
-      }),
-    });
+    expect(request).toHaveBeenCalledWith(
+      '/projects/00000000-0000-4000-8000-000000000001/versions',
+      {
+        method: 'POST',
+        body: expect.objectContaining({
+          name: '第一批 1500 套',
+          status: 'active',
+          source: 'agent',
+        }),
+      },
+    );
 
     await client.callTool({
       name: 'update_version',
       arguments: {
-        version_id: 'version-1',
+        version_id: '00000000-0000-4000-8000-000000000007',
         planned_release_at: '2026-09-01T10:00:00.000Z',
         reason: '生产计划确认',
         agent_name: '验收调用方',
       },
     });
-    expect(request).toHaveBeenCalledWith('/versions/version-1', {
-      method: 'PATCH',
-      body: expect.objectContaining({
-        plannedReleaseAt: '2026-09-01T10:00:00.000Z',
-        reason: '生产计划确认',
-      }),
-    });
+    expect(request).toHaveBeenCalledWith(
+      '/versions/00000000-0000-4000-8000-000000000007',
+      {
+        method: 'PATCH',
+        body: expect.objectContaining({
+          plannedReleaseAt: '2026-09-01T10:00:00.000Z',
+          reason: '生产计划确认',
+        }),
+      },
+    );
 
     await client.callTool({
       name: 'create_requirement',
       arguments: {
-        project_id: 'project-1',
+        project_id: '00000000-0000-4000-8000-000000000001',
         title: '量产物料准备',
         stages: [
           {
             name: '物料报价',
             work_domain: 'implementation',
-            owner_ids: ['person-1'],
+            owner_ids: ['00000000-0000-4000-8000-000000000008'],
             planned_end_at: '2026-08-28T10:00:00.000Z',
           },
           { name: '采购下单' },
@@ -341,7 +372,7 @@ describe('FlowTrace MCP Server', () => {
           expect.objectContaining({
             name: '物料报价',
             workDomain: 'implementation',
-            ownerIds: ['person-1'],
+            ownerIds: ['00000000-0000-4000-8000-000000000008'],
           }),
           expect.objectContaining({ name: '采购下单' }),
         ],
@@ -358,7 +389,7 @@ describe('FlowTrace MCP Server', () => {
       await client.callTool({
         name: 'create_requirement',
         arguments: {
-          project_id: 'project-1',
+          project_id: '00000000-0000-4000-8000-000000000001',
           version_id,
           title: '需求池事项',
           agent_name: '验收调用方',
@@ -367,6 +398,25 @@ describe('FlowTrace MCP Server', () => {
       const backlogBody = latestRequirementBody();
       expect(backlogBody).not.toHaveProperty('versionId');
     }
+
+    const callsBeforeInvalidId = request.mock.calls.length;
+    const invalidId = await client.callTool({
+      name: 'update_stage_status',
+      arguments: {
+        stage_id: 'efb2d48-a-c379-4ccf-a048-0e9ae59db207',
+        status: 'done',
+        agent_name: '验收调用方',
+      },
+    });
+    expect(invalidId.isError).toBe(true);
+    expect(invalidId.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          text: expect.stringContaining('请逐字复制最近一次查询返回的 ID'),
+        }),
+      ]),
+    );
+    expect(request).toHaveBeenCalledTimes(callsBeforeInvalidId);
 
     const resources = await client.listResources();
     expect(resources.resources.map((resource) => resource.uri)).toEqual([

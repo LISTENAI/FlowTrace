@@ -553,4 +553,20 @@ describe.sequential('HTTP API', () => {
       .send({ key: 'BAD', name: '错误输入', unexpected: true })
       .expect(400);
   });
+
+  it('rejects malformed UUIDs before they reach PostgreSQL', async () => {
+    const malformedId = 'efb2d48-a-c379-4ccf-a048-0e9ae59db207';
+
+    const pathResponse = await request(app.getHttpServer())
+      .post(`/api/stages/${malformedId}/status`)
+      .send({ status: 'done' })
+      .expect(400);
+    expect(pathResponse.body.message).toContain('完整的 UUID');
+
+    const queryResponse = await request(app.getHttpServer())
+      .get('/api/requirements')
+      .query({ projectId: malformedId })
+      .expect(400);
+    expect(queryResponse.body.message).toContain('完整的 UUID');
+  });
 });
