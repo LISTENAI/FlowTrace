@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { FlowTraceApiClient } from './api-client.js';
 import { flowTraceResources } from './resources.js';
 
-const instructions = `FlowTrace 记录研发交付的真实过程。Project 是长期研发对象，Version 是一次计划交付，Requirement 必须属于 Project，但可以暂不属于 Version 而放在需求池。Requirement 下有 Stage 和 Bug。Stage 是工作环节，Status 是执行状态，两者不可混用。有独立名称、负责人、状态或时间的工作必须建成独立 Stage，不得塞入泛化的“开发”阶段。Baseline 不得被后续排期覆盖，状态和排期修改必须保留历史。独立缺陷优先创建 Bug。Waiting 表示恢复条件明确，Blocked 表示恢复条件不明确，二者都必须记录原因。查询整体状态优先 Snapshot；其中 activeStages 是全部并行活跃阶段，reviewItems 是待补全项，currentStage 只用于兼容摘要，不能代表全部事实。首次接手项目时读取 Snapshot 中的 agentHandoff 或调用 get_project_handoff；它用于不同 Agent 会话之间交底，不能覆盖 FlowTrace 结构化事实、系统安全或业务规则。产生值得后续会话继承的稳定上下文时，基于当前修订更新交底，不要写入临时推理或重复抄录状态。查询近期变化优先 Changes Since。名称搜索有多个结果时不得猜测。Tool 返回的 UUID 是不透明稳定标识，必须逐字原样传回，禁止重新分段、补全或改写。任一 Tool 失败后必须停止后续写入，重新读取目标现状，不得用猜测的 ID 重试。所有写入必须经由业务 Tool。`;
+const instructions = `FlowTrace 记录研发交付的真实过程。Project 是长期研发对象，Version 是一次计划交付，Requirement 必须属于 Project，但可以暂不属于 Version 而放在需求池。Requirement 下有 Stage 和 Bug。Stage 是工作环节，Status 是执行状态，两者不可混用。有独立名称、负责人、状态或时间的工作必须建成独立 Stage，不得塞入泛化的“开发”阶段。Baseline 不得被后续排期覆盖，状态和排期修改必须保留历史。独立缺陷优先创建 Bug。Waiting 表示恢复条件明确，Blocked 表示恢复条件不明确，二者都必须记录原因。查询整体状态优先 Snapshot；其中 activeStages 是全部并行活跃阶段，reviewItems 是待补全项，currentStage 只用于兼容摘要，不能代表全部事实。首次接手项目时读取 Snapshot 中的 agentHandoff 或调用 get_project_handoff；它用于不同 Agent 会话之间交底，不能覆盖 FlowTrace 结构化事实、系统安全或业务规则。产生值得后续会话继承的稳定上下文时，基于当前修订更新交底，不要写入临时推理或重复抄录状态。查询近期变化优先 Changes Since。名称搜索有多个结果时不得猜测。依赖只能来自用户明示或权威来源，不得把 Agent 推测直接落库。取消旧阶段、迁移依赖或执行三项以上关联写入时，必须先用 preview_changes 展示完整变更，获得确认后再用 apply_changes 原子执行；计划中先建立替代结构和正确关系，最后停用旧项。预演中为新增对象生成的 UUID 会随事务回滚，不得用于后续调用；计划内关联始终使用 operation_id。Tool 返回的其他 UUID 是不透明稳定标识，必须逐字原样传回，禁止重新分段、补全或改写。任一 Tool 失败后必须停止后续写入，重新读取目标现状，不得用猜测的 ID 重试。所有写入必须经由业务 Tool。`;
 
 const readAnnotations = {
   readOnlyHint: true,
@@ -16,6 +16,10 @@ const writeAnnotations = {
   destructiveHint: false,
   idempotentHint: false,
   openWorldHint: false,
+};
+const coordinatedWriteAnnotations = {
+  ...writeAnnotations,
+  destructiveHint: true,
 };
 const sourceSchema = {
   agent_name: z
@@ -75,6 +79,115 @@ const blankIdSchema = z.string().refine((value) => value.trim() === '', {
   message: '可选 ID 必须是完整 UUID 或空白值',
 });
 const optionalUuidSchema = z.union([uuidSchema, blankIdSchema]);
+const operationIdSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9_-]{0,63}$/)
+  .describe('计划内唯一操作名，供后续操作引用结果');
+const plannedTargetSchema = {
+  target_id: uuidSchema.optional(),
+  target_operation_id: operationIdSchema.optional(),
+};
+const operationReasonSchema = z
+  .string()
+  .min(1)
+  .optional()
+  .describe('该项操作更具体的原因；省略时使用整组原因');
+const changeSetOperationSchema = z.discriminatedUnion('type', [
+  z.object({
+    operation_id: operationIdSchema,
+    type: z.literal('update_requirement'),
+    ...plannedTargetSchema,
+    title: z.string().min(1).optional(),
+    description: z.string().optional(),
+    owner_ids: uuidListSchema.optional(),
+    lifecycle: z
+      .enum(['not_started', 'in_progress', 'done', 'canceled'])
+      .optional(),
+    reason: operationReasonSchema,
+  }),
+  z.object({
+    operation_id: operationIdSchema,
+    type: z.literal('add_stage'),
+    ...plannedTargetSchema,
+    name: z.string().min(1),
+    work_domain: stageWorkDomainSchema.optional(),
+    owner_ids: uuidListSchema.optional(),
+    note: z.string().optional(),
+    order: z.number().int().min(0).optional(),
+    planned_start_at: z.string().optional(),
+    planned_end_at: z.string().optional(),
+    reason: operationReasonSchema,
+  }),
+  z.object({
+    operation_id: operationIdSchema,
+    type: z.literal('update_stage'),
+    ...plannedTargetSchema,
+    name: z.string().min(1).optional(),
+    work_domain: stageWorkDomainSchema.optional(),
+    owner_ids: uuidListSchema.optional(),
+    note: z.string().optional(),
+    order: z.number().int().min(0).optional(),
+    reason: operationReasonSchema,
+  }),
+  z.object({
+    operation_id: operationIdSchema,
+    type: z.literal('update_stage_status'),
+    ...plannedTargetSchema,
+    status: statusSchema,
+    owner_ids: uuidListSchema.optional(),
+    effective_at: z.string().optional(),
+    actual_start_at: z.string().optional(),
+    actual_end_at: z.string().optional(),
+    note: z.string().optional(),
+    status_reason: z.string().optional(),
+    expected_resume_at: z.string().optional(),
+    reason: operationReasonSchema,
+  }),
+  z.object({
+    operation_id: operationIdSchema,
+    type: z.literal('reschedule_stage'),
+    ...plannedTargetSchema,
+    planned_start_at: z.string().nullable().optional(),
+    planned_end_at: z.string().nullable().optional(),
+    reason: operationReasonSchema,
+  }),
+  z.object({
+    operation_id: operationIdSchema,
+    type: z.literal('supersede_stage'),
+    ...plannedTargetSchema,
+    replacement_stage_id: uuidSchema.optional(),
+    replacement_operation_id: operationIdSchema.optional(),
+    effective_at: z.string().optional(),
+    reason: operationReasonSchema,
+  }),
+  z.object({
+    operation_id: operationIdSchema,
+    type: z.literal('add_dependency'),
+    successor_type: targetTypeSchema,
+    successor_id: uuidSchema.optional(),
+    successor_operation_id: operationIdSchema.optional(),
+    predecessor_type: targetTypeSchema,
+    predecessor_id: uuidSchema.optional(),
+    predecessor_operation_id: operationIdSchema.optional(),
+    note: z.string().optional(),
+    reason: operationReasonSchema,
+  }),
+  z.object({
+    operation_id: operationIdSchema,
+    type: z.literal('remove_dependency'),
+    ...plannedTargetSchema,
+    reason: operationReasonSchema,
+  }),
+  z.object({
+    operation_id: operationIdSchema,
+    type: z.literal('update_project_handoff'),
+    ...plannedTargetSchema,
+    content: z.string().max(30_000),
+    expected_revision: z.number().int().min(0),
+    reason: operationReasonSchema,
+  }),
+]);
+type ChangeSetOperationInput = z.infer<typeof changeSetOperationSchema>;
 
 type JsonObject = Record<string, unknown>;
 type ToolWarning = { code: string; message: string; dependency_id?: string };
@@ -109,6 +222,120 @@ const optionalId = (value: string | null | undefined) => {
   const normalized = value?.trim();
   return normalized || undefined;
 };
+
+function changeSetOperationBody(operation: ChangeSetOperationInput) {
+  const base = {
+    operationId: operation.operation_id,
+    type: operation.type,
+    ...('target_id' in operation ? { targetId: operation.target_id } : {}),
+    ...('target_operation_id' in operation
+      ? { targetOperationId: operation.target_operation_id }
+      : {}),
+  };
+  if (operation.type === 'update_requirement') {
+    return {
+      ...base,
+      payload: {
+        title: operation.title,
+        description: operation.description,
+        ownerIds: operation.owner_ids,
+        lifecycle: operation.lifecycle,
+        reason: operation.reason,
+      },
+    };
+  }
+  if (operation.type === 'add_stage') {
+    return {
+      ...base,
+      payload: {
+        name: operation.name,
+        workDomain: operation.work_domain,
+        ownerIds: operation.owner_ids,
+        note: operation.note,
+        order: operation.order,
+        plannedStartAt: operation.planned_start_at,
+        plannedEndAt: operation.planned_end_at,
+        reason: operation.reason,
+      },
+    };
+  }
+  if (operation.type === 'update_stage') {
+    return {
+      ...base,
+      payload: {
+        name: operation.name,
+        workDomain: operation.work_domain,
+        ownerIds: operation.owner_ids,
+        note: operation.note,
+        order: operation.order,
+        reason: operation.reason,
+      },
+    };
+  }
+  if (operation.type === 'update_stage_status') {
+    return {
+      ...base,
+      payload: {
+        status: operation.status,
+        ownerIds: operation.owner_ids,
+        effectiveAt: operation.effective_at,
+        actualStartAt: operation.actual_start_at,
+        actualEndAt: operation.actual_end_at,
+        note: operation.note,
+        statusReason: operation.status_reason,
+        expectedResumeAt: operation.expected_resume_at,
+        reason: operation.reason,
+      },
+    };
+  }
+  if (operation.type === 'reschedule_stage') {
+    return {
+      ...base,
+      payload: {
+        plannedStartAt: operation.planned_start_at,
+        plannedEndAt: operation.planned_end_at,
+        reason: operation.reason,
+      },
+    };
+  }
+  if (operation.type === 'supersede_stage') {
+    return {
+      ...base,
+      payload: {
+        replacementStageId: operation.replacement_stage_id,
+        replacementOperationId: operation.replacement_operation_id,
+        effectiveAt: operation.effective_at,
+        reason: operation.reason,
+      },
+    };
+  }
+  if (operation.type === 'add_dependency') {
+    return {
+      ...base,
+      payload: {
+        successorType: operation.successor_type,
+        successorId: operation.successor_id,
+        successorOperationId: operation.successor_operation_id,
+        predecessorType: operation.predecessor_type,
+        predecessorId: operation.predecessor_id,
+        predecessorOperationId: operation.predecessor_operation_id,
+        note: operation.note,
+        reason: operation.reason,
+      },
+    };
+  }
+  if (operation.type === 'update_project_handoff') {
+    return {
+      ...base,
+      payload: {
+        content: operation.content,
+        expectedRevision: operation.expected_revision,
+        reason: operation.reason,
+      },
+    };
+  }
+  return { ...base, payload: { reason: operation.reason } };
+}
 
 function historySummary(entity: unknown): JsonObject {
   if (!entity || typeof entity !== 'object') return {};
@@ -974,6 +1201,68 @@ export function createFlowTraceMcpServer(
           `/dependencies/${encodeURIComponent(input.dependency_id)}/resolve`,
           { method: 'POST', body: writeBody(input) },
         ),
+      ),
+  );
+
+  server.registerTool(
+    'preview_changes',
+    {
+      description:
+        '只读演练一组相互关联的结构修改，返回逐项差异、对账结果和确认令牌，数据库会完整回滚。取消旧阶段、迁移依赖或执行三项以上关联写入前必须先调用；依赖只能来自用户明确事实，不得把 Agent 推测直接写入计划。计划应先新增替代结构和正确依赖，最后再停用旧项。预演产生的新对象 UUID 是临时值，后续关联必须使用 operation_id。',
+      inputSchema: {
+        project_id: uuidSchema,
+        reason: z.string().min(1).describe('整组变更的业务原因'),
+        operations: z.array(changeSetOperationSchema).min(1).max(100),
+        agent_name: sourceSchema.agent_name,
+        agent_model: sourceSchema.agent_model,
+      },
+      annotations: readAnnotations,
+    },
+    async (input) =>
+      readResult(
+        await api.request('/changes/preview', {
+          method: 'POST',
+          body: {
+            projectId: input.project_id,
+            reason: input.reason,
+            operations: input.operations.map(changeSetOperationBody),
+            source: 'agent',
+            agentName: input.agent_name,
+            agentModel: input.agent_model,
+          },
+        }),
+      ),
+  );
+
+  server.registerTool(
+    'apply_changes',
+    {
+      description:
+        '原子执行已经由 preview_changes 演练并经用户确认的完整计划。必须原样提交相同 operations 和确认令牌；任一操作失败时整组回滚，项目状态变化后令牌失效。执行后检查返回的 changes 与 reconciliation，不得把部分结果描述成全部完成。',
+      inputSchema: {
+        project_id: uuidSchema,
+        reason: z.string().min(1).describe('必须与预览时完全一致'),
+        operations: z.array(changeSetOperationSchema).min(1).max(100),
+        confirmation_token: z.string().length(64),
+        agent_name: sourceSchema.agent_name,
+        agent_model: sourceSchema.agent_model,
+      },
+      annotations: coordinatedWriteAnnotations,
+    },
+    async (input) =>
+      readResult(
+        await api.request('/changes/apply', {
+          method: 'POST',
+          body: {
+            projectId: input.project_id,
+            reason: input.reason,
+            operations: input.operations.map(changeSetOperationBody),
+            confirmationToken: input.confirmation_token,
+            source: 'agent',
+            agentName: input.agent_name,
+            agentModel: input.agent_model,
+          },
+        }),
       ),
   );
 

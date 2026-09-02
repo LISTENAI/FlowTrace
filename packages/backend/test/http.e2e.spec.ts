@@ -129,12 +129,14 @@ describe.sequential('HTTP API', () => {
       .set('accept', 'application/json, text/event-stream')
       .send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
       .expect(200);
-    expect(tools.body.result.tools).toHaveLength(25);
+    expect(tools.body.result.tools).toHaveLength(27);
     expect(tools.body.result.tools).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'search' }),
         expect.objectContaining({ name: 'update_stage' }),
         expect.objectContaining({ name: 'update_stage_status' }),
+        expect.objectContaining({ name: 'preview_changes' }),
+        expect.objectContaining({ name: 'apply_changes' }),
       ]),
     );
     await request(app.getHttpServer()).get('/mcp').expect(405);

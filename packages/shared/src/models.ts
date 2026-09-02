@@ -204,6 +204,7 @@ export interface Stage extends WorkTiming {
   note?: string;
   statusReason?: string;
   expectedResumeAt?: string;
+  supersededByStageId?: string;
   statusHistory: StatusHistory[];
   scheduleHistory: ScheduleHistory[];
   createdAt: string;
@@ -304,6 +305,33 @@ export interface ChangeEvent {
   project?: Pick<Project, 'id' | 'key' | 'name'>;
   version?: Pick<Version, 'id' | 'name'>;
   requirement?: Pick<Requirement, 'id' | 'key' | 'title'>;
+}
+
+export interface ChangeSetOperationResult {
+  operationId: string;
+  type: string;
+  entityType: string;
+  entityId: string;
+  summary: string;
+}
+
+export interface ChangeSetReconciliation {
+  requirementCount: number;
+  stageCount: number;
+  activeDependencyCount: number;
+  reviewItems: SnapshotReviewItem[];
+}
+
+export interface ChangeSetPreview {
+  projectId: string;
+  confirmationToken: string;
+  operations: ChangeSetOperationResult[];
+  changes: ChangeEvent[];
+  reconciliation: ChangeSetReconciliation;
+}
+
+export interface ChangeSetApplication extends ChangeSetPreview {
+  applied: true;
 }
 
 export interface SearchResult {

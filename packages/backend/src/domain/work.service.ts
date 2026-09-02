@@ -8,6 +8,9 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import type {
   Bug,
+  ChangeSetApplication,
+  ChangeSetOperationResult,
+  ChangeSetPreview,
   ChangeContext,
   ChangeEvent,
   Dependency,
@@ -47,8 +50,9 @@ import {
   selectCurrentStage,
   selectNextStages,
 } from '@flowtrace/shared';
-import { randomUUID } from 'node:crypto';
-import { isUUID } from 'class-validator';
+import { createHash, randomUUID } from 'node:crypto';
+import { plainToInstance } from 'class-transformer';
+import { isUUID, validate } from 'class-validator';
 import {
   DataSource,
   EntityManager,
@@ -75,8 +79,11 @@ import {
   VersionHistoryEntity,
   entities,
 } from '@/database/entities';
-import type {
+import {
+  ApplyChangesDto,
   BatchDto,
+  ChangeContextDto,
+  type ChangeSetOperationDto,
   CorrectStatusHistoryDto,
   CreateBugDto,
   CreateDependencyDto,
@@ -88,7 +95,11 @@ import type {
   CreateVersionDto,
   DeleteWorkItemDto,
   MoveVersionDto,
+  PlannedDependencyDto,
+  PlannedStageSupersessionDto,
+  PreviewChangesDto,
   RescheduleDto,
+  SupersedeStageDto,
   UpdateBugDto,
   UpdatePersonDto,
   UpdateProjectDto,
@@ -111,6 +122,32 @@ type ChangeFilters = {
   requirementId?: string;
   limit?: number;
 };
+type ChangeSetEntityType =
+  'project' | 'requirement' | 'stage' | 'bug' | 'dependency';
+type ChangeSetReference = {
+  entityType: ChangeSetEntityType;
+  entityId: string;
+};
+type DtoConstructor<T extends object> = new () => T;
+
+const canonicalize = (value: unknown): unknown => {
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, item]) => item !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, canonicalize(item)]),
+    );
+  }
+  return value;
+};
+
+const digest = (value: unknown) =>
+  createHash('sha256')
+    .update(JSON.stringify(canonicalize(value)))
+    .digest('hex');
 
 const iso = (date: Date | null | undefined) => date?.toISOString();
 const date = (value: string | null | undefined) =>
@@ -1264,9 +1301,94 @@ export class WorkService {
     return this.getStage(stage.id);
   }
 
+  async supersedeStage(id: string, input: SupersedeStageDto): Promise<Stage> {
+    await this.dataSource.transaction(async (manager) => {
+      const stageRepository = manager.getRepository(StageEntity);
+      const [stage, replacement] = await Promise.all([
+        stageRepository.findOneBy({ id }),
+        stageRepository.findOneBy({ id: input.replacementStageId }),
+      ]);
+      if (!stage) throw new NotFoundException('未找到被接替阶段');
+      if (!replacement) throw new NotFoundException('未找到接替阶段');
+      if (stage.id === replacement.id) {
+        throw new BadRequestException('阶段不能接替自身');
+      }
+      const [requirement, replacementRequirement] = await Promise.all([
+        manager
+          .getRepository(RequirementEntity)
+          .findOneBy({ id: stage.requirementId }),
+        manager
+          .getRepository(RequirementEntity)
+          .findOneBy({ id: replacement.requirementId }),
+      ]);
+      if (!requirement || !replacementRequirement) {
+        throw new NotFoundException('未找到阶段所属需求');
+      }
+      if (requirement.projectId !== replacementRequirement.projectId) {
+        throw new BadRequestException('接替阶段必须属于同一项目');
+      }
+      if (stage.supersededByStageId) {
+        if (stage.supersededByStageId === replacement.id) return;
+        throw new ConflictException('该阶段已经由另一阶段接替');
+      }
+
+      let cursor: StageEntity | null = replacement;
+      const visited = new Set<string>();
+      while (cursor?.supersededByStageId) {
+        if (
+          cursor.supersededByStageId === stage.id ||
+          visited.has(cursor.supersededByStageId)
+        ) {
+          throw new BadRequestException('阶段接替关系不能形成环');
+        }
+        visited.add(cursor.supersededByStageId);
+        cursor = await stageRepository.findOneBy({
+          id: cursor.supersededByStageId,
+        });
+      }
+
+      stage.supersededByStageId = replacement.id;
+      await stageRepository.save(stage);
+      if (!['done', 'canceled'].includes(stage.status)) {
+        await this.scopedTo(manager).changeStatus('stage', stage, {
+          status: 'canceled',
+          statusReason: input.reason,
+          effectiveAt: input.effectiveAt,
+          source: input.source,
+          agentName: input.agentName,
+          agentModel: input.agentModel,
+          reason: input.reason,
+        });
+      }
+      await this.recordChange(manager, {
+        entityType: 'stage',
+        entityId: stage.id,
+        projectId: requirement.projectId,
+        requirementId: requirement.id,
+        type: 'stage_superseded',
+        summary: `${requirement.key} 阶段「${stage.name}」由「${replacement.name}」接替`,
+        details: {
+          replacementStageId: replacement.id,
+          replacementRequirementId: replacement.requirementId,
+          effectiveAt: input.effectiveAt,
+        },
+        ...context(input),
+      });
+    });
+    return this.getStage(id);
+  }
+
   async deleteStage(id: string, input: DeleteWorkItemDto): Promise<void> {
     const stage = await this.findStage(id);
     this.assertDeleteConfirmation(stage.name, input.confirmation);
+    const supersededStages = await this.stages.count({
+      where: { supersededByStageId: id },
+    });
+    if (stage.supersededByStageId || supersededStages > 0) {
+      throw new BadRequestException(
+        '已参与接替关系的阶段必须保留，以便追溯结构调整',
+      );
+    }
     const requirement = await this.findRequirement(stage.requirementId);
     await this.dataSource.transaction(async (manager) => {
       await this.deactivateDependencies(manager, [{ type: 'stage', id }]);
@@ -1680,6 +1802,81 @@ export class WorkService {
       versionId,
     );
     return { ...base, version: this.toVersion(versionEntity) };
+  }
+
+  async previewChanges(input: PreviewChangesDto): Promise<ChangeSetPreview> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const manager = queryRunner.manager;
+      const stateFingerprint = await this.changeSetFingerprint(
+        manager,
+        input.projectId,
+      );
+      const previousChangeIds = await this.projectChangeIds(
+        manager,
+        input.projectId,
+      );
+      const scoped = this.scopedTo(manager);
+      const operations = await scoped.executeChangeSetOperations(input);
+      const report = await scoped.buildChangeSetReport(
+        manager,
+        input.projectId,
+        previousChangeIds,
+      );
+      const preview: ChangeSetPreview = {
+        projectId: input.projectId,
+        confirmationToken: this.changeSetToken(input, stateFingerprint),
+        operations,
+        ...report,
+      };
+      await queryRunner.rollbackTransaction();
+      return preview;
+    } catch (error) {
+      if (queryRunner.isTransactionActive)
+        await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async applyChanges(input: ApplyChangesDto): Promise<ChangeSetApplication> {
+    return this.dataSource.transaction(async (manager) => {
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `flowtrace:change-set:${input.projectId}`,
+      ]);
+      await this.lockProjectChangeSet(manager, input.projectId);
+      const stateFingerprint = await this.changeSetFingerprint(
+        manager,
+        input.projectId,
+      );
+      const expectedToken = this.changeSetToken(input, stateFingerprint);
+      if (input.confirmationToken !== expectedToken) {
+        throw new ConflictException(
+          '变更计划或项目状态已变化，请重新预览并确认',
+        );
+      }
+      const previousChangeIds = await this.projectChangeIds(
+        manager,
+        input.projectId,
+      );
+      const scoped = this.scopedTo(manager);
+      const operations = await scoped.executeChangeSetOperations(input);
+      const report = await scoped.buildChangeSetReport(
+        manager,
+        input.projectId,
+        previousChangeIds,
+      );
+      return {
+        projectId: input.projectId,
+        confirmationToken: input.confirmationToken,
+        operations,
+        ...report,
+        applied: true,
+      };
+    });
   }
 
   async batch(
@@ -2552,6 +2749,7 @@ export class WorkService {
       note: row.note ?? undefined,
       statusReason: row.statusReason ?? undefined,
       expectedResumeAt: iso(row.expectedResumeAt),
+      supersededByStageId: row.supersededByStageId ?? undefined,
       statusHistory: this.orderStatusHistory(statusHistory).map((item) =>
         this.toStatusHistory(item),
       ),
@@ -2855,6 +3053,594 @@ export class WorkService {
       requirementKey: requirement.key,
       status: entity.status,
     };
+  }
+
+  private scopedTo(manager: EntityManager): WorkService {
+    const scopedDataSource = {
+      manager,
+      transaction: async <T>(
+        run: (transactionManager: EntityManager) => Promise<T>,
+      ) => run(manager),
+    } as unknown as DataSource;
+    return new WorkService(
+      scopedDataSource,
+      manager.getRepository(ProjectEntity),
+      manager.getRepository(ProjectAgentHandoffRevisionEntity),
+      manager.getRepository(ProjectRhythmEntity),
+      manager.getRepository(PersonEntity),
+      manager.getRepository(AuthPersonBindingEntity),
+      manager.getRepository(VersionEntity),
+      manager.getRepository(RequirementEntity),
+      manager.getRepository(StageEntity),
+      manager.getRepository(BugEntity),
+      manager.getRepository(StatusHistoryEntity),
+      manager.getRepository(ScheduleHistoryEntity),
+      manager.getRepository(VersionHistoryEntity),
+      manager.getRepository(DependencyEntity),
+      manager.getRepository(ChangeEventEntity),
+    );
+  }
+
+  private changeSetToken(
+    input: PreviewChangesDto,
+    stateFingerprint: string,
+  ): string {
+    return digest({
+      projectId: input.projectId,
+      reason: input.reason,
+      source: input.source ?? 'manual',
+      agentName: input.agentName,
+      agentModel: input.agentModel,
+      operations: input.operations,
+      stateFingerprint,
+    });
+  }
+
+  private async changeSetFingerprint(
+    manager: EntityManager,
+    projectId: string,
+  ): Promise<string> {
+    const project = await manager
+      .getRepository(ProjectEntity)
+      .findOneBy({ id: projectId });
+    if (!project) throw new NotFoundException('未找到项目');
+    const requirements = await manager.getRepository(RequirementEntity).find({
+      where: { projectId },
+      order: { id: 'ASC' },
+    });
+    const requirementIds = requirements.map((item) => item.id);
+    const [stages, bugs] = requirementIds.length
+      ? await Promise.all([
+          manager.getRepository(StageEntity).find({
+            where: { requirementId: In(requirementIds) },
+            order: { id: 'ASC' },
+          }),
+          manager.getRepository(BugEntity).find({
+            where: { requirementId: In(requirementIds) },
+            order: { id: 'ASC' },
+          }),
+        ])
+      : [[], []];
+    const targetIds = new Set([
+      ...requirementIds,
+      ...stages.map((item) => item.id),
+      ...bugs.map((item) => item.id),
+    ]);
+    const dependencies = (
+      await manager.getRepository(DependencyEntity).find({
+        order: { createdAt: 'ASC' },
+      })
+    ).filter(
+      (item) =>
+        targetIds.has(item.successorId) || targetIds.has(item.predecessorId),
+    );
+    return digest({
+      project: {
+        id: project.id,
+        updatedAt: project.updatedAt,
+        agentHandoffRevision: project.agentHandoffRevision,
+      },
+      requirements: requirements.map((item) => ({
+        id: item.id,
+        updatedAt: item.updatedAt,
+      })),
+      stages: stages.map((item) => ({
+        id: item.id,
+        updatedAt: item.updatedAt,
+      })),
+      bugs: bugs.map((item) => ({
+        id: item.id,
+        updatedAt: item.updatedAt,
+      })),
+      dependencies: dependencies.map((item) => ({
+        id: item.id,
+        active: item.active,
+        successorType: item.successorType,
+        successorId: item.successorId,
+        predecessorType: item.predecessorType,
+        predecessorId: item.predecessorId,
+        note: item.note,
+        resolvedAt: item.resolvedAt,
+      })),
+    });
+  }
+
+  private async lockProjectChangeSet(
+    manager: EntityManager,
+    projectId: string,
+  ): Promise<void> {
+    const project = await manager.getRepository(ProjectEntity).findOne({
+      where: { id: projectId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!project) throw new NotFoundException('未找到项目');
+    const requirements = await manager.getRepository(RequirementEntity).find({
+      where: { projectId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    const requirementIds = requirements.map((item) => item.id);
+    if (!requirementIds.length) return;
+    const stages = await manager.getRepository(StageEntity).find({
+      where: { requirementId: In(requirementIds) },
+      lock: { mode: 'pessimistic_write' },
+    });
+    const bugs = await manager.getRepository(BugEntity).find({
+      where: { requirementId: In(requirementIds) },
+      lock: { mode: 'pessimistic_write' },
+    });
+    const itemIds = [
+      ...requirementIds,
+      ...stages.map((item) => item.id),
+      ...bugs.map((item) => item.id),
+    ];
+    await manager.getRepository(DependencyEntity).find({
+      where: [{ successorId: In(itemIds) }, { predecessorId: In(itemIds) }],
+      lock: { mode: 'pessimistic_write' },
+    });
+  }
+
+  private async projectChangeIds(
+    manager: EntityManager,
+    projectId: string,
+  ): Promise<Set<string>> {
+    const rows = await manager.getRepository(ChangeEventEntity).find({
+      select: { id: true },
+      where: { projectId },
+    });
+    return new Set(rows.map((item) => item.id));
+  }
+
+  private async buildChangeSetReport(
+    manager: EntityManager,
+    projectId: string,
+    previousChangeIds: Set<string>,
+  ): Promise<Pick<ChangeSetPreview, 'changes' | 'reconciliation'>> {
+    const snapshot = await this.getProjectSnapshot(projectId);
+    const changes = (
+      await manager.getRepository(ChangeEventEntity).find({
+        where: { projectId },
+        order: { occurredAt: 'ASC' },
+      })
+    )
+      .filter((item) => !previousChangeIds.has(item.id))
+      .map((item) => this.toChange(item));
+    const requirementIds = snapshot.requirements.map((item) => item.id);
+    const stages = snapshot.requirements.reduce(
+      (count, item) => count + item.stageCount,
+      0,
+    );
+    const [allStages, allBugs, dependencies] = requirementIds.length
+      ? await Promise.all([
+          manager
+            .getRepository(StageEntity)
+            .findBy({ requirementId: In(requirementIds) }),
+          manager
+            .getRepository(BugEntity)
+            .findBy({ requirementId: In(requirementIds) }),
+          manager.getRepository(DependencyEntity).find({
+            where: { active: true },
+          }),
+        ])
+      : [[], [], []];
+    const targetIds = new Set([
+      ...requirementIds,
+      ...allStages.map((item) => item.id),
+      ...allBugs.map((item) => item.id),
+    ]);
+    return {
+      changes,
+      reconciliation: {
+        requirementCount: snapshot.requirements.length,
+        stageCount: stages,
+        activeDependencyCount: dependencies.filter(
+          (item) =>
+            targetIds.has(item.successorId) ||
+            targetIds.has(item.predecessorId),
+        ).length,
+        reviewItems: snapshot.reviewItems,
+      },
+    };
+  }
+
+  private async validateChangePayload<T extends object>(
+    operation: ChangeSetOperationDto,
+    dto: DtoConstructor<T>,
+    input: PreviewChangesDto,
+  ): Promise<T> {
+    const payload = plainToInstance(dto, {
+      ...operation.payload,
+      source: input.source ?? 'manual',
+      agentName: input.agentName,
+      agentModel: input.agentModel,
+      reason:
+        typeof operation.payload.reason === 'string'
+          ? operation.payload.reason
+          : input.reason,
+    });
+    const errors = await validate(payload, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      forbidUnknownValues: true,
+    });
+    if (errors.length) {
+      const messages = errors.flatMap((error) => [
+        ...Object.values(error.constraints ?? {}),
+        ...(error.children ?? []).flatMap((child) =>
+          Object.values(child.constraints ?? {}),
+        ),
+      ]);
+      throw new BadRequestException(
+        `操作 ${operation.operationId} 的 payload 无效：${messages.join('；')}`,
+      );
+    }
+    return payload;
+  }
+
+  private async resolveChangeTarget(
+    operation: ChangeSetOperationDto,
+    references: Map<string, ChangeSetReference>,
+    expectedType: ChangeSetEntityType,
+  ): Promise<ChangeSetReference> {
+    if (Boolean(operation.targetId) === Boolean(operation.targetOperationId)) {
+      throw new BadRequestException(
+        `操作 ${operation.operationId} 必须且只能指定 targetId 或 targetOperationId`,
+      );
+    }
+    const reference = operation.targetOperationId
+      ? references.get(operation.targetOperationId)
+      : { entityType: expectedType, entityId: operation.targetId! };
+    if (!reference) {
+      throw new BadRequestException(
+        `操作 ${operation.operationId} 引用了尚未执行的操作 ${operation.targetOperationId}`,
+      );
+    }
+    if (reference.entityType !== expectedType) {
+      throw new BadRequestException(
+        `操作 ${operation.operationId} 的目标类型应为 ${expectedType}`,
+      );
+    }
+    return reference;
+  }
+
+  private async assertReferenceInProject(
+    reference: ChangeSetReference,
+    projectId: string,
+  ): Promise<void> {
+    let targetProjectIds: string[] = [];
+    if (reference.entityType === 'project') {
+      targetProjectIds = [reference.entityId];
+    } else if (reference.entityType === 'requirement') {
+      targetProjectIds = [
+        (await this.findRequirement(reference.entityId)).projectId,
+      ];
+    } else if (reference.entityType === 'stage') {
+      const stage = await this.findStage(reference.entityId);
+      targetProjectIds = [
+        (await this.findRequirement(stage.requirementId)).projectId,
+      ];
+    } else if (reference.entityType === 'bug') {
+      const bug = await this.findBug(reference.entityId);
+      targetProjectIds = [
+        (await this.findRequirement(bug.requirementId)).projectId,
+      ];
+    } else {
+      const dependency = await this.dependencyRepository.findOneBy({
+        id: reference.entityId,
+      });
+      if (!dependency) throw new NotFoundException('未找到依赖关系');
+      const [successor, predecessor] = await Promise.all([
+        this.getTargetSummary(dependency.successorType, dependency.successorId),
+        this.getTargetSummary(
+          dependency.predecessorType,
+          dependency.predecessorId,
+        ),
+      ]);
+      targetProjectIds = [successor.projectId, predecessor.projectId];
+    }
+    if (!targetProjectIds.includes(projectId)) {
+      throw new BadRequestException('变更计划包含不属于目标项目的事项');
+    }
+  }
+
+  private async resolvePlannedDependencyTarget(
+    type: DependencyTargetType,
+    id: string | undefined,
+    operationId: string | undefined,
+    references: Map<string, ChangeSetReference>,
+    label: string,
+  ): Promise<ChangeSetReference> {
+    if (Boolean(id) === Boolean(operationId)) {
+      throw new BadRequestException(
+        `${label}必须且只能指定稳定 ID 或计划内操作 ID`,
+      );
+    }
+    const reference = operationId
+      ? references.get(operationId)
+      : { entityType: type, entityId: id! };
+    if (!reference) {
+      throw new BadRequestException(
+        `${label}引用了尚未执行的操作 ${operationId}`,
+      );
+    }
+    if (reference.entityType !== type) {
+      throw new BadRequestException(`${label}的事项类型与引用结果不一致`);
+    }
+    return reference;
+  }
+
+  private async executeChangeSetOperations(
+    input: PreviewChangesDto,
+  ): Promise<ChangeSetOperationResult[]> {
+    const references = new Map<string, ChangeSetReference>();
+    const results: ChangeSetOperationResult[] = [];
+    let retirementStarted = false;
+    for (const operation of input.operations) {
+      if (references.has(operation.operationId)) {
+        throw new BadRequestException(
+          `计划内操作 ID 重复：${operation.operationId}`,
+        );
+      }
+      const isRetirement =
+        operation.type === 'remove_dependency' ||
+        operation.type === 'supersede_stage' ||
+        (operation.type === 'update_stage_status' &&
+          operation.payload.status === 'canceled') ||
+        (operation.type === 'update_requirement' &&
+          operation.payload.lifecycle === 'canceled');
+      if (
+        retirementStarted &&
+        !isRetirement &&
+        operation.type !== 'update_project_handoff'
+      ) {
+        throw new BadRequestException(
+          `操作 ${operation.operationId} 位于停用操作之后；请先建立并验证替代结构，再停用旧项`,
+        );
+      }
+      retirementStarted ||= isRetirement;
+
+      try {
+        let reference: ChangeSetReference;
+        let summary: string;
+        if (operation.type === 'update_requirement') {
+          reference = await this.resolveChangeTarget(
+            operation,
+            references,
+            'requirement',
+          );
+          await this.assertReferenceInProject(reference, input.projectId);
+          const payload = await this.validateChangePayload(
+            operation,
+            UpdateRequirementDto,
+            input,
+          );
+          const requirement = await this.updateRequirement(
+            reference.entityId,
+            payload,
+          );
+          summary = `${requirement.key} 更新为「${requirement.title}」`;
+        } else if (operation.type === 'add_stage') {
+          const requirementReference = await this.resolveChangeTarget(
+            operation,
+            references,
+            'requirement',
+          );
+          await this.assertReferenceInProject(
+            requirementReference,
+            input.projectId,
+          );
+          const payload = await this.validateChangePayload(
+            operation,
+            CreateStageDto,
+            input,
+          );
+          const stage = await this.addStage(
+            requirementReference.entityId,
+            payload,
+          );
+          reference = { entityType: 'stage', entityId: stage.id };
+          summary = `新增阶段「${stage.name}」`;
+        } else if (operation.type === 'update_stage') {
+          reference = await this.resolveChangeTarget(
+            operation,
+            references,
+            'stage',
+          );
+          await this.assertReferenceInProject(reference, input.projectId);
+          const payload = await this.validateChangePayload(
+            operation,
+            UpdateStageDto,
+            input,
+          );
+          const stage = await this.updateStage(reference.entityId, payload);
+          summary = `更新阶段「${stage.name}」`;
+        } else if (operation.type === 'update_stage_status') {
+          reference = await this.resolveChangeTarget(
+            operation,
+            references,
+            'stage',
+          );
+          await this.assertReferenceInProject(reference, input.projectId);
+          const payload = await this.validateChangePayload(
+            operation,
+            UpdateStatusDto,
+            input,
+          );
+          const stage = await this.updateStageStatus(
+            reference.entityId,
+            payload,
+          );
+          summary = `阶段「${stage.name}」变为${this.statusLabel(stage.status)}`;
+        } else if (operation.type === 'reschedule_stage') {
+          reference = await this.resolveChangeTarget(
+            operation,
+            references,
+            'stage',
+          );
+          await this.assertReferenceInProject(reference, input.projectId);
+          const payload = await this.validateChangePayload(
+            operation,
+            RescheduleDto,
+            input,
+          );
+          const stage = await this.rescheduleStage(reference.entityId, payload);
+          summary = `调整阶段「${stage.name}」排期`;
+        } else if (operation.type === 'supersede_stage') {
+          reference = await this.resolveChangeTarget(
+            operation,
+            references,
+            'stage',
+          );
+          await this.assertReferenceInProject(reference, input.projectId);
+          const payload = await this.validateChangePayload(
+            operation,
+            PlannedStageSupersessionDto,
+            input,
+          );
+          const replacement = await this.resolvePlannedDependencyTarget(
+            'stage',
+            payload.replacementStageId,
+            payload.replacementOperationId,
+            references,
+            '接替阶段',
+          );
+          await this.assertReferenceInProject(replacement, input.projectId);
+          const stage = await this.supersedeStage(reference.entityId, {
+            replacementStageId: replacement.entityId,
+            effectiveAt: payload.effectiveAt,
+            source: payload.source,
+            agentName: payload.agentName,
+            agentModel: payload.agentModel,
+            reason: payload.reason ?? input.reason,
+          });
+          const replacementStage = await this.getStage(replacement.entityId);
+          summary = `阶段「${stage.name}」由「${replacementStage.name}」接替`;
+        } else if (operation.type === 'add_dependency') {
+          if (operation.targetId || operation.targetOperationId) {
+            throw new BadRequestException('新增依赖不使用 target 字段');
+          }
+          const payload = await this.validateChangePayload(
+            operation,
+            PlannedDependencyDto,
+            input,
+          );
+          const successor = await this.resolvePlannedDependencyTarget(
+            payload.successorType,
+            payload.successorId,
+            payload.successorOperationId,
+            references,
+            '后继事项',
+          );
+          const predecessor = await this.resolvePlannedDependencyTarget(
+            payload.predecessorType,
+            payload.predecessorId,
+            payload.predecessorOperationId,
+            references,
+            '前置事项',
+          );
+          const [successorInProject, predecessorInProject] = await Promise.all([
+            this.referenceBelongsToProject(successor, input.projectId),
+            this.referenceBelongsToProject(predecessor, input.projectId),
+          ]);
+          if (!successorInProject && !predecessorInProject) {
+            throw new BadRequestException('新增依赖的两端都不属于目标项目');
+          }
+          const dependency = await this.addDependency({
+            successorType: payload.successorType,
+            successorId: successor.entityId,
+            predecessorType: payload.predecessorType,
+            predecessorId: predecessor.entityId,
+            note: payload.note,
+            source: payload.source,
+            agentName: payload.agentName,
+            agentModel: payload.agentModel,
+            reason: payload.reason,
+          });
+          reference = { entityType: 'dependency', entityId: dependency.id };
+          summary = `${dependency.successor?.name ?? '后继事项'} 依赖 ${dependency.predecessor?.name ?? '前置事项'}`;
+        } else if (operation.type === 'remove_dependency') {
+          reference = await this.resolveChangeTarget(
+            operation,
+            references,
+            'dependency',
+          );
+          await this.assertReferenceInProject(reference, input.projectId);
+          const payload = await this.validateChangePayload(
+            operation,
+            ChangeContextDto,
+            input,
+          );
+          const dependency = await this.resolveDependency(
+            reference.entityId,
+            payload,
+          );
+          summary = `停用依赖 ${dependency.id}`;
+        } else {
+          reference = await this.resolveChangeTarget(
+            operation,
+            references,
+            'project',
+          );
+          await this.assertReferenceInProject(reference, input.projectId);
+          const payload = await this.validateChangePayload(
+            operation,
+            UpdateProjectAgentHandoffDto,
+            input,
+          );
+          const handoff = await this.updateProjectAgentHandoff(
+            reference.entityId,
+            payload,
+          );
+          summary = `更新项目交底至修订 ${handoff.revision}`;
+        }
+        references.set(operation.operationId, reference);
+        results.push({
+          operationId: operation.operationId,
+          type: operation.type,
+          entityType: reference.entityType,
+          entityId: reference.entityId,
+          summary,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '未知错误';
+        throw new BadRequestException(
+          `变更计划在操作 ${operation.operationId} 失败，整组未应用：${message}`,
+        );
+      }
+    }
+    return results;
+  }
+
+  private async referenceBelongsToProject(
+    reference: ChangeSetReference,
+    projectId: string,
+  ): Promise<boolean> {
+    try {
+      await this.assertReferenceInProject(reference, projectId);
+      return true;
+    } catch (error) {
+      if (error instanceof BadRequestException) return false;
+      throw error;
+    }
   }
 
   private async findProject(idOrKey: string): Promise<ProjectEntity> {

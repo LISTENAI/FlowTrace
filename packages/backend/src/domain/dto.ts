@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsEmail,
@@ -7,6 +9,7 @@ import {
   IsInt,
   IsISO8601,
   IsNotEmpty,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -518,6 +521,22 @@ export class UpdateStatusDto extends ChangeContextDto {
   expectedResumeAt?: string;
 }
 
+export class SupersedeStageDto extends ChangeContextDto {
+  @ApiProperty({ description: '接替旧阶段的新阶段稳定 UUID' })
+  @IsUUID()
+  replacementStageId!: string;
+
+  @ApiPropertyOptional({ description: '接替关系实际生效时间，允许补录' })
+  @IsOptional()
+  @IsISO8601()
+  effectiveAt?: string;
+
+  @ApiProperty({ description: '说明为何由新阶段接替旧阶段' })
+  @IsString()
+  @IsNotEmpty()
+  declare reason: string;
+}
+
 export class CorrectStatusHistoryDto extends ChangeContextDto {
   @ApiProperty({ description: '说明为什么需要修正这条历史记录' })
   @IsString()
@@ -676,4 +695,134 @@ export class BatchDto extends ChangeContextDto {
   @ApiProperty({ type: [BatchOperationDto] })
   @IsArray()
   operations!: BatchOperationDto[];
+}
+
+export const changeSetOperationTypes = [
+  'update_requirement',
+  'add_stage',
+  'update_stage',
+  'update_stage_status',
+  'reschedule_stage',
+  'supersede_stage',
+  'add_dependency',
+  'remove_dependency',
+  'update_project_handoff',
+] as const;
+
+export type ChangeSetOperationType = (typeof changeSetOperationTypes)[number];
+
+export class PlannedDependencyDto extends ChangeContextDto {
+  @ApiProperty({ enum: ['requirement', 'stage', 'bug'] })
+  @IsIn(['requirement', 'stage', 'bug'])
+  successorType!: DependencyTargetType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  successorId?: string;
+
+  @ApiPropertyOptional({ description: '引用计划内先前操作产生的事项' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z][a-z0-9_-]{0,63}$/)
+  successorOperationId?: string;
+
+  @ApiProperty({ enum: ['requirement', 'stage', 'bug'] })
+  @IsIn(['requirement', 'stage', 'bug'])
+  predecessorType!: DependencyTargetType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  predecessorId?: string;
+
+  @ApiPropertyOptional({ description: '引用计划内先前操作产生的事项' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z][a-z0-9_-]{0,63}$/)
+  predecessorOperationId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+export class PlannedStageSupersessionDto extends ChangeContextDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  replacementStageId?: string;
+
+  @ApiPropertyOptional({ description: '引用计划内先前新增的接替阶段' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z][a-z0-9_-]{0,63}$/)
+  replacementOperationId?: string;
+
+  @ApiPropertyOptional({ description: '接替关系实际生效时间，允许补录' })
+  @IsOptional()
+  @IsISO8601()
+  effectiveAt?: string;
+}
+
+export class ChangeSetOperationDto {
+  @ApiProperty({
+    description: '计划内稳定引用；后续操作可通过 targetOperationId 引用结果',
+    example: 'add-production-stage',
+  })
+  @IsString()
+  @Matches(/^[a-z][a-z0-9_-]{0,63}$/)
+  operationId!: string;
+
+  @ApiProperty({ enum: changeSetOperationTypes })
+  @IsIn(changeSetOperationTypes)
+  type!: ChangeSetOperationType;
+
+  @ApiPropertyOptional({ description: '已有目标的稳定 UUID' })
+  @IsOptional()
+  @IsUUID()
+  targetId?: string;
+
+  @ApiPropertyOptional({
+    description: '引用本计划中位于当前操作之前的操作结果',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z][a-z0-9_-]{0,63}$/)
+  targetOperationId?: string;
+
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  @IsObject()
+  payload!: Record<string, unknown>;
+}
+
+export class PreviewChangesDto extends ChangeContextDto {
+  @ApiProperty({ description: '本次变更所属的项目稳定 UUID' })
+  @IsUUID()
+  projectId!: string;
+
+  @ApiProperty({
+    description: '整组变更的业务原因，将作为各项操作的默认原因',
+  })
+  @IsString()
+  @IsNotEmpty()
+  declare reason: string;
+
+  @ApiProperty({ type: [ChangeSetOperationDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => ChangeSetOperationDto)
+  operations!: ChangeSetOperationDto[];
+}
+
+export class ApplyChangesDto extends PreviewChangesDto {
+  @ApiProperty({
+    description: 'preview_changes 返回的确认令牌；计划或项目状态变化后失效',
+  })
+  @IsString()
+  @IsNotEmpty()
+  confirmationToken!: string;
 }

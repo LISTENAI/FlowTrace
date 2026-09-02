@@ -134,6 +134,28 @@ user separately asked to change future defaults.
    partial result; do not continue the remaining writes or retry a hand-edited
    UUID.
 
+## Workflow restructure: “把拆散的开发前任务重新整理一下”
+
+1. Read every affected Requirement and the Project handoff. List the facts the
+   user actually supplied separately from your proposed interpretation.
+2. Build one complete operation list. First add or update the replacement
+   Stages, then add only explicitly stated dependencies, then update the durable
+   Project handoff. Put dependency removal and `supersede_stage` operations for
+   old items last.
+3. Give each operation a stable name such as `add-agent-validation`. When a
+   dependency points to that new Stage, use its `operation_id`; do not invent or
+   copy a UUID that does not exist yet.
+4. Call `preview_changes`. Explain the returned changes in work-item names and
+   state which old items will be canceled. Include remaining `reviewItems`.
+5. After the user confirms the preview, pass the exact same reason and
+   operations plus the returned token to `apply_changes`.
+6. Compare the returned operation list, change events, dependency count, and
+   review items with the approved preview before claiming completion.
+
+Do not infer a complete stage-to-stage dependency chain merely because the
+stages appear in a likely order. Do not remove old dependencies first. Do not
+fall back to dozens of individual writes after a preview or apply failure.
+
 ## Defect: “音量切换后偶发无声，需要单独跟踪”
 
 Create a Bug because it has an independent symptom and tracking need. Resolve

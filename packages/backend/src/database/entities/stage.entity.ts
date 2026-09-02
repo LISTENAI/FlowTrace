@@ -52,4 +52,8 @@ export class StageEntity extends BaseEntity {
 
   @Column('timestamptz', { nullable: true })
   actualEndAt!: Date | null;
+
+  @Index()
+  @Column('uuid', { nullable: true })
+  supersededByStageId!: string | null;
 }

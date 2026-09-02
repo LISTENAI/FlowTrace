@@ -134,9 +134,9 @@ plans, reason in this order before the first write:
    `assign_owners`, `reschedule_stage`, and `update_stage_status` for their
    separate concerns; do not replace an existing Stage merely to change its
    metadata.
-7. Apply writes in container-first order: an explicitly requested Version,
-   Requirements with Stages, owners and plans, statuses, Bugs, then
-   dependencies. Stop on failure.
+7. For one or two independent changes, apply writes in container-first order.
+   For three or more related writes, any cancellation, or dependency rewiring,
+   use the coordinated restructuring workflow below.
 8. Re-read the affected Version Snapshot for versioned work, or the Project
    Snapshot for backlog work, and report both progress exceptions and every
    `reviewItem`. Do not call an import complete while required facts remain
@@ -146,6 +146,41 @@ Before applying a large source with materially ambiguous grouping or target
 container, show the proposed Project → Version → Requirement → Stage mapping
 and ask one focused question. Do not ask for confirmation merely because there
 are many unambiguous rows and the user already authorized the import.
+
+## Coordinated restructuring
+
+Use `preview_changes` before changing an existing workflow when the plan has
+three or more related writes, cancels an existing Requirement or Stage, or
+replaces dependencies. The preview verifies the exact implementation; it does
+not ask the user to repeat authorization already given.
+
+1. Read every affected Requirement and the current Project handoff.
+2. Build the complete operation list. Give each operation a short stable
+   `operation_id`; later operations may refer to a newly added Stage by that
+   name instead of copying a generated UUID. UUIDs returned for objects created
+   inside a preview are temporary because the preview transaction is rolled
+   back; never use them in the apply call or another Tool.
+3. Put replacement objects and correct dependencies first. Put cancellation
+   and dependency removal last. Never remove the only valid relationship
+   before its replacement exists.
+   Use `supersede_stage` for an old Stage that is explicitly replaced, so its
+   history remains linked to the new Stage instead of becoming an unexplained
+   cancellation.
+4. Add a dependency only when the user or an authoritative source states the
+   relationship. If it is merely a plausible process improvement, describe it
+   as a proposal outside FlowTrace and ask before including it.
+5. Include a handoff update when the restructuring establishes durable
+   terminology, grouping decisions, or unresolved questions that later Agents
+   need. Do not duplicate the resulting structured state in the handoff.
+6. Show the preview in business terms: renamed, added and canceled items;
+   dependency changes; migrated facts; remaining review items. Do not expose
+   UUIDs or bury the decision in routine dependency warnings.
+7. After the user confirms that preview, call `apply_changes` with the exact
+   same reason and operations plus its `confirmation_token`. Never reconstruct
+   the plan from memory.
+8. Treat any rejection as a complete failure. Re-read and preview again. On
+   success, compare returned `changes` and `reconciliation` with the approved
+   plan before reporting completion.
 
 ## Human-readable reporting
 
@@ -196,6 +231,8 @@ request. Stop after any failed step; do not improvise a compensating write.
 - Dependencies warn but do not block progress. Prefer Stage-to-Stage dependency
   when the actual handoff is known; use Requirement-level dependency only when
   the specific phases cannot be identified.
+- Record dependencies only from explicit user statements or authoritative
+  source facts. Do not turn a likely process order into stored truth.
 - A reusable Project rhythm and a Project's copied template are defaults for
   future creation. They are not a substitute for changing the actual Stages of
   an existing Requirement.
@@ -207,6 +244,8 @@ request. Stop after any failed step; do not improvise a compensating write.
   or from a request to review data.
 - Before a write, verify stable target IDs and the current value. Do not submit
   an unchanged write.
+- Do not perform a long sequence of related single-item writes when
+  `preview_changes` and `apply_changes` can validate and commit them together.
 - Treat UUIDs returned by Tools as opaque values. Copy them byte for byte into
   the next Tool call; never reconstruct, reformat, split, or repair one from
   memory. If an ID fails validation, re-read the target instead of guessing.

@@ -36,5 +36,27 @@ export async function createTestDataSource(): Promise<DataSource> {
     synchronize: false,
   });
   await dataSource.initialize();
+  const createQueryRunner = dataSource.createQueryRunner.bind(dataSource);
+  dataSource.createQueryRunner = (
+    ...args: Parameters<DataSource['createQueryRunner']>
+  ) => {
+    const queryRunner = createQueryRunner(...args);
+    const startTransaction = queryRunner.startTransaction.bind(queryRunner);
+    const rollbackTransaction =
+      queryRunner.rollbackTransaction.bind(queryRunner);
+    let backup: ReturnType<typeof database.backup> | undefined;
+    queryRunner.startTransaction = async (
+      ...transactionArgs: Parameters<typeof startTransaction>
+    ) => {
+      backup = database.backup();
+      await startTransaction(...transactionArgs);
+    };
+    queryRunner.rollbackTransaction = async () => {
+      await rollbackTransaction();
+      backup?.restore();
+      backup = undefined;
+    };
+    return queryRunner;
+  };
   return dataSource;
 }

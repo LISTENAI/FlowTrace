@@ -54,6 +54,35 @@ describe('FlowTrace MCP Server', () => {
           source: 'agent',
         };
       }
+      if (path === '/changes/preview') {
+        return {
+          projectId: '00000000-0000-4000-8000-000000000001',
+          confirmationToken: 'a'.repeat(64),
+          operations: [],
+          changes: [],
+          reconciliation: {
+            requirementCount: 1,
+            stageCount: 2,
+            activeDependencyCount: 1,
+            reviewItems: [],
+          },
+        };
+      }
+      if (path === '/changes/apply') {
+        return {
+          projectId: '00000000-0000-4000-8000-000000000001',
+          confirmationToken: 'a'.repeat(64),
+          operations: [],
+          changes: [],
+          reconciliation: {
+            requirementCount: 1,
+            stageCount: 2,
+            activeDependencyCount: 1,
+            reviewItems: [],
+          },
+          applied: true,
+        };
+      }
       return {
         id: '00000000-0000-4000-8000-000000000005',
         requirementId: '00000000-0000-4000-8000-000000000003',
@@ -78,7 +107,7 @@ describe('FlowTrace MCP Server', () => {
     ]);
 
     const tools = await client.listTools();
-    expect(tools.tools).toHaveLength(25);
+    expect(tools.tools).toHaveLength(27);
     expect(tools.tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
         'search',
@@ -105,6 +134,8 @@ describe('FlowTrace MCP Server', () => {
         'reschedule_bug',
         'add_dependency',
         'remove_dependency',
+        'preview_changes',
+        'apply_changes',
         'delete_work_item',
       ]),
     );
@@ -126,6 +157,12 @@ describe('FlowTrace MCP Server', () => {
     expect(
       tools.tools.find((tool) => tool.name === 'add_stage')?.description,
     ).toContain('独立名称');
+    expect(
+      tools.tools.find((tool) => tool.name === 'preview_changes')?.annotations,
+    ).toMatchObject({ readOnlyHint: true });
+    expect(
+      tools.tools.find((tool) => tool.name === 'apply_changes')?.annotations,
+    ).toMatchObject({ destructiveHint: true, readOnlyHint: false });
 
     const search = await client.callTool({
       name: 'search',
@@ -258,6 +295,91 @@ describe('FlowTrace MCP Server', () => {
         }),
       },
     );
+
+    const plannedOperations = [
+      {
+        operation_id: 'add-validation',
+        type: 'add_stage' as const,
+        target_id: '00000000-0000-4000-8000-000000000003',
+        name: '独立验证',
+        work_domain: 'verification' as const,
+      },
+      {
+        operation_id: 'link-validation',
+        type: 'add_dependency' as const,
+        successor_type: 'stage' as const,
+        successor_operation_id: 'add-validation',
+        predecessor_type: 'stage' as const,
+        predecessor_id: '00000000-0000-4000-8000-000000000005',
+        note: '需求评审完成后开始验证',
+      },
+      {
+        operation_id: 'supersede-old-stage',
+        type: 'supersede_stage' as const,
+        target_id: '00000000-0000-4000-8000-000000000005',
+        replacement_operation_id: 'add-validation',
+        effective_at: '2026-09-03T02:00:00.000Z',
+      },
+    ];
+    await client.callTool({
+      name: 'preview_changes',
+      arguments: {
+        project_id: '00000000-0000-4000-8000-000000000001',
+        reason: '按评审结论重构流程',
+        operations: plannedOperations,
+        agent_name: '验收调用方',
+      },
+    });
+    expect(request).toHaveBeenCalledWith('/changes/preview', {
+      method: 'POST',
+      body: expect.objectContaining({
+        source: 'agent',
+        reason: '按评审结论重构流程',
+        operations: [
+          expect.objectContaining({
+            operationId: 'add-validation',
+            targetId: '00000000-0000-4000-8000-000000000003',
+            payload: expect.objectContaining({
+              name: '独立验证',
+              workDomain: 'verification',
+            }),
+          }),
+          expect.objectContaining({
+            operationId: 'link-validation',
+            payload: expect.objectContaining({
+              successorOperationId: 'add-validation',
+              predecessorId: '00000000-0000-4000-8000-000000000005',
+            }),
+          }),
+          expect.objectContaining({
+            operationId: 'supersede-old-stage',
+            targetId: '00000000-0000-4000-8000-000000000005',
+            payload: expect.objectContaining({
+              replacementOperationId: 'add-validation',
+              effectiveAt: '2026-09-03T02:00:00.000Z',
+            }),
+          }),
+        ],
+      }),
+    });
+    await client.callTool({
+      name: 'apply_changes',
+      arguments: {
+        project_id: '00000000-0000-4000-8000-000000000001',
+        reason: '按评审结论重构流程',
+        operations: plannedOperations,
+        confirmation_token: 'a'.repeat(64),
+        agent_name: '验收调用方',
+      },
+    });
+    expect(request).toHaveBeenCalledWith('/changes/apply', {
+      method: 'POST',
+      body: expect.objectContaining({
+        confirmationToken: 'a'.repeat(64),
+        operations: expect.any(Array),
+        source: 'agent',
+      }),
+    });
 
     await client.callTool({
       name: 'add_stage',

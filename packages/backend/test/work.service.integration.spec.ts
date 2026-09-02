@@ -948,4 +948,184 @@ describe.sequential('WorkService business rules', () => {
       ]),
     );
   });
+
+  it('previews and atomically applies structural change sets', async () => {
+    const project = await work.createProject({
+      key: 'PLAN',
+      name: '事务式变更计划',
+      templateStages: [{ name: '需求评审', workDomain: 'product' }],
+    });
+    const requirement = await work.createRequirement({
+      projectId: project.id,
+      title: '受控重编排',
+    });
+    const input = {
+      projectId: project.id,
+      source: 'agent' as const,
+      agentName: '集成验证',
+      reason: '按已确认方案增加独立验证阶段',
+      operations: [
+        {
+          operationId: 'add-verification',
+          type: 'add_stage' as const,
+          targetId: requirement.id,
+          payload: {
+            name: '独立验证',
+            workDomain: 'verification',
+            order: 1,
+          },
+        },
+        {
+          operationId: 'link-verification',
+          type: 'add_dependency' as const,
+          payload: {
+            successorType: 'stage',
+            successorOperationId: 'add-verification',
+            predecessorType: 'stage',
+            predecessorId: requirement.stages[0]!.id,
+            note: '独立验证在需求评审后开始',
+          },
+        },
+        {
+          operationId: 'update-handoff',
+          type: 'update_project_handoff' as const,
+          targetId: project.id,
+          payload: {
+            content: '需求评审后进入独立验证。',
+            expectedRevision: 0,
+          },
+        },
+        {
+          operationId: 'supersede-review',
+          type: 'supersede_stage' as const,
+          targetId: requirement.stages[0]!.id,
+          payload: {
+            replacementOperationId: 'add-verification',
+            effectiveAt: '2026-09-03T02:00:00.000Z',
+          },
+        },
+      ],
+    };
+
+    const preview = await work.previewChanges(input);
+    expect(preview.confirmationToken).toMatch(/^[a-f0-9]{64}$/);
+    expect(preview.operations.map((item) => item.operationId)).toEqual([
+      'add-verification',
+      'link-verification',
+      'update-handoff',
+      'supersede-review',
+    ]);
+    expect(preview.changes.map((item) => item.type)).toEqual(
+      expect.arrayContaining([
+        'stage_added',
+        'dependency_added',
+        'project_agent_handoff_updated',
+        'stage_superseded',
+      ]),
+    );
+    const unchanged = await work.getRequirement(requirement.id);
+    expect(unchanged.stages).toHaveLength(1);
+    expect(unchanged.stages[0]).toMatchObject({ status: 'not_started' });
+    expect(unchanged.stages[0]?.supersededByStageId).toBeUndefined();
+    expect((await work.getProjectAgentHandoff(project.id)).revision).toBe(0);
+
+    const applied = await work.applyChanges({
+      ...input,
+      confirmationToken: preview.confirmationToken,
+    });
+    expect(applied.applied).toBe(true);
+    const changed = await work.getRequirementDetail(requirement.id);
+    expect(changed.requirement.stages.map((item) => item.name)).toEqual([
+      '需求评审',
+      '独立验证',
+    ]);
+    expect(changed.requirement.stages[0]).toMatchObject({
+      status: 'canceled',
+      supersededByStageId: changed.requirement.stages[1]!.id,
+    });
+    expect(changed.dependencies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          successorId: changed.requirement.stages[1]!.id,
+          predecessorId: changed.requirement.stages[0]!.id,
+        }),
+      ]),
+    );
+    expect((await work.getProjectAgentHandoff(project.id)).revision).toBe(1);
+    await expect(
+      work.supersedeStage(changed.requirement.stages[1]!.id, {
+        replacementStageId: changed.requirement.stages[0]!.id,
+        reason: '不允许形成反向接替关系',
+      }),
+    ).rejects.toThrow('不能形成环');
+    await expect(
+      work.deleteStage(changed.requirement.stages[0]!.id, {
+        confirmation: '需求评审',
+        reason: '不应删除有接替血缘的阶段',
+      }),
+    ).rejects.toThrow('必须保留');
+
+    await expect(
+      work.applyChanges({
+        ...input,
+        confirmationToken: preview.confirmationToken,
+      }),
+    ).rejects.toThrow('重新预览');
+
+    await expect(
+      work.previewChanges({
+        projectId: project.id,
+        reason: '验证失败时完整回滚',
+        operations: [
+          {
+            operationId: 'temporary-stage',
+            type: 'add_stage',
+            targetId: requirement.id,
+            payload: { name: '不应落库' },
+          },
+          {
+            operationId: 'invalid-reference',
+            type: 'update_stage',
+            targetOperationId: 'missing-stage',
+            payload: { name: '无效修改' },
+          },
+        ],
+      }),
+    ).rejects.toThrow('整组未应用');
+    expect(
+      (await work.getRequirement(requirement.id)).stages.map(
+        (item) => item.name,
+      ),
+    ).not.toContain('不应落库');
+  });
+
+  it('keeps completed facts when a stage is superseded', async () => {
+    const project = await work.createProject({
+      key: 'LINEAGE',
+      name: '阶段接替关系',
+      templateStages: [{ name: '旧验证' }, { name: '新验证' }],
+    });
+    const requirement = await work.createRequirement({
+      projectId: project.id,
+      title: '保留已完成事实',
+    });
+    const [oldStage, replacement] = requirement.stages;
+    await work.updateStageStatus(oldStage!.id, {
+      status: 'done',
+      effectiveAt: '2026-09-01T02:00:00.000Z',
+      reason: '补录原验证完成时间',
+    });
+
+    const superseded = await work.supersedeStage(oldStage!.id, {
+      replacementStageId: replacement!.id,
+      effectiveAt: '2026-09-02T02:00:00.000Z',
+      reason: '后续工作改由新验证阶段承接',
+    });
+
+    expect(superseded.status).toBe('done');
+    expect(superseded.supersededByStageId).toBe(replacement!.id);
+    expect(superseded.statusHistory.map((item) => item.toStatus)).not.toContain(
+      'canceled',
+    );
+  });
 });

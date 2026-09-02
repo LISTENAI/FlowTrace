@@ -22,6 +22,7 @@ import {
   type SearchEntityType,
 } from '@flowtrace/shared';
 import {
+  ApplyChangesDto,
   BatchDto,
   CorrectStatusHistoryDto,
   CreateBugDto,
@@ -34,7 +35,9 @@ import {
   CreateVersionDto,
   DeleteWorkItemDto,
   MoveVersionDto,
+  PreviewChangesDto,
   RescheduleDto,
+  SupersedeStageDto,
   UpdateBugDto,
   UpdatePersonDto,
   UpdateProjectDto,
@@ -299,6 +302,15 @@ export class StagesController {
     return this.work.rescheduleStage(id, input);
   }
 
+  @Post(':id/supersede')
+  @ApiOperation({ summary: '记录新阶段接替关系，并取消尚未结束的旧阶段' })
+  supersede(
+    @Param('id', uuidPipe) id: string,
+    @Body() input: SupersedeStageDto,
+  ) {
+    return this.work.supersedeStage(id, input);
+  }
+
   @Delete(':id')
   @HttpCode(204)
   @ApiOperation({ summary: '软删除阶段，并保留状态和排期历史' })
@@ -442,6 +454,22 @@ export class InsightsController {
       requirementId,
       limit: parsedLimit,
     });
+  }
+
+  @Post('changes/preview')
+  @ApiOperation({
+    summary: '在事务中演练一组关联修改，回滚后返回确认令牌和对账结果',
+  })
+  previewChanges(@Body() input: PreviewChangesDto) {
+    return this.work.previewChanges(input);
+  }
+
+  @Post('changes/apply')
+  @ApiOperation({
+    summary: '使用预览令牌原子执行整组修改；项目状态变化后拒绝应用',
+  })
+  applyChanges(@Body() input: ApplyChangesDto) {
+    return this.work.applyChanges(input);
   }
 
   @Post('batch')
