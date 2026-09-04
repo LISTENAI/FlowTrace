@@ -99,9 +99,8 @@ describe.sequential('HTTP API', () => {
     );
     expect(response.body.paths).toHaveProperty('/api/people/{id}/work');
     expect(response.body.paths).toHaveProperty('/api/action-items');
-    expect(response.body.paths).toHaveProperty(
-      '/api/action-items/{id}/status',
-    );
+    expect(response.body.paths['/api/versions/{id}']).toHaveProperty('delete');
+    expect(response.body.paths).toHaveProperty('/api/action-items/{id}/status');
   });
 
   it('serves the stateless remote MCP endpoint outside the API prefix', async () => {

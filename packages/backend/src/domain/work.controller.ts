@@ -171,6 +171,12 @@ export class VersionsController {
   update(@Param('id', uuidPipe) id: string, @Body() input: UpdateVersionDto) {
     return this.work.updateVersion(id, input);
   }
+
+  @Delete(':id')
+  @HttpCode(204)
+  remove(@Param('id', uuidPipe) id: string, @Body() input: DeleteWorkItemDto) {
+    return this.work.deleteVersion(id, input);
+  }
 }
 
 @ApiTags('人员')

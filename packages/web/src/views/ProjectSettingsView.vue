@@ -5,6 +5,7 @@ import type {
   ProjectAgentHandoffRevision,
   TemplateStage,
   Version,
+  VersionStatus,
 } from '@flowtrace/shared';
 import {
   ArrowLeftIcon,
@@ -17,10 +18,12 @@ import {
   PencilSquareIcon,
   TrashIcon,
 } from '@heroicons/vue/24/outline';
+import dayjs from 'dayjs';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import { api } from '@/api';
 import AppDateTimeField from '@/components/AppDateTimeField.vue';
+import DeleteWorkItemDialog from '@/components/DeleteWorkItemDialog.vue';
 import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
 import AuditAttribution from '@/components/AuditAttribution.vue';
@@ -43,6 +46,10 @@ const agentHandoffHistory = ref<ProjectAgentHandoffRevision[]>([]);
 const stages = ref<TemplateStage[]>([]);
 const saving = ref(false);
 const versionOpen = ref(false);
+const versionEditOpen = ref(false);
+const versionDeleteOpen = ref(false);
+const versionDeleteSaving = ref(false);
+const editingVersion = ref<Version>();
 const versionOrderSaving = ref(false);
 const handoffOpen = ref(false);
 const handoffSaving = ref(false);
@@ -51,13 +58,30 @@ const handoffReason = ref('');
 const projectForm = reactive({ name: '', description: '' });
 const versionForm = reactive({
   name: '',
-  status: 'planning',
+  status: 'planning' as VersionStatus,
   plannedReleaseAt: '',
   description: '',
 });
-const versionStatusOptions = [
+const versionEditForm = reactive({
+  name: '',
+  status: 'planning' as VersionStatus,
+  plannedStartAt: '',
+  plannedReleaseAt: '',
+  actualReleaseAt: '',
+  description: '',
+  reason: '',
+});
+const versionStatusOptions: Array<{ value: VersionStatus; label: string }> = [
   { value: 'planning', label: '规划中' },
   { value: 'active', label: '进行中' },
+];
+const versionEditStatusOptions: Array<{
+  value: VersionStatus;
+  label: string;
+}> = [
+  ...versionStatusOptions,
+  { value: 'released', label: '已发布' },
+  { value: 'canceled', label: '已取消' },
 ];
 
 async function load() {
@@ -181,6 +205,94 @@ async function createVersion() {
   } finally {
     saving.value = false;
   }
+}
+
+function localDate(value?: string) {
+  return value ? dayjs(value).format('YYYY-MM-DD') : '';
+}
+
+function openVersionEditor(version: Version) {
+  editingVersion.value = version;
+  versionEditForm.name = version.name;
+  versionEditForm.status = version.status;
+  versionEditForm.plannedStartAt = localDate(version.plannedStartAt);
+  versionEditForm.plannedReleaseAt = localDate(version.plannedReleaseAt);
+  versionEditForm.actualReleaseAt = localDate(version.actualReleaseAt);
+  versionEditForm.description = version.description ?? '';
+  versionEditForm.reason = '';
+  versionEditOpen.value = true;
+}
+
+function selectVersionStatus(status: VersionStatus) {
+  versionEditForm.status = status;
+  if (status === 'released' && !versionEditForm.actualReleaseAt) {
+    versionEditForm.actualReleaseAt = dayjs().format('YYYY-MM-DD');
+  }
+}
+
+async function saveVersion() {
+  if (!editingVersion.value) return;
+  saving.value = true;
+  try {
+    await api.updateVersion(editingVersion.value.id, {
+      name: versionEditForm.name,
+      status: versionEditForm.status,
+      plannedStartAt: versionEditForm.plannedStartAt || null,
+      plannedReleaseAt: versionEditForm.plannedReleaseAt || null,
+      actualReleaseAt:
+        versionEditForm.status === 'released'
+          ? versionEditForm.actualReleaseAt
+          : null,
+      description: versionEditForm.description,
+      reason: versionEditForm.reason,
+      source: 'manual',
+    });
+    versionEditOpen.value = false;
+    toasts.show(
+      versionEditForm.status === 'released'
+        ? '版本已标记为已发布'
+        : '版本已更新',
+    );
+    await load();
+  } catch (error) {
+    toasts.show(
+      '版本更新失败',
+      error instanceof Error ? error.message : undefined,
+      'error',
+    );
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function deleteVersion(input: { confirmation: string; reason: string }) {
+  if (!editingVersion.value) return;
+  versionDeleteSaving.value = true;
+  try {
+    await api.deleteVersion(editingVersion.value.id, input);
+    versionDeleteOpen.value = false;
+    versionEditOpen.value = false;
+    toasts.show('版本已删除', '历史记录仍然保留');
+    await load();
+  } catch (error) {
+    toasts.show(
+      '版本删除失败',
+      error instanceof Error ? error.message : undefined,
+      'error',
+    );
+  } finally {
+    versionDeleteSaving.value = false;
+  }
+}
+
+function openVersionDelete() {
+  versionEditOpen.value = false;
+  versionDeleteOpen.value = true;
+}
+
+function closeVersionDelete() {
+  versionDeleteOpen.value = false;
+  versionEditOpen.value = true;
 }
 
 async function moveVersion(index: number, offset: number) {
@@ -456,12 +568,33 @@ onMounted(async () => {
               </p>
             </div>
             <div class="text-right">
-              <p class="text-[10px] text-slate-400">计划发布</p>
+              <p class="text-[10px] text-slate-400">
+                {{
+                  version.status === 'released' && version.actualReleaseAt
+                    ? '实际发布'
+                    : '计划发布'
+                }}
+              </p>
               <p class="mt-0.5 text-xs font-medium text-slate-600">
-                {{ formatDate(version.plannedReleaseAt) }}
+                {{
+                  formatDate(
+                    version.status === 'released'
+                      ? version.actualReleaseAt
+                      : version.plannedReleaseAt,
+                  )
+                }}
               </p>
             </div>
             <div class="flex shrink-0 items-center gap-1">
+              <button
+                v-tooltip="'编辑版本'"
+                type="button"
+                class="rounded-lg p-1.5 text-slate-400 transition hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/50 dark:hover:text-indigo-300"
+                :aria-label="`编辑版本${version.name}`"
+                @click="openVersionEditor(version)"
+              >
+                <PencilSquareIcon class="h-4 w-4" />
+              </button>
               <button
                 type="button"
                 class="rounded-lg p-1.5 text-slate-300 transition hover:bg-slate-50 hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-25"
@@ -596,5 +729,160 @@ onMounted(async () => {
         </div>
       </form></AppModal
     >
+
+    <AppModal
+      :open="versionEditOpen"
+      :title="
+        editingVersion ? `编辑版本「${editingVersion.name}」` : '编辑版本'
+      "
+      description="维护交付状态和日期；已发布相当于这个版本已经完成交付。"
+      width="sm"
+      @close="versionEditOpen = false"
+    >
+      <form class="space-y-4" @submit.prevent="saveVersion">
+        <label class="block">
+          <span
+            class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300"
+            >版本名称</span
+          >
+          <input
+            v-model="versionEditForm.name"
+            required
+            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+        </label>
+
+        <div>
+          <span
+            class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300"
+            >状态</span
+          >
+          <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <button
+              v-for="option in versionEditStatusOptions"
+              :key="option.value"
+              type="button"
+              class="focus-ring rounded-xl border px-2.5 py-2 text-xs font-semibold transition"
+              :class="
+                versionEditForm.status === option.value
+                  ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-200'
+                  : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600'
+              "
+              @click="selectVersionStatus(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label>
+            <span
+              class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300"
+              >计划开始</span
+            >
+            <AppDateTimeField v-model="versionEditForm.plannedStartAt" />
+          </label>
+          <label>
+            <span
+              class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300"
+              >计划发布</span
+            >
+            <AppDateTimeField
+              v-model="versionEditForm.plannedReleaseAt"
+              :min="versionEditForm.plannedStartAt"
+            />
+          </label>
+        </div>
+
+        <label v-if="versionEditForm.status === 'released'" class="block">
+          <span
+            class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300"
+            >实际发布日期</span
+          >
+          <AppDateTimeField v-model="versionEditForm.actualReleaseAt" />
+          <span class="mt-1.5 block text-[11px] text-slate-400">
+            选择“已发布”时必须记录实际交付日期。
+          </span>
+        </label>
+
+        <label class="block">
+          <span
+            class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300"
+            >说明</span
+          >
+          <input
+            v-model="versionEditForm.description"
+            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+        </label>
+
+        <label class="block">
+          <span
+            class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300"
+            >调整原因</span
+          >
+          <input
+            v-model="versionEditForm.reason"
+            required
+            maxlength="500"
+            placeholder="例如：版本已正式交付"
+            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          />
+        </label>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            class="focus-ring rounded-xl px-4 py-2.5 text-sm text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            @click="versionEditOpen = false"
+          >
+            取消
+          </button>
+          <button
+            :disabled="
+              saving ||
+              !versionEditForm.name.trim() ||
+              !versionEditForm.reason.trim() ||
+              (versionEditForm.status === 'released' &&
+                !versionEditForm.actualReleaseAt)
+            "
+            class="focus-ring rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50 dark:bg-indigo-500"
+          >
+            {{ saving ? '保存中…' : '保存版本' }}
+          </button>
+        </div>
+        <div
+          class="flex items-center justify-between gap-4 border-t border-slate-100 pt-4 dark:border-slate-800"
+        >
+          <div>
+            <p class="text-xs font-semibold text-slate-600 dark:text-slate-300">
+              删除空版本
+            </p>
+            <p class="mt-0.5 text-[11px] text-slate-400">
+              仍有需求归属时，系统会拒绝删除。
+            </p>
+          </div>
+          <button
+            type="button"
+            class="focus-ring shrink-0 rounded-xl px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+            @click="openVersionDelete"
+          >
+            删除版本
+          </button>
+        </div>
+      </form>
+    </AppModal>
+
+    <DeleteWorkItemDialog
+      :open="versionDeleteOpen"
+      :item-label="`版本「${editingVersion?.name ?? ''}」`"
+      :confirmation-text="editingVersion?.name ?? ''"
+      :saving="versionDeleteSaving"
+      description="删除后不再出现在项目中，但版本及需求归属历史仍然保留。"
+      warning="只有当前不包含需求的版本才能删除；请先迁移或移出仍归属于它的需求。"
+      @close="closeVersionDelete"
+      @confirm="deleteVersion"
+    />
   </div>
 </template>

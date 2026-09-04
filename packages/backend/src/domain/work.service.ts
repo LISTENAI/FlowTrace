@@ -1145,6 +1145,31 @@ export class WorkService {
   async updateVersion(id: string, input: UpdateVersionDto): Promise<Version> {
     const version = await this.versions.findOneBy({ id });
     if (!version) throw new NotFoundException('未找到版本');
+    const before = {
+      name: version.name,
+      status: version.status,
+      sortOrder: version.sortOrder,
+      plannedStartAt: iso(version.plannedStartAt),
+      plannedReleaseAt: iso(version.plannedReleaseAt),
+      actualReleaseAt: iso(version.actualReleaseAt),
+      description: version.description,
+    };
+    const changesTrackedPlan =
+      (input.status !== undefined && input.status !== version.status) ||
+      input.plannedStartAt !== undefined ||
+      input.plannedReleaseAt !== undefined ||
+      input.actualReleaseAt !== undefined;
+    if (changesTrackedPlan && !input.reason?.trim()) {
+      throw new BadRequestException('调整版本状态或日期时必须填写原因');
+    }
+    if (
+      input.status === 'released' &&
+      version.status !== 'released' &&
+      !input.actualReleaseAt &&
+      !version.actualReleaseAt
+    ) {
+      throw new BadRequestException('将版本标记为已发布时必须填写实际发布日期');
+    }
     if (input.name !== undefined) version.name = input.name;
     if (input.status !== undefined) version.status = input.status;
     if (input.sortOrder !== undefined) version.sortOrder = input.sortOrder;
@@ -1156,16 +1181,56 @@ export class WorkService {
       version.actualReleaseAt = date(input.actualReleaseAt);
     if (input.description !== undefined)
       version.description = input.description || null;
-    await this.versions.save(version);
-    await this.recordChange(this.dataSource.manager, {
-      entityType: 'version',
-      entityId: version.id,
-      projectId: version.projectId,
-      type: 'version_updated',
-      summary: `更新版本「${version.name}」`,
-      ...context(input),
+    await this.dataSource.transaction(async (manager) => {
+      await manager.save(version);
+      await this.recordChange(manager, {
+        entityType: 'version',
+        entityId: version.id,
+        projectId: version.projectId,
+        type: 'version_updated',
+        summary: `更新版本「${version.name}」`,
+        details: {
+          before,
+          after: {
+            name: version.name,
+            status: version.status,
+            sortOrder: version.sortOrder,
+            plannedStartAt: iso(version.plannedStartAt),
+            plannedReleaseAt: iso(version.plannedReleaseAt),
+            actualReleaseAt: iso(version.actualReleaseAt),
+            description: version.description,
+          },
+        },
+        ...context(input),
+      });
     });
     return this.toVersion(version);
+  }
+
+  async deleteVersion(id: string, input: DeleteWorkItemDto): Promise<void> {
+    const version = await this.versions.findOneBy({ id });
+    if (!version) throw new NotFoundException('未找到版本');
+    this.assertDeleteConfirmation(version.name, input.confirmation);
+    const requirementCount = await this.requirements.countBy({
+      versionId: version.id,
+    });
+    if (requirementCount > 0) {
+      throw new ConflictException(
+        `版本中仍有 ${requirementCount} 个需求，请先移出或迁移这些需求`,
+      );
+    }
+    await this.dataSource.transaction(async (manager) => {
+      await this.recordChange(manager, {
+        entityType: 'version',
+        entityId: version.id,
+        projectId: version.projectId,
+        type: 'version_deleted',
+        summary: `删除版本「${version.name}」`,
+        details: { reason: input.reason },
+        ...context(input),
+      });
+      await manager.getRepository(VersionEntity).softDelete(version.id);
+    });
   }
 
   async listRequirements(filters: {

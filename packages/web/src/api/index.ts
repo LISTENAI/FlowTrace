@@ -96,6 +96,14 @@ export const api = {
     }),
   updateVersion: (id: string, input: Record<string, unknown>) =>
     request<Version>(`/versions/${id}`, { method: 'PATCH', body: input }),
+  deleteVersion: (
+    id: string,
+    input: { confirmation: string; reason: string },
+  ) =>
+    request<void>(`/versions/${id}`, {
+      method: 'DELETE',
+      body: input,
+    }),
   requirements: (filters: Record<string, string | undefined>) => {
     const query = new URLSearchParams();
     Object.entries(filters).forEach(

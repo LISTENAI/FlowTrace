@@ -1,10 +1,13 @@
 import type { VersionStatus } from '@flowtrace/shared';
-import { Column, Entity, Index } from 'typeorm';
+import { Column, DeleteDateColumn, Entity, Index } from 'typeorm';
 import { BaseEntity } from '@/database/entities/base';
 
 @Entity('versions')
 @Index(['projectId', 'name'], { unique: true })
 export class VersionEntity extends BaseEntity {
+  @DeleteDateColumn({ type: 'timestamptz', nullable: true })
+  deletedAt!: Date | null;
+
   @Index()
   @Column('uuid')
   projectId!: string;

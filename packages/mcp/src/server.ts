@@ -45,6 +45,7 @@ const entityTypeSchema = z.enum([
   'person',
 ]);
 const targetTypeSchema = z.enum(['requirement', 'stage', 'bug']);
+const deletableTypeSchema = z.enum(['version', 'requirement', 'stage', 'bug']);
 const assignableTypeSchema = z.enum([
   'requirement',
   'stage',
@@ -228,8 +229,11 @@ const writeBody = (input: {
   agentModel: input.agent_model,
   reason: input.reason,
 });
-const collectionOf = (type: 'requirement' | 'stage' | 'bug' | 'action_item') =>
+const collectionOf = (
+  type: 'version' | 'requirement' | 'stage' | 'bug' | 'action_item',
+) =>
   ({
+    version: 'versions',
     requirement: 'requirements',
     stage: 'stages',
     bug: 'bugs',
@@ -625,7 +629,7 @@ export function createFlowTraceMcpServer(
     'update_version',
     {
       description:
-        '修改已存在 Version 的名称、状态、顺序或计划，并保留审计变化。只传需要修改的字段，排期或状态调整必须说明原因。',
+        '修改已存在 Version 的名称、状态、顺序或计划，并保留审计变化。只传需要修改的字段，排期或状态调整必须说明原因；改为 released 时同时填写 actual_release_at。',
       inputSchema: {
         version_id: uuidSchema,
         name: z.string().min(1).optional(),
@@ -1489,11 +1493,13 @@ export function createFlowTraceMcpServer(
     'delete_work_item',
     {
       description:
-        '仅用于删除明确误建的需求、阶段或 Bug。必须先读取目标并获得用户明确授权；有历史或关联时仍保留审计数据。',
+        '删除明确不再使用的空版本，或明确误建的需求、阶段或 Bug。版本必须已经移空；必须先读取目标并获得用户明确授权，历史仍保留。',
       inputSchema: {
-        target_type: targetTypeSchema,
+        target_type: deletableTypeSchema,
         target_id: uuidSchema,
-        confirmation: z.string().describe('需求编号、阶段名称或 Bug 编号'),
+        confirmation: z
+          .string()
+          .describe('版本名称、需求编号、阶段名称或 Bug 编号'),
         reason: z.string().min(1),
         agent_name: sourceSchema.agent_name,
         agent_model: sourceSchema.agent_model,

@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { TypeOrmModule, type TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
+import { VersionEntity } from '@/database/entities';
 import { DomainModule } from '@/domain/domain.module';
 import { WorkService } from '@/domain/work.service';
 import { createTestDataSource } from './support/database';
@@ -215,6 +216,65 @@ describe.sequential('WorkService business rules', () => {
       id: action.id,
       actualStartAt: '2026-09-05T02:00:00.000Z',
     });
+  });
+
+  it('soft deletes only versions without current requirements', async () => {
+    const project = await work.createProject({
+      key: 'VERSIONS',
+      name: '版本清理',
+    });
+    const version = await work.createVersion(project.id, { name: '1.0' });
+    await expect(
+      work.updateVersion(version.id, {
+        status: 'released',
+        reason: '版本完成交付',
+      }),
+    ).rejects.toThrow('必须填写实际发布日期');
+    expect(
+      await work.updateVersion(version.id, {
+        status: 'released',
+        actualReleaseAt: '2026-09-05T08:00:00.000Z',
+        reason: '版本完成交付',
+      }),
+    ).toMatchObject({
+      status: 'released',
+      actualReleaseAt: '2026-09-05T08:00:00.000Z',
+    });
+    const requirement = await work.createRequirement({
+      projectId: project.id,
+      versionId: version.id,
+      title: '仍归属于版本的需求',
+    });
+
+    await expect(
+      work.deleteVersion(version.id, {
+        confirmation: version.name,
+        reason: '验证非空版本不可删除',
+      }),
+    ).rejects.toThrow('仍有 1 个需求');
+
+    await work.moveRequirement(requirement.id, {
+      versionId: null,
+      reason: '将版本移空后删除',
+    });
+    await work.deleteVersion(version.id, {
+      confirmation: version.name,
+      reason: '空版本不再使用',
+    });
+
+    expect(await work.listVersions(project.id)).toEqual([]);
+    expect(
+      await dataSource.getRepository(VersionEntity).findOne({
+        where: { id: version.id },
+        withDeleted: true,
+      }),
+    ).toMatchObject({
+      id: version.id,
+      deletedAt: expect.any(Date),
+    });
+    await expect(work.getVersionSnapshot(version.id)).rejects.toThrow(
+      '未找到版本',
+    );
   });
 
   afterAll(async () => {

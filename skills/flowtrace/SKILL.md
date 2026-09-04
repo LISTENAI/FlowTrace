@@ -259,7 +259,8 @@ request. Stop after any failed step; do not improvise a compensating write.
   user did not provide one.
 - Before `delete_work_item`, read the target, explain that normal views will no
   longer show it while audit history remains, and obtain explicit confirmation
-  of the exact Requirement key, Stage name, or Bug key.
+  of the exact Version name, Requirement key, Stage name, or Bug key. A Version
+  can be deleted only after all current Requirements have been moved out.
 - If a Tool rejects input, report the error in business language. Do not retry
   with guessed IDs, altered dates, another status, or a broader deletion.
 - An empty optional ID is not evidence that the business operation is

@@ -478,6 +478,29 @@ describe('FlowTrace MCP Server', () => {
     );
 
     await client.callTool({
+      name: 'delete_work_item',
+      arguments: {
+        target_type: 'version',
+        target_id: '00000000-0000-4000-8000-000000000007',
+        confirmation: '第一批 1500 套',
+        reason: '空版本不再使用',
+        agent_name: '验收调用方',
+      },
+    });
+    expect(request).toHaveBeenCalledWith(
+      '/versions/00000000-0000-4000-8000-000000000007',
+      {
+        method: 'DELETE',
+        body: expect.objectContaining({
+          confirmation: '第一批 1500 套',
+          reason: '空版本不再使用',
+          source: 'agent',
+          agentName: '验收调用方',
+        }),
+      },
+    );
+
+    await client.callTool({
       name: 'create_requirement',
       arguments: {
         project_id: '00000000-0000-4000-8000-000000000001',

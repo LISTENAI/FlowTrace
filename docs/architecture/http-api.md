@@ -6,7 +6,8 @@
 ## 业务入口
 
 - `/project-rhythms`：维护新建项目可选的节奏及其默认环节。
-- `/projects`、`/people`、`/versions`：维护项目边界、负责人目录和交付版本。
+- `/projects`、`/people`、`/versions`：维护项目边界、负责人目录和交付版本；
+  空版本可软删除，仍有需求归属时会拒绝。
 - `/projects/:id/agent-handoff`：独立于项目说明维护跨 Agent 会话交底；使用
   修订号拒绝并发覆盖，并通过 `/history` 保留完整修订。
 - `/requirements`：创建需求时可复制项目当前模板，也可直接提交按顺序排列的
