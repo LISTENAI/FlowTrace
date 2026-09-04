@@ -25,6 +25,7 @@ import {
   ApplyChangesDto,
   BatchDto,
   CorrectStatusHistoryDto,
+  CreateActionItemDto,
   CreateBugDto,
   CreateDependencyDto,
   CreatePersonDto,
@@ -39,6 +40,7 @@ import {
   RescheduleDto,
   SupersedeStageDto,
   UpdateBugDto,
+  UpdateActionItemDto,
   UpdatePersonDto,
   UpdateProjectDto,
   UpdateProjectAgentHandoffDto,
@@ -190,6 +192,12 @@ export class PeopleController {
     return this.work.createPerson(input);
   }
 
+  @Get(':id/work')
+  @ApiOperation({ summary: '跨项目查看某个人负责和协调的工作' })
+  workOverview(@Param('id', uuidPipe) id: string) {
+    return this.work.getPersonWork(id);
+  }
+
   @Patch(':id')
   update(
     @Param('id', uuidPipe) id: string,
@@ -201,6 +209,67 @@ export class PeopleController {
       input,
       request.flowTraceIdentity?.person.id,
     );
+  }
+}
+
+@ApiTags('待办')
+@Controller('action-items')
+export class ActionItemsController {
+  constructor(@Inject(WorkService) private readonly work: WorkService) {}
+
+  @Get()
+  @ApiQuery({ name: 'ownerId', required: false })
+  @ApiQuery({ name: 'projectId', required: false })
+  @ApiQuery({ name: 'status', required: false })
+  list(
+    @Query('ownerId', optionalUuidPipe) ownerId?: string,
+    @Query('projectId', optionalUuidPipe) projectId?: string,
+    @Query('status')
+    status?:
+      | 'not_started'
+      | 'in_progress'
+      | 'waiting'
+      | 'blocked'
+      | 'done'
+      | 'canceled',
+  ) {
+    return this.work.listActionItems({ ownerId, projectId, status });
+  }
+
+  @Get(':id')
+  get(@Param('id') id: string) {
+    return this.work.getActionItemByReference(id);
+  }
+
+  @Post()
+  create(
+    @Body() input: CreateActionItemDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const actorPersonId = request.flowTraceIdentity?.person.id;
+    if (!actorPersonId) throw new BadRequestException('无法确认待办创建人');
+    return this.work.createActionItem(input, actorPersonId);
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id', uuidPipe) id: string,
+    @Body() input: UpdateActionItemDto,
+  ) {
+    return this.work.updateActionItem(id, input);
+  }
+
+  @Post(':id/status')
+  updateStatus(
+    @Param('id', uuidPipe) id: string,
+    @Body() input: UpdateStatusDto,
+  ) {
+    return this.work.updateActionItemStatus(id, input);
+  }
+
+  @Post(':id/reschedule')
+  reschedule(@Param('id', uuidPipe) id: string, @Body() input: RescheduleDto) {
+    return this.work.rescheduleActionItem(id, input);
   }
 }
 

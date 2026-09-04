@@ -13,7 +13,7 @@ import { toasts } from '@/state/toasts';
 const props = defineProps<{
   open: boolean;
   itemId: string;
-  itemType: 'stage' | 'bug';
+  itemType: 'stage' | 'bug' | 'action_item';
   itemName: string;
   currentStatus: ExecutionStatus;
   actualStartAt?: string;
@@ -180,7 +180,9 @@ async function save() {
     const updated =
       props.itemType === 'stage'
         ? await api.updateStageStatus(props.itemId, input)
-        : await api.updateBugStatus(props.itemId, input);
+        : props.itemType === 'bug'
+          ? await api.updateBugStatus(props.itemId, input)
+          : await api.updateActionItemStatus(props.itemId, input);
     if (recordsProgressEvent.value && updated.status !== form.status) {
       toasts.show(
         '进展已补记',

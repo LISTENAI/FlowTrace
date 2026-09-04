@@ -1,9 +1,11 @@
 import type {
+  ActionItem,
   Bug,
   ChangeEvent,
   Dependency,
   ExecutionStatus,
   Person,
+  PersonWorkOverview,
   Project,
   ProjectAgentHandoff,
   ProjectAgentHandoffRevision,
@@ -239,6 +241,64 @@ export const api = {
     request<Person>('/people', { method: 'POST', body: input }),
   updatePerson: (id: string, input: Record<string, unknown>) =>
     request<Person>(`/people/${id}`, { method: 'PATCH', body: input }),
+  personWork: (id: string) => request<PersonWorkOverview>(`/people/${id}/work`),
+  actionItems: (
+    filters: {
+      ownerId?: string;
+      projectId?: string;
+      status?: ExecutionStatus;
+    } = {},
+  ) => {
+    const query = new URLSearchParams();
+    Object.entries(filters).forEach(
+      ([key, value]) => value && query.set(key, value),
+    );
+    return request<ActionItem[]>(`/action-items?${query.toString()}`);
+  },
+  actionItem: (id: string) => request<ActionItem>(`/action-items/${id}`),
+  createActionItem: (input: {
+    title: string;
+    description?: string;
+    projectId?: string;
+    requirementId?: string;
+    ownerIds?: string[];
+    plannedStartAt?: string;
+    plannedEndAt?: string;
+  }) => request<ActionItem>('/action-items', { method: 'POST', body: input }),
+  updateActionItem: (id: string, input: Record<string, unknown>) =>
+    request<ActionItem>(`/action-items/${id}`, {
+      method: 'PATCH',
+      body: input,
+    }),
+  updateActionItemStatus: (
+    id: string,
+    input: {
+      status: ExecutionStatus;
+      effectiveAt?: string;
+      actualStartAt?: string;
+      actualEndAt?: string;
+      statusReason?: string;
+      expectedResumeAt?: string;
+      note?: string;
+      ownerIds?: string[];
+    },
+  ) =>
+    request<ActionItem>(`/action-items/${id}/status`, {
+      method: 'POST',
+      body: input,
+    }),
+  rescheduleActionItem: (
+    id: string,
+    input: {
+      plannedStartAt?: string | null;
+      plannedEndAt?: string | null;
+      reason?: string;
+    },
+  ) =>
+    request<ActionItem>(`/action-items/${id}/reschedule`, {
+      method: 'POST',
+      body: input,
+    }),
   dependencies: (requirementId?: string) =>
     request<Dependency[]>(
       `/dependencies${requirementId ? `?requirementId=${requirementId}` : ''}`,

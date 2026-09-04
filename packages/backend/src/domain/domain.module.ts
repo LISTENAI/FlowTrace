@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { entities } from '@/database/entities';
 import {
+  ActionItemsController,
   BugsController,
   DependenciesController,
   HistoryController,
@@ -18,6 +19,7 @@ import { WorkService } from '@/domain/work.service';
 @Module({
   imports: [TypeOrmModule.forFeature(entities)],
   controllers: [
+    ActionItemsController,
     ProjectsController,
     ProjectRhythmsController,
     PeopleController,

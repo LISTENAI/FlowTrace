@@ -8,7 +8,7 @@ import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
 import { toasts } from '@/state/toasts';
 
-type PlanningItemType = 'requirement' | 'stage' | 'bug';
+type PlanningItemType = 'requirement' | 'stage' | 'bug' | 'action_item';
 
 const props = withDefaults(
   defineProps<{
@@ -103,6 +103,8 @@ async function save() {
       await api.rescheduleStage(props.itemId, schedule);
     if (hasScheduleChanges.value && props.itemType === 'bug')
       await api.rescheduleBug(props.itemId, schedule);
+    if (hasScheduleChanges.value && props.itemType === 'action_item')
+      await api.rescheduleActionItem(props.itemId, schedule);
     if (hasVersionChanges.value)
       await api.moveRequirement(
         props.itemId,

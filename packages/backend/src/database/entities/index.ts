@@ -1,3 +1,4 @@
+export { ActionItemEntity } from '@/database/entities/action-item.entity';
 export { BugEntity } from '@/database/entities/bug.entity';
 export { AuthPersonBindingEntity } from '@/database/entities/auth-person-binding.entity';
 export { ChangeEventEntity } from '@/database/entities/change-event.entity';
@@ -13,6 +14,7 @@ export { StatusHistoryEntity } from '@/database/entities/status-history.entity';
 export { VersionEntity } from '@/database/entities/version.entity';
 export { VersionHistoryEntity } from '@/database/entities/version-history.entity';
 
+import { ActionItemEntity } from '@/database/entities/action-item.entity';
 import { BugEntity } from '@/database/entities/bug.entity';
 import { AuthPersonBindingEntity } from '@/database/entities/auth-person-binding.entity';
 import { ChangeEventEntity } from '@/database/entities/change-event.entity';
@@ -29,6 +31,7 @@ import { VersionEntity } from '@/database/entities/version.entity';
 import { VersionHistoryEntity } from '@/database/entities/version-history.entity';
 
 export const entities = [
+  ActionItemEntity,
   AuthPersonBindingEntity,
   ProjectEntity,
   ProjectAgentHandoffRevisionEntity,

@@ -14,7 +14,7 @@ export class ScheduleHistoryEntity {
   id!: string;
 
   @Column('text')
-  entityType!: 'requirement' | 'stage' | 'bug';
+  entityType!: 'requirement' | 'stage' | 'bug' | 'action_item';
 
   @Column('uuid')
   entityId!: string;

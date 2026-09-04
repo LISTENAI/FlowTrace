@@ -7,6 +7,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CpuChipIcon,
+  CalendarDaysIcon,
   KeyIcon,
   PencilSquareIcon,
   QueueListIcon,
@@ -202,6 +203,19 @@ onMounted(async () => {
           项目总览
         </RouterLink>
         <RouterLink
+          to="/work"
+          class="focus-ring flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition"
+          :class="
+            route.name === 'work'
+              ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80 dark:bg-slate-900 dark:text-white dark:ring-slate-700'
+              : 'text-slate-500 hover:bg-white/70 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-900/70 dark:hover:text-white'
+          "
+          @click="mobileOpen = false"
+        >
+          <CalendarDaysIcon class="h-[18px] w-[18px]" />
+          我的工作
+        </RouterLink>
+        <RouterLink
           to="/people"
           class="focus-ring flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition"
           :class="
@@ -391,7 +405,7 @@ onMounted(async () => {
 
       <RouterView v-slot="{ Component, route: matchedRoute }">
         <Transition name="page" mode="out-in">
-          <KeepAlive :max="5" include="ProjectView">
+          <KeepAlive :max="5" include="ProjectView,WorkView">
             <component
               :is="Component"
               :key="

@@ -1,6 +1,6 @@
 ---
 name: flowtrace
-description: Manage and review FlowTrace engineering projects through the FlowTrace MCP server. Use when the user asks about FlowTrace projects, versions, requirements, stages, bugs, schedules, Waiting, Blocked, dependencies, recent changes, or asks to update FlowTrace.
+description: Manage and review FlowTrace engineering projects and personal work through the FlowTrace MCP server. Use when the user asks about projects, versions, requirements, stages, bugs, action items, a person's work, schedules, Waiting, Blocked, dependencies, recent changes, or asks to update FlowTrace.
 ---
 
 # FlowTrace
@@ -21,7 +21,9 @@ read path that can answer it:
   asked for a global review.
 - For a current Project or Version overview, resolve the named object with
   `search`, then call its Snapshot Tool.
-- For an existing Requirement, Stage, Bug, or write, resolve only the named
+- For a person's current cross-Project work, resolve the Person with `search`,
+  then call `get_person_work`. Never infer that missing records mean free time.
+- For an existing Requirement, Stage, Bug, Action Item, or write, resolve only the named
   targets with `search`, then call `get_requirement` to verify the current
   facts and stable IDs. For creation, always resolve and inspect the target
   Project. Resolve a Version only when the source or user actually chose one;
@@ -191,6 +193,8 @@ both its stable readable key and its business name:
 - Stage: `FW-12「离线升级支持断点续传」/ 测试`
 - Bug: `FW-BUG-18「升级后配置丢失」`, together with its parent
   Requirement when the surrounding context does not already establish it
+- Action Item: `TODO-12「确认下周评审时间」`, together with its Project
+  context when it has one
 - Version: `Arcs 固件 / 2.7` when the Version name is not globally unique
 
 Never expose internal UUIDs as user-facing names. Do not present a comma-
@@ -210,6 +214,8 @@ request. Stop after any failed step; do not improvise a compensating write.
   without a confirmed delivery boundary belongs in the Project backlog.
 - Requirement is a trackable deliverable. Stage is a real work phase inside a
   Requirement. Status describes how a Stage or Bug is progressing.
+- Action Item is independent work that cannot yet be placed in a Requirement.
+  Its Project and Requirement are optional; never invent a container for it.
 - Work with its own name, owner, status, or time is an independent Stage. Do
   not hide several such phases inside a generic development Stage merely
   because they all happen before implementation.

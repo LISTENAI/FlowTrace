@@ -8,6 +8,7 @@ export const flowTraceResources = [
 
 查询对象时先用 search 取得稳定 ID；同名结果多于一个时不要猜测。
 回答项目或版本整体状态时优先读取 Snapshot，回答近期变化时优先读取 Changes Since。
+回答某个人的跨项目安排时使用 get_person_work；没有记录不代表人员空闲。
 写入前读取目标当前值，只在用户明确要求改动时调用写工具。
 取消旧阶段、迁移依赖或执行三项以上关联写入时，先调用 preview_changes
 展示完整差异；获得确认后再将相同计划交给 apply_changes 原子执行。
@@ -19,12 +20,14 @@ export const flowTraceResources = [
     name: 'flowtrace-model',
     uri: 'flowtrace://concepts/model',
     title: '对象模型',
-    description: 'Project、Version、Requirement、Stage 和 Bug 的职责。',
+    description:
+      'Project、Version、Requirement、Stage、Bug 和 Action Item 的职责。',
     text: `Project 是长期存在的研发对象。
 Version 是 Project 中的一次计划交付，不是另一个项目。
 Requirement 是一项可追踪的交付内容，可属于 Version 或需求池。
 Stage 是 Requirement 内的实际工作环节，每个环节可有独立负责人、状态和排期。
-Bug 是 Requirement 下需要独立追踪的缺陷，也有自己的负责人、状态和排期。`,
+Bug 是 Requirement 下需要独立追踪的缺陷，也有自己的负责人、状态和排期。
+Action Item 是暂时无法归入具体需求或项目的零碎工作，不应为它虚构容器。`,
   },
   {
     name: 'flowtrace-status',
@@ -36,7 +39,7 @@ Bug 是 Requirement 下需要独立追踪的缺陷，也有自己的负责人、
 状态包括：待开始、进行中、等待中、阻塞、已完成和已取消。
 等待中表示恢复条件已知，必须记录原因，能确定时可记录预计恢复时间。
 阻塞表示恢复条件尚不明确，必须记录原因。
-在过去时间追加遗漏事件是补记，使用 update_stage_status 或 update_bug_status 的 effective_at。
+在过去时间追加遗漏事件是补记，使用对应状态工具的 effective_at。
 改动一条已存在的历史是修正，必须先读取其稳定 ID，再使用 correct_status_history 并说明原因。
 不要为了表达等待或阻塞而新增一个 Stage。`,
   },

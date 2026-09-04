@@ -10,6 +10,8 @@ FlowTrace 是面向内部研发团队的轻量项目进度管理工具。它要�
 `docs/product/authentication-v0.3.md`。业务取舍以这些文档为准，后续增量文档
 覆盖早期文档中的阶段性范围判断。Agent 交底与来源审计增量位于
 `docs/product/agent-handoff-v0.4.md`。
+人员工作台与零碎待办增量位于
+`docs/product/personal-work-v0.5.md`。
 
 ## 工程结构
 

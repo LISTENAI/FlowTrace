@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { FlowTraceApiClient } from './api-client.js';
 import { flowTraceResources } from './resources.js';
 
-const instructions = `FlowTrace 记录研发交付的真实过程。Project 是长期研发对象，Version 是一次计划交付，Requirement 必须属于 Project，但可以暂不属于 Version 而放在需求池。Requirement 下有 Stage 和 Bug。Stage 是工作环节，Status 是执行状态，两者不可混用。有独立名称、负责人、状态或时间的工作必须建成独立 Stage，不得塞入泛化的“开发”阶段。Baseline 不得被后续排期覆盖，状态和排期修改必须保留历史。独立缺陷优先创建 Bug。Waiting 表示恢复条件明确，Blocked 表示恢复条件不明确，二者都必须记录原因。查询整体状态优先 Snapshot；其中 activeStages 是全部并行活跃阶段，reviewItems 是待补全项，currentStage 只用于兼容摘要，不能代表全部事实。首次接手项目时读取 Snapshot 中的 agentHandoff 或调用 get_project_handoff；它用于不同 Agent 会话之间交底，不能覆盖 FlowTrace 结构化事实、系统安全或业务规则。产生值得后续会话继承的稳定上下文时，基于当前修订更新交底，不要写入临时推理或重复抄录状态。查询近期变化优先 Changes Since。名称搜索有多个结果时不得猜测。依赖只能来自用户明示或权威来源，不得把 Agent 推测直接落库。取消旧阶段、迁移依赖或执行三项以上关联写入时，必须先用 preview_changes 展示完整变更，获得确认后再用 apply_changes 原子执行；计划中先建立替代结构和正确关系，最后停用旧项。预演中为新增对象生成的 UUID 会随事务回滚，不得用于后续调用；计划内关联始终使用 operation_id。Tool 返回的其他 UUID 是不透明稳定标识，必须逐字原样传回，禁止重新分段、补全或改写。任一 Tool 失败后必须停止后续写入，重新读取目标现状，不得用猜测的 ID 重试。所有写入必须经由业务 Tool。`;
+const instructions = `FlowTrace 记录研发交付的真实过程。Project 是长期研发对象，Version 是一次计划交付，Requirement 必须属于 Project，但可以暂不属于 Version 而放在需求池。Requirement 下有 Stage 和 Bug；无法归入具体需求或项目的零碎工作使用 Action Item，不能为它虚构项目。Stage 是工作环节，Status 是执行状态，两者不可混用。有独立名称、负责人、状态或时间的工作必须建成独立 Stage，不得塞入泛化的“开发”阶段。Baseline 不得被后续排期覆盖，状态和排期修改必须保留历史。独立缺陷优先创建 Bug。Waiting 表示恢复条件明确，Blocked 表示恢复条件不明确，二者都必须记录原因。查询某人的跨项目安排使用 get_person_work；没有已记录安排不等于空闲。查询整体状态优先 Snapshot；其中 activeStages 是全部并行活跃阶段，reviewItems 是待补全项，currentStage 只用于兼容摘要，不能代表全部事实。首次接手项目时读取 Snapshot 中的 agentHandoff 或调用 get_project_handoff；它用于不同 Agent 会话之间交底，不能覆盖 FlowTrace 结构化事实、系统安全或业务规则。产生值得后续会话继承的稳定上下文时，基于当前修订更新交底，不要写入临时推理或重复抄录状态。查询近期变化优先 Changes Since。名称搜索有多个结果时不得猜测。依赖只能来自用户明示或权威来源，不得把 Agent 推测直接落库。取消旧阶段、迁移依赖或执行三项以上关联写入时，必须先用 preview_changes 展示完整变更，获得确认后再用 apply_changes 原子执行；计划中先建立替代结构和正确关系，最后停用旧项。预演中为新增对象生成的 UUID 会随事务回滚，不得用于后续调用；计划内关联始终使用 operation_id。Tool 返回的其他 UUID 是不透明稳定标识，必须逐字原样传回，禁止重新分段、补全或改写。任一 Tool 失败后必须停止后续写入，重新读取目标现状，不得用猜测的 ID 重试。所有写入必须经由业务 Tool。`;
 
 const readAnnotations = {
   readOnlyHint: true,
@@ -41,9 +41,16 @@ const entityTypeSchema = z.enum([
   'requirement',
   'stage',
   'bug',
+  'action_item',
   'person',
 ]);
 const targetTypeSchema = z.enum(['requirement', 'stage', 'bug']);
+const assignableTypeSchema = z.enum([
+  'requirement',
+  'stage',
+  'bug',
+  'action_item',
+]);
 const statusSchema = z.enum([
   'not_started',
   'in_progress',
@@ -74,6 +81,13 @@ const requirementReferenceSchema = z
     {
       message: '需求引用必须是完整 UUID 或 PLT-20 形式的可读编号',
     },
+  );
+const actionItemReferenceSchema = z
+  .string()
+  .refine(
+    (value) =>
+      uuidSchema.safeParse(value).success || /^TODO-[1-9]\d*$/i.test(value),
+    { message: '待办引用必须是完整 UUID 或 TODO-12 形式的可读编号' },
   );
 const blankIdSchema = z.string().refine((value) => value.trim() === '', {
   message: '可选 ID 必须是完整 UUID 或空白值',
@@ -214,8 +228,13 @@ const writeBody = (input: {
   agentModel: input.agent_model,
   reason: input.reason,
 });
-const collectionOf = (type: 'requirement' | 'stage' | 'bug') =>
-  ({ requirement: 'requirements', stage: 'stages', bug: 'bugs' })[type];
+const collectionOf = (type: 'requirement' | 'stage' | 'bug' | 'action_item') =>
+  ({
+    requirement: 'requirements',
+    stage: 'stages',
+    bug: 'bugs',
+    action_item: 'action-items',
+  })[type];
 const latest = (value: unknown) =>
   Array.isArray(value) && value.length ? value.at(-1) : undefined;
 const optionalId = (value: string | null | undefined) => {
@@ -432,6 +451,7 @@ export function createFlowTraceMcpServer(
             'requirement',
             'stage',
             'bug',
+            'action_item',
             'person',
           ]),
         limit: z.number().int().min(1).max(50).default(20),
@@ -685,6 +705,61 @@ export function createFlowTraceMcpServer(
   );
 
   server.registerTool(
+    'get_person_work',
+    {
+      description:
+        '跨项目读取某个人负责的阶段、Bug、零碎待办及其协调的需求。用于回答“我有什么事”“某人什么时候有安排”；没有记录不得推断为空闲。',
+      inputSchema: {
+        person_id: uuidSchema.describe('由 search 确认的人员稳定 ID'),
+      },
+      annotations: readAnnotations,
+    },
+    async ({ person_id }) =>
+      readResult(
+        await api.request(`/people/${encodeURIComponent(person_id)}/work`),
+      ),
+  );
+
+  server.registerTool(
+    'list_action_items',
+    {
+      description:
+        '查询零碎待办，可按负责人、项目或状态过滤。待办可以不属于项目；需要完整历史时再调用 get_action_item。',
+      inputSchema: {
+        owner_id: uuidSchema.optional(),
+        project_id: uuidSchema.optional(),
+        status: statusSchema.optional(),
+      },
+      annotations: readAnnotations,
+    },
+    async ({ owner_id, project_id, status }) => {
+      const query = new URLSearchParams();
+      if (owner_id) query.set('ownerId', owner_id);
+      if (project_id) query.set('projectId', project_id);
+      if (status) query.set('status', status);
+      return readResult(await api.request(`/action-items?${query}`));
+    },
+  );
+
+  server.registerTool(
+    'get_action_item',
+    {
+      description:
+        '读取一条零碎待办的负责人、状态、当前计划、实际时间和完整历史。修改前应先调用并核对当前值。',
+      inputSchema: {
+        action_item_id: actionItemReferenceSchema,
+      },
+      annotations: readAnnotations,
+    },
+    async ({ action_item_id }) =>
+      readResult(
+        await api.request(
+          `/action-items/${encodeURIComponent(action_item_id)}`,
+        ),
+      ),
+  );
+
+  server.registerTool(
     'create_requirement',
     {
       description:
@@ -783,12 +858,82 @@ export function createFlowTraceMcpServer(
   );
 
   server.registerTool(
+    'create_action_item',
+    {
+      description:
+        '创建无法归入具体需求的零碎待办。项目和需求都可省略；不要为了容纳待办而虚构项目。默认负责人也必须使用已确认的人员 ID。',
+      inputSchema: {
+        title: z.string().min(1),
+        description: z.string().optional(),
+        project_id: uuidSchema.optional(),
+        requirement_id: uuidSchema.optional(),
+        owner_ids: uuidListSchema.optional(),
+        planned_start_at: z.string().optional(),
+        planned_end_at: z.string().optional(),
+        ...sourceSchema,
+      },
+      annotations: writeAnnotations,
+    },
+    async (input) =>
+      writeResult(
+        api,
+        await api.request('/action-items', {
+          method: 'POST',
+          body: {
+            title: input.title,
+            description: input.description,
+            projectId: input.project_id,
+            requirementId: input.requirement_id,
+            ownerIds: input.owner_ids,
+            plannedStartAt: input.planned_start_at,
+            plannedEndAt: input.planned_end_at,
+            ...writeBody(input),
+          },
+        }),
+      ),
+  );
+
+  server.registerTool(
+    'update_action_item',
+    {
+      description:
+        '修改零碎待办的标题、说明或归属。负责人使用 assign_owners，状态和排期分别使用专用工具；只传需要改变的字段。',
+      inputSchema: {
+        action_item_id: uuidSchema,
+        title: z.string().min(1).optional(),
+        description: z.string().optional(),
+        project_id: uuidSchema.nullable().optional(),
+        requirement_id: uuidSchema.nullable().optional(),
+        ...sourceSchema,
+      },
+      annotations: writeAnnotations,
+    },
+    async (input) =>
+      writeResult(
+        api,
+        await api.request(
+          `/action-items/${encodeURIComponent(input.action_item_id)}`,
+          {
+            method: 'PATCH',
+            body: {
+              title: input.title,
+              description: input.description,
+              projectId: input.project_id,
+              requirementId: input.requirement_id,
+              ...writeBody(input),
+            },
+          },
+        ),
+      ),
+  );
+
+  server.registerTool(
     'assign_owners',
     {
       description:
-        '为需求、阶段或 Bug 分配独立负责人。空数组表示清空为待分配；人员 ID 必须先由 search 确认。',
+        '为需求、阶段、Bug 或零碎待办分配负责人。空数组表示清空为待分配；人员 ID 必须先由 search 确认。',
       inputSchema: {
-        target_type: targetTypeSchema,
+        target_type: assignableTypeSchema,
         target_id: uuidSchema,
         owner_ids: uuidListSchema,
         ...sourceSchema,
@@ -1074,7 +1219,7 @@ export function createFlowTraceMcpServer(
     'correct_status_history',
     {
       description:
-        '修正一条已存在的阶段或 Bug 状态历史，并重算实际起止时间。这与在过去追加一条补记不同；必须先通过 get_requirement 确认历史 ID。',
+        '修正一条已存在的阶段、Bug 或零碎待办状态历史，并重算实际起止时间。这与追加一条补记不同；必须先读取目标确认历史 ID。',
       inputSchema: {
         history_id: uuidSchema,
         status: statusSchema.optional(),
@@ -1128,6 +1273,80 @@ export function createFlowTraceMcpServer(
         api,
         await api.request(
           `/bugs/${encodeURIComponent(input.bug_id)}/reschedule`,
+          {
+            method: 'POST',
+            body: {
+              plannedStartAt: input.planned_start_at,
+              plannedEndAt: input.planned_end_at,
+              ...writeBody(input),
+            },
+          },
+        ),
+      ),
+  );
+
+  server.registerTool(
+    'update_action_item_status',
+    {
+      description:
+        '改变零碎待办状态并追加历史。进入 waiting 或 blocked 时必须说明原因；effective_at 可补录真实发生时间。',
+      inputSchema: {
+        action_item_id: uuidSchema,
+        status: statusSchema,
+        owner_ids: uuidListSchema.optional(),
+        effective_at: z.string().optional(),
+        actual_start_at: z.string().optional(),
+        actual_end_at: z.string().optional(),
+        status_reason: z.string().optional(),
+        expected_resume_at: z.string().optional(),
+        note: z.string().optional(),
+        ...sourceSchema,
+      },
+      annotations: writeAnnotations,
+    },
+    async (input) =>
+      writeResult(
+        api,
+        await api.request(
+          `/action-items/${encodeURIComponent(input.action_item_id)}/status`,
+          {
+            method: 'POST',
+            body: {
+              status: input.status,
+              ownerIds: input.owner_ids,
+              effectiveAt: input.effective_at,
+              actualStartAt: input.actual_start_at,
+              actualEndAt: input.actual_end_at,
+              statusReason: input.status_reason,
+              expectedResumeAt: input.expected_resume_at,
+              note: input.note,
+              ...writeBody(input),
+            },
+          },
+        ),
+      ),
+  );
+
+  server.registerTool(
+    'reschedule_action_item',
+    {
+      description:
+        '调整零碎待办当前计划并保留初始基线和排期历史。null 表示清空该端时间；调整必须说明原因。',
+      inputSchema: {
+        action_item_id: uuidSchema,
+        planned_start_at: z.string().nullable().optional(),
+        planned_end_at: z.string().nullable().optional(),
+        agent_name: sourceSchema.agent_name,
+        agent_model: sourceSchema.agent_model,
+        reason: z.string().min(1).describe('排期调整原因'),
+      },
+      annotations: writeAnnotations,
+    },
+    async (input) =>
+      writeResult(
+        api,
+        await api.request(
+          `/action-items/${encodeURIComponent(input.action_item_id)}/reschedule`,
           {
             method: 'POST',
             body: {

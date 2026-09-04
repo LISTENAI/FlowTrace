@@ -107,7 +107,7 @@ describe('FlowTrace MCP Server', () => {
     ]);
 
     const tools = await client.listTools();
-    expect(tools.tools).toHaveLength(27);
+    expect(tools.tools).toHaveLength(34);
     expect(tools.tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
         'search',
@@ -117,11 +117,16 @@ describe('FlowTrace MCP Server', () => {
         'get_project_handoff_history',
         'get_version_snapshot',
         'get_requirement',
+        'get_person_work',
+        'list_action_items',
+        'get_action_item',
         'get_changes_since',
         'create_version',
         'update_version',
         'create_requirement',
         'update_requirement',
+        'create_action_item',
+        'update_action_item',
         'assign_owners',
         'move_requirement_to_version',
         'add_stage',
@@ -132,6 +137,8 @@ describe('FlowTrace MCP Server', () => {
         'update_bug_status',
         'correct_status_history',
         'reschedule_bug',
+        'update_action_item_status',
+        'reschedule_action_item',
         'add_dependency',
         'remove_dependency',
         'preview_changes',

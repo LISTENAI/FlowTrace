@@ -14,7 +14,7 @@ export class StatusHistoryEntity {
   id!: string;
 
   @Column('text')
-  entityType!: 'stage' | 'bug';
+  entityType!: 'stage' | 'bug' | 'action_item';
 
   @Column('uuid')
   entityId!: string;

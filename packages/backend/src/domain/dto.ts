@@ -647,6 +647,75 @@ export class UpdateBugDto extends ChangeContextDto {
   targetVersionId?: string;
 }
 
+export class CreateActionItemDto extends ChangeContextDto {
+  @ApiProperty({ example: '联系运维开通测试环境' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  title!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  projectId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  requirementId?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  ownerIds?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsISO8601()
+  plannedStartAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsISO8601()
+  plannedEndAt?: string;
+}
+
+export class UpdateActionItemDto extends ChangeContextDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  title?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsUUID()
+  projectId?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsUUID()
+  requirementId?: string | null;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  ownerIds?: string[];
+}
+
 export class CreateDependencyDto extends ChangeContextDto {
   @ApiProperty({ enum: ['requirement', 'stage', 'bug'] })
   @IsIn(['requirement', 'stage', 'bug'])

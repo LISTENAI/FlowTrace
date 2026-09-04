@@ -32,6 +32,7 @@ import {
 import { useRouter } from 'vue-router';
 import { api } from '@/api';
 import AppModal from '@/components/AppModal.vue';
+import AvatarStack from '@/components/AvatarStack.vue';
 import OwnerPicker from '@/components/OwnerPicker.vue';
 import {
   formatDate,
@@ -1250,6 +1251,14 @@ watch(
                       >{{ requirement.title }}</span
                     >
                   </button>
+                  <AvatarStack
+                    v-tooltip="'需求协调人'"
+                    :owner-ids="requirement.ownerIds"
+                    :max="1"
+                    compact
+                    :show-unassigned="false"
+                    class="shrink-0"
+                  />
                   <TimelineItemActionsMenu
                     :label="requirement.title"
                     allow-edit
@@ -1407,6 +1416,12 @@ watch(
                           >{{ row.stage.name }}</span
                         >
                       </button>
+                      <AvatarStack
+                        :owner-ids="row.stage.ownerIds"
+                        :max="1"
+                        compact
+                        class="shrink-0"
+                      />
                       <TimelineItemActionsMenu
                         :label="row.stage.name"
                         @owners="openOwners(row.stage)"
@@ -1564,6 +1579,12 @@ watch(
                           >{{ bug.title }}</span
                         >
                       </button>
+                      <AvatarStack
+                        :owner-ids="bug.ownerIds"
+                        :max="1"
+                        compact
+                        class="shrink-0"
+                      />
                       <TimelineItemActionsMenu
                         :label="bug.title"
                         @owners="openOwners(bug)"

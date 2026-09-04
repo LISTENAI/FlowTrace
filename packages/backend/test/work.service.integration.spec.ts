@@ -154,6 +154,69 @@ describe.sequential('WorkService business rules', () => {
     ).toBe(true);
   });
 
+  it('collects cross-project work and keeps lightweight todos independent', async () => {
+    const person = await work.createPerson({ name: '跨项目负责人' });
+    const project = await work.createProject({
+      key: 'WORK',
+      name: '人员工作台',
+      templateStages: [{ name: '验证' }],
+    });
+    const requirement = await work.createRequirement({
+      projectId: project.id,
+      title: '核验跨项目视角',
+      ownerIds: [person.id],
+      stages: [{ name: '执行验证', ownerIds: [person.id] }],
+    });
+    const action = await work.createActionItem(
+      {
+        title: '确认评审时间',
+        ownerIds: [person.id],
+        plannedStartAt: '2026-09-05T00:00:00.000Z',
+        plannedEndAt: '2026-09-05T23:59:59.999Z',
+      },
+      person.id,
+    );
+
+    expect(action).toMatchObject({
+      key: 'TODO-1',
+      title: '确认评审时间',
+      projectId: undefined,
+      status: 'not_started',
+    });
+    await work.updateActionItemStatus(action.id, {
+      status: 'in_progress',
+      effectiveAt: '2026-09-05T02:00:00.000Z',
+    });
+
+    const overview = await work.getPersonWork(person.id);
+    expect(overview.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'stage',
+          name: '执行验证',
+          requirement: expect.objectContaining({ id: requirement.id }),
+        }),
+        expect.objectContaining({
+          type: 'action_item',
+          key: action.key,
+          name: '确认评审时间',
+          status: 'in_progress',
+          project: undefined,
+        }),
+      ]),
+    );
+    expect(overview.coordinatedRequirements).toEqual([
+      expect.objectContaining({
+        id: requirement.id,
+        project: expect.objectContaining({ id: project.id }),
+      }),
+    ]);
+    expect(await work.getActionItemByReference(action.key)).toMatchObject({
+      id: action.id,
+      actualStartAt: '2026-09-05T02:00:00.000Z',
+    });
+  });
+
   afterAll(async () => {
     if (dataSource?.isInitialized) await dataSource.destroy();
   });

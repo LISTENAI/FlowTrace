@@ -4,8 +4,13 @@ import { personToneClass } from '@/lib/person-color';
 import { workspace } from '@/state/workspace';
 
 const props = withDefaults(
-  defineProps<{ ownerIds: string[]; max?: number; compact?: boolean }>(),
-  { max: 3, compact: false },
+  defineProps<{
+    ownerIds: string[];
+    max?: number;
+    compact?: boolean;
+    showUnassigned?: boolean;
+  }>(),
+  { max: 3, compact: false, showUnassigned: true },
 );
 
 const owners = computed(() =>
@@ -43,6 +48,11 @@ const owners = computed(() =>
     >
       +{{ owners.length - max }}
     </div>
-    <span v-if="!owners.length" class="text-xs text-slate-400">待分配</span>
+    <span
+      v-if="!owners.length && showUnassigned"
+      class="text-slate-400"
+      :class="compact ? 'text-[10px]' : 'text-xs'"
+      >待分配</span
+    >
   </div>
 </template>

@@ -8,6 +8,7 @@ import ProjectView from '@/views/ProjectView.vue';
 import RequirementView from '@/views/RequirementView.vue';
 import LoginView from '@/views/LoginView.vue';
 import IdentityIssueView from '@/views/IdentityIssueView.vue';
+import WorkView from '@/views/WorkView.vue';
 import { authClient, currentIdentity, IdentityProvisioningError } from '@/auth';
 
 export const router = createRouter({
@@ -20,6 +21,7 @@ export const router = createRouter({
       component: IdentityIssueView,
     },
     { path: '/', name: 'projects', component: ProjectListView },
+    { path: '/work', name: 'work', component: WorkView },
     { path: '/projects/:projectId', name: 'project', component: ProjectView },
     {
       path: '/projects/:projectId/settings',

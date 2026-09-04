@@ -12,6 +12,7 @@ simple factual lookup.
 | Track one deliverable outcome                                 | Requirement    | Can it be reviewed and accepted as one item?                        |
 | Track one kind of work within a Requirement                   | Stage          | Does it represent a real phase with its own owner, status, or time? |
 | Track one independently actionable defect                     | Bug            | Does it need separate assignment, schedule, or acceptance?          |
+| Track a small item outside a confirmed Requirement            | Action Item    | Would assigning it to a Project or Requirement require guessing?    |
 
 If a proposed Requirement contains several outcomes that can be accepted or
 delayed independently, propose separate Requirements. Do not split solely to
@@ -45,6 +46,7 @@ or blocked interval; the Tool appends history.
 - Requirement owners coordinate the overall outcome.
 - Stage owners execute that phase.
 - Bug owners resolve that defect.
+- Action Item owners execute that independent item; its creator is only provenance.
 - An empty owner list means unassigned; it is not an error.
 - A person's stable ID survives rename and inactive status. Routine search
   returns active people only. Include inactive people explicitly for historical

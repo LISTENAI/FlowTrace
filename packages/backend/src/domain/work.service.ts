@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type {
+  ActionItem,
   Bug,
   ChangeSetApplication,
   ChangeSetOperationResult,
@@ -19,6 +20,8 @@ import type {
   ExecutionStatus,
   HealthStatus,
   Person,
+  PersonWorkItem,
+  PersonWorkOverview,
   Project,
   ProjectAgentHandoff,
   ProjectAgentHandoffRevision,
@@ -63,6 +66,7 @@ import {
   Repository,
 } from 'typeorm';
 import {
+  ActionItemEntity,
   AuthPersonBindingEntity,
   BugEntity,
   ChangeEventEntity,
@@ -85,6 +89,7 @@ import {
   ChangeContextDto,
   type ChangeSetOperationDto,
   CorrectStatusHistoryDto,
+  CreateActionItemDto,
   CreateBugDto,
   CreateDependencyDto,
   CreatePersonDto,
@@ -101,6 +106,7 @@ import {
   RescheduleDto,
   SupersedeStageDto,
   UpdateBugDto,
+  UpdateActionItemDto,
   UpdatePersonDto,
   UpdateProjectDto,
   UpdateProjectAgentHandoffDto,
@@ -112,9 +118,11 @@ import {
   UpdateVersionDto,
 } from '@/domain/dto';
 
-type TrackableEntity = StageEntity | BugEntity;
-type SchedulableEntity = RequirementEntity | StageEntity | BugEntity;
-type EntityKind = 'requirement' | 'stage' | 'bug';
+type TrackableEntity = StageEntity | BugEntity | ActionItemEntity;
+type SchedulableEntity =
+  RequirementEntity | StageEntity | BugEntity | ActionItemEntity;
+type TrackableKind = 'stage' | 'bug' | 'action_item';
+type EntityKind = 'requirement' | TrackableKind;
 type ChangeFilters = {
   since: string;
   projectId?: string;
@@ -193,6 +201,8 @@ export class WorkService {
     private readonly stages: Repository<StageEntity>,
     @InjectRepository(BugEntity)
     private readonly bugs: Repository<BugEntity>,
+    @InjectRepository(ActionItemEntity)
+    private readonly actionItems: Repository<ActionItemEntity>,
     @InjectRepository(StatusHistoryEntity)
     private readonly statuses: Repository<StatusHistoryEntity>,
     @InjectRepository(ScheduleHistoryEntity)
@@ -437,11 +447,17 @@ export class WorkService {
     const compactNeedle = normalizeSearchText(query);
     const needleVersionParts = versionParts(query);
     const selected = new Set(types.length ? types : searchEntityTypes);
-    const needsRequirements = ['requirement', 'stage', 'bug'].some((type) =>
-      selected.has(type as SearchEntityType),
-    );
+    const needsRequirements = [
+      'requirement',
+      'stage',
+      'bug',
+      'action_item',
+    ].some((type) => selected.has(type as SearchEntityType));
     const needsProjects =
-      needsRequirements || selected.has('project') || selected.has('version');
+      needsRequirements ||
+      selected.has('project') ||
+      selected.has('version') ||
+      selected.has('action_item');
     const needsVersions = needsRequirements || selected.has('version');
     const [
       projectRows,
@@ -449,6 +465,7 @@ export class WorkService {
       requirementRows,
       stageRows,
       bugRows,
+      actionItemRows,
       people,
     ] = await Promise.all([
       needsProjects ? this.projects.find() : [],
@@ -456,6 +473,7 @@ export class WorkService {
       needsRequirements ? this.requirements.find() : [],
       selected.has('stage') ? this.stages.find() : [],
       selected.has('bug') ? this.bugs.find() : [],
+      selected.has('action_item') ? this.actionItems.find() : [],
       selected.has('person')
         ? this.people.find({
             where: includeInactivePeople ? {} : { active: true },
@@ -647,6 +665,39 @@ export class WorkService {
         );
       }
     }
+    if (selected.has('action_item')) {
+      for (const item of actionItemRows) {
+        const requirement = item.requirementId
+          ? requirements.get(item.requirementId)
+          : undefined;
+        const project = item.projectId
+          ? projects.get(item.projectId)
+          : requirement
+            ? projects.get(requirement.projectId)
+            : undefined;
+        add(
+          {
+            type: 'action_item',
+            id: item.id,
+            key: item.key,
+            name: item.title,
+            projectId: project?.id,
+            projectName: project?.name,
+            requirementId: requirement?.id,
+            requirementKey: requirement?.key,
+            status: item.status,
+          },
+          [
+            item.key,
+            item.title,
+            item.description,
+            requirement?.key,
+            requirement?.title,
+            project?.name,
+          ],
+        );
+      }
+    }
     if (selected.has('person')) {
       for (const person of people) {
         add(
@@ -737,6 +788,315 @@ export class WorkService {
     if (input.note !== undefined) person.note = input.note || null;
     if (input.active !== undefined) person.active = input.active;
     return this.toPerson(await this.people.save(person), binding ?? undefined);
+  }
+
+  async getPersonWork(id: string): Promise<PersonWorkOverview> {
+    const person = await this.people.findOneBy({ id });
+    if (!person) throw new NotFoundException('未找到人员');
+    const binding = await this.personBindings.findOneBy({ personId: id });
+    const [stageRows, bugRows, actionRows, requirementRows, projectRows] =
+      await Promise.all([
+        this.stages.find({ order: { updatedAt: 'DESC' } }),
+        this.bugs.find({ order: { updatedAt: 'DESC' } }),
+        this.actionItems.find({ order: { updatedAt: 'DESC' } }),
+        this.requirements.find({ order: { updatedAt: 'DESC' } }),
+        this.projects.find({ order: { name: 'ASC' } }),
+      ]);
+    const ownedStages = stageRows.filter((item) => item.ownerIds.includes(id));
+    const ownedBugs = bugRows.filter((item) => item.ownerIds.includes(id));
+    const ownedActions = actionRows.filter((item) =>
+      item.ownerIds.includes(id),
+    );
+    const itemIds = [
+      ...ownedStages.map((item) => item.id),
+      ...ownedBugs.map((item) => item.id),
+      ...ownedActions.map((item) => item.id),
+    ];
+    const [histories, schedules] = itemIds.length
+      ? await Promise.all([
+          this.statuses.find({
+            where: { entityId: In(itemIds) },
+            order: { effectiveAt: 'ASC' },
+          }),
+          this.schedules.find({
+            where: { entityId: In(itemIds) },
+            order: { changedAt: 'ASC' },
+          }),
+        ])
+      : [[], []];
+    const requirementMap = new Map(
+      requirementRows.map((item) => [item.id, item]),
+    );
+    const projectMap = new Map(projectRows.map((item) => [item.id, item]));
+    const versionIds = [
+      ...new Set(
+        requirementRows
+          .filter((item) => item.ownerIds.includes(id))
+          .map((item) => item.versionId)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
+    const versionRows = versionIds.length
+      ? await this.versions.findBy({ id: In(versionIds) })
+      : [];
+    const versionMap = new Map(versionRows.map((item) => [item.id, item]));
+    const historyFor = (entityType: TrackableKind, entityId: string) =>
+      histories.filter(
+        (item) => item.entityType === entityType && item.entityId === entityId,
+      );
+    const scheduleFor = (entityType: EntityKind, entityId: string) =>
+      schedules.filter(
+        (item) => item.entityType === entityType && item.entityId === entityId,
+      );
+    const contextFor = (
+      requirementId?: string | null,
+      projectId?: string | null,
+    ) => {
+      const requirement = requirementId
+        ? requirementMap.get(requirementId)
+        : undefined;
+      const project = projectMap.get(projectId ?? requirement?.projectId ?? '');
+      return {
+        project: project
+          ? { id: project.id, key: project.key, name: project.name }
+          : undefined,
+        requirement: requirement
+          ? {
+              id: requirement.id,
+              key: requirement.key,
+              title: requirement.title,
+            }
+          : undefined,
+      };
+    };
+    const items: PersonWorkItem[] = [
+      ...ownedStages.map((row) => {
+        const item = this.toStage(
+          row,
+          historyFor('stage', row.id),
+          scheduleFor('stage', row.id),
+        );
+        return {
+          ...item,
+          type: 'stage' as const,
+          name: item.name,
+          ...contextFor(row.requirementId),
+        };
+      }),
+      ...ownedBugs.map((row) => {
+        const item = this.toBug(
+          row,
+          historyFor('bug', row.id),
+          scheduleFor('bug', row.id),
+        );
+        return {
+          ...item,
+          type: 'bug' as const,
+          name: item.title,
+          ...contextFor(row.requirementId),
+        };
+      }),
+      ...ownedActions.map((row) => {
+        const item = this.toActionItem(
+          row,
+          historyFor('action_item', row.id),
+          scheduleFor('action_item', row.id),
+        );
+        return {
+          ...item,
+          type: 'action_item' as const,
+          name: item.title,
+          ...contextFor(row.requirementId, row.projectId),
+        };
+      }),
+    ].sort((left, right) => {
+      const leftTime = left.plannedStartAt ?? left.plannedEndAt;
+      const rightTime = right.plannedStartAt ?? right.plannedEndAt;
+      return (
+        (leftTime ? new Date(leftTime).getTime() : Number.MAX_SAFE_INTEGER) -
+          (rightTime
+            ? new Date(rightTime).getTime()
+            : Number.MAX_SAFE_INTEGER) ||
+        left.name.localeCompare(right.name, 'zh-CN')
+      );
+    });
+    const coordinatedRequirements = await Promise.all(
+      requirementRows
+        .filter((item) => item.ownerIds.includes(id))
+        .map(async (row) => ({
+          ...(await this.getRequirementSummary(row)),
+          project: (() => {
+            const project = projectMap.get(row.projectId)!;
+            return { id: project.id, key: project.key, name: project.name };
+          })(),
+          version: row.versionId
+            ? (() => {
+                const version = versionMap.get(row.versionId!);
+                return version
+                  ? { id: version.id, name: version.name }
+                  : undefined;
+              })()
+            : undefined,
+        })),
+    );
+    return {
+      person: this.toPerson(person, binding ?? undefined),
+      items,
+      coordinatedRequirements,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  async listActionItems(filters: {
+    ownerId?: string;
+    projectId?: string;
+    status?: ExecutionStatus;
+  }): Promise<ActionItem[]> {
+    const rows = await this.actionItems.find({ order: { updatedAt: 'DESC' } });
+    return Promise.all(
+      rows
+        .filter(
+          (item) =>
+            (!filters.ownerId || item.ownerIds.includes(filters.ownerId)) &&
+            (!filters.projectId || item.projectId === filters.projectId) &&
+            (!filters.status || item.status === filters.status),
+        )
+        .map((item) => this.getActionItem(item.id)),
+    );
+  }
+
+  async getActionItemByReference(idOrKey: string): Promise<ActionItem> {
+    const item = await this.findActionItem(idOrKey);
+    return this.getActionItem(item.id);
+  }
+
+  async createActionItem(
+    input: CreateActionItemDto,
+    actorPersonId: string,
+  ): Promise<ActionItem> {
+    const scope = await this.resolveActionItemScope(
+      input.projectId,
+      input.requirementId,
+    );
+    const itemId = await this.dataSource.transaction(async (manager) => {
+      const result = (await manager.query(
+        'SELECT nextval(\'action_item_key_seq\') AS "value"',
+      )) as Array<{ value: string | number }>;
+      const sequence = result[0]?.value;
+      if (sequence === undefined)
+        throw new ConflictException('无法生成待办编号');
+      const item = manager.getRepository(ActionItemEntity).create({
+        id: randomUUID(),
+        key: `TODO-${sequence}`,
+        title: input.title.trim(),
+        description: input.description?.trim() || null,
+        projectId: scope.projectId,
+        requirementId: scope.requirementId,
+        ownerIds: input.ownerIds ?? [actorPersonId],
+        status: 'not_started',
+        statusReason: null,
+        expectedResumeAt: null,
+        createdByPersonId: actorPersonId,
+        baselineStartAt: date(input.plannedStartAt),
+        baselineEndAt: date(input.plannedEndAt),
+        plannedStartAt: date(input.plannedStartAt),
+        plannedEndAt: date(input.plannedEndAt),
+        actualStartAt: null,
+        actualEndAt: null,
+      });
+      await manager.save(item);
+      await this.recordChange(manager, {
+        entityType: 'action_item',
+        entityId: item.id,
+        projectId: item.projectId ?? undefined,
+        requirementId: item.requirementId ?? undefined,
+        type: 'action_item_created',
+        summary: `创建 ${item.key}「${item.title}」`,
+        ...context(input),
+      });
+      return item.id;
+    });
+    return this.getActionItem(itemId);
+  }
+
+  async updateActionItem(
+    id: string,
+    input: UpdateActionItemDto,
+  ): Promise<ActionItem> {
+    const item = await this.findActionItem(id);
+    if (
+      input.title === undefined &&
+      input.description === undefined &&
+      input.projectId === undefined &&
+      input.requirementId === undefined &&
+      input.ownerIds === undefined
+    ) {
+      return this.getActionItem(item.id);
+    }
+    const nextRequirementId =
+      input.requirementId === undefined
+        ? item.requirementId
+        : input.requirementId;
+    const nextProjectId =
+      input.projectId === undefined ? item.projectId : input.projectId;
+    const scope = await this.resolveActionItemScope(
+      nextProjectId ?? undefined,
+      nextRequirementId ?? undefined,
+    );
+    const before = {
+      title: item.title,
+      description: item.description,
+      projectId: item.projectId,
+      requirementId: item.requirementId,
+      ownerIds: item.ownerIds,
+    };
+    if (input.title !== undefined) item.title = input.title.trim();
+    if (input.description !== undefined)
+      item.description = input.description.trim() || null;
+    item.projectId = scope.projectId;
+    item.requirementId = scope.requirementId;
+    if (input.ownerIds !== undefined) item.ownerIds = input.ownerIds;
+    await this.dataSource.transaction(async (manager) => {
+      await manager.save(item);
+      await this.recordChange(manager, {
+        entityType: 'action_item',
+        entityId: item.id,
+        projectId: item.projectId ?? undefined,
+        requirementId: item.requirementId ?? undefined,
+        type: 'action_item_updated',
+        summary: `${item.key} 更新基本资料`,
+        details: {
+          before,
+          after: {
+            title: item.title,
+            description: item.description,
+            projectId: item.projectId,
+            requirementId: item.requirementId,
+            ownerIds: item.ownerIds,
+          },
+        },
+        ...context(input),
+      });
+    });
+    return this.getActionItem(item.id);
+  }
+
+  async updateActionItemStatus(
+    id: string,
+    input: UpdateStatusDto,
+  ): Promise<ActionItem> {
+    const item = await this.findActionItem(id);
+    await this.changeStatus('action_item', item, input);
+    return this.getActionItem(item.id);
+  }
+
+  async rescheduleActionItem(
+    id: string,
+    input: RescheduleDto,
+  ): Promise<ActionItem> {
+    const item = await this.findActionItem(id);
+    await this.reschedule('action_item', item, input);
+    return this.getActionItem(item.id);
   }
 
   async listVersions(projectId: string): Promise<Version[]> {
@@ -1561,7 +1921,7 @@ export class WorkService {
   async correctStatusHistory(
     id: string,
     input: CorrectStatusHistoryDto,
-  ): Promise<Stage | Bug> {
+  ): Promise<Stage | Bug | ActionItem> {
     const history = await this.statuses.findOneBy({ id });
     if (!history) throw new NotFoundException('未找到状态历史');
     const before = {
@@ -1618,24 +1978,42 @@ export class WorkService {
           ? await manager
               .getRepository(StageEntity)
               .findOneBy({ id: history.entityId })
-          : await manager
-              .getRepository(BugEntity)
-              .findOneBy({ id: history.entityId });
+          : history.entityType === 'bug'
+            ? await manager
+                .getRepository(BugEntity)
+                .findOneBy({ id: history.entityId })
+            : await manager
+                .getRepository(ActionItemEntity)
+                .findOneBy({ id: history.entityId });
       if (!entity) throw new NotFoundException('未找到历史记录对应的事项');
-      const requirement = await manager
-        .getRepository(RequirementEntity)
-        .findOneBy({ id: entity.requirementId });
-      if (!requirement) throw new NotFoundException('未找到历史记录对应的需求');
-      await this.recomputeRequirement(manager, entity.requirementId);
+      const requirementId =
+        'requirementId' in entity ? entity.requirementId : null;
+      const requirement = requirementId
+        ? await manager
+            .getRepository(RequirementEntity)
+            .findOneBy({ id: requirementId })
+        : undefined;
+      if (history.entityType !== 'action_item' && !requirement)
+        throw new NotFoundException('未找到历史记录对应的需求');
+      if (history.entityType !== 'action_item' && requirementId)
+        await this.recomputeRequirement(manager, requirementId);
       const itemName =
         history.entityType === 'stage'
           ? (entity as StageEntity).name
-          : (entity as BugEntity).key;
+          : history.entityType === 'bug'
+            ? (entity as BugEntity).key
+            : (entity as ActionItemEntity).key;
       await this.recordChange(manager, {
         entityType: history.entityType,
         entityId: history.entityId,
-        projectId: requirement.projectId,
-        requirementId: requirement.id,
+        projectId:
+          requirement?.projectId ??
+          (entity as ActionItemEntity).projectId ??
+          undefined,
+        requirementId:
+          requirement?.id ??
+          (entity as ActionItemEntity).requirementId ??
+          undefined,
         type: `${history.entityType}_status_history_corrected`,
         summary: `${itemName} 修正历史状态记录`,
         details: { historyId: history.id, before, after },
@@ -1644,7 +2022,9 @@ export class WorkService {
     });
     return history.entityType === 'stage'
       ? this.getStage(history.entityId)
-      : this.getBug(history.entityId);
+      : history.entityType === 'bug'
+        ? this.getBug(history.entityId)
+        : this.getActionItem(history.entityId);
   }
 
   async listDependencies(requirementId?: string): Promise<Dependency[]> {
@@ -1957,7 +2337,7 @@ export class WorkService {
   }
 
   private async changeStatus(
-    kind: 'stage' | 'bug',
+    kind: TrackableKind,
     entity: TrackableEntity,
     input: UpdateStatusDto,
   ): Promise<void> {
@@ -1983,7 +2363,12 @@ export class WorkService {
       input.ownerIds !== undefined &&
       [...input.ownerIds].sort().join('\0') !==
         [...entity.ownerIds].sort().join('\0');
-    const requirement = await this.findRequirement(entity.requirementId);
+    const requirement =
+      kind === 'action_item' || !('requirementId' in entity)
+        ? undefined
+        : await this.findRequirement(
+            (entity as StageEntity | BugEntity).requirementId,
+          );
     await this.dataSource.transaction(async (manager) => {
       let historyCreatedAt = await this.nextStatusHistoryCreatedAt(
         manager,
@@ -2054,26 +2439,32 @@ export class WorkService {
         await this.recomputeTrackable(manager, kind, entity.id);
       }
       if (ownersChanged && input.ownerIds) {
-        const repository = manager.getRepository(
-          kind === 'stage' ? StageEntity : BugEntity,
-        );
+        const repository = this.trackableRepository(manager, kind);
         const current = await repository.findOneBy({ id: entity.id });
         if (current) {
           current.ownerIds = input.ownerIds;
           await repository.save(current);
         }
       }
-      await this.recomputeRequirement(manager, requirement.id);
+      if (requirement) await this.recomputeRequirement(manager, requirement.id);
       const name =
         kind === 'stage'
           ? (entity as StageEntity).name
-          : (entity as BugEntity).key;
+          : kind === 'bug'
+            ? (entity as BugEntity).key
+            : (entity as ActionItemEntity).key;
       if (recordsStatus) {
         await this.recordChange(manager, {
           entityType: kind,
           entityId: entity.id,
-          projectId: requirement.projectId,
-          requirementId: requirement.id,
+          projectId:
+            requirement?.projectId ??
+            (entity as ActionItemEntity).projectId ??
+            undefined,
+          requirementId:
+            requirement?.id ??
+            (entity as ActionItemEntity).requirementId ??
+            undefined,
           type: `${kind}_status_changed`,
           summary: `${name} 状态更新为 ${this.statusLabel(input.status)}`,
           details: {
@@ -2089,8 +2480,14 @@ export class WorkService {
         await this.recordChange(manager, {
           entityType: kind,
           entityId: entity.id,
-          projectId: requirement.projectId,
-          requirementId: requirement.id,
+          projectId:
+            requirement?.projectId ??
+            (entity as ActionItemEntity).projectId ??
+            undefined,
+          requirementId:
+            requirement?.id ??
+            (entity as ActionItemEntity).requirementId ??
+            undefined,
           type: `${kind}_actual_period_corrected`,
           summary: `${name} 补录实际起止时间`,
           details: {
@@ -2104,8 +2501,14 @@ export class WorkService {
         await this.recordChange(manager, {
           entityType: kind,
           entityId: entity.id,
-          projectId: requirement.projectId,
-          requirementId: requirement.id,
+          projectId:
+            requirement?.projectId ??
+            (entity as ActionItemEntity).projectId ??
+            undefined,
+          requirementId:
+            requirement?.id ??
+            (entity as ActionItemEntity).requirementId ??
+            undefined,
           type: `${kind}_updated`,
           summary: `${name} 更新负责人`,
           details: {
@@ -2120,7 +2523,7 @@ export class WorkService {
 
   private async reconcileActualPeriod(
     manager: EntityManager,
-    kind: 'stage' | 'bug',
+    kind: TrackableKind,
     entityId: string,
     actualStartAt: Date | null,
     actualEndAt: Date | null,
@@ -2185,7 +2588,7 @@ export class WorkService {
 
   private async nextStatusHistoryCreatedAt(
     manager: EntityManager,
-    kind: 'stage' | 'bug',
+    kind: TrackableKind,
     entityId: string,
   ): Promise<Date> {
     const latest = await manager.getRepository(StatusHistoryEntity).findOne({
@@ -2205,9 +2608,11 @@ export class WorkService {
     const requirement =
       kind === 'requirement'
         ? (entity as RequirementEntity)
-        : await this.findRequirement(
-            (entity as StageEntity | BugEntity).requirementId,
-          );
+        : kind === 'action_item'
+          ? undefined
+          : await this.findRequirement(
+              (entity as StageEntity | BugEntity).requirementId,
+            );
     const oldStart = entity.plannedStartAt;
     const oldEnd = entity.plannedEndAt;
     const nextStart =
@@ -2243,10 +2648,16 @@ export class WorkService {
       await this.recordChange(manager, {
         entityType: kind,
         entityId: entity.id,
-        projectId: requirement.projectId,
-        requirementId: requirement.id,
+        projectId:
+          requirement?.projectId ??
+          (entity as ActionItemEntity).projectId ??
+          undefined,
+        requirementId:
+          requirement?.id ??
+          (entity as ActionItemEntity).requirementId ??
+          undefined,
         type: `${kind}_rescheduled`,
-        summary: `${kind === 'stage' ? (entity as StageEntity).name : kind === 'bug' ? (entity as BugEntity).key : requirement.key} 调整排期`,
+        summary: `${kind === 'stage' ? (entity as StageEntity).name : kind === 'bug' ? (entity as BugEntity).key : kind === 'action_item' ? (entity as ActionItemEntity).key : requirement!.key} 调整排期`,
         details: {
           oldStartAt: iso(oldStart),
           oldEndAt: iso(oldEnd),
@@ -2260,7 +2671,7 @@ export class WorkService {
 
   private async recomputeTrackable(
     manager: EntityManager,
-    kind: 'stage' | 'bug',
+    kind: TrackableKind,
     entityId: string,
   ): Promise<void> {
     const history = this.orderStatusHistory(
@@ -2277,9 +2688,7 @@ export class WorkService {
       previousStatus = item.toStatus;
     }
     await manager.getRepository(StatusHistoryEntity).save(history);
-    const repository = manager.getRepository(
-      kind === 'stage' ? StageEntity : BugEntity,
-    );
+    const repository = this.trackableRepository(manager, kind);
     const entity = await repository.findOneBy({ id: entityId });
     if (!entity) return;
     entity.status = latest.toStatus;
@@ -2386,6 +2795,21 @@ export class WorkService {
       }),
     ]);
     return this.toBug(bug, statuses, schedules);
+  }
+
+  private async getActionItem(id: string): Promise<ActionItem> {
+    const item = await this.findActionItem(id);
+    const [statuses, schedules] = await Promise.all([
+      this.statuses.find({
+        where: { entityType: 'action_item', entityId: id },
+        order: { effectiveAt: 'ASC' },
+      }),
+      this.schedules.find({
+        where: { entityType: 'action_item', entityId: id },
+        order: { changedAt: 'ASC' },
+      }),
+    ]);
+    return this.toActionItem(item, statuses, schedules);
   }
 
   private async hydrateRequirement(
@@ -2792,6 +3216,35 @@ export class WorkService {
     };
   }
 
+  private toActionItem(
+    row: ActionItemEntity,
+    statusHistory: StatusHistoryEntity[],
+    scheduleHistory: ScheduleHistoryEntity[],
+  ): ActionItem {
+    return {
+      id: row.id,
+      key: row.key,
+      title: row.title,
+      description: row.description ?? undefined,
+      projectId: row.projectId ?? undefined,
+      requirementId: row.requirementId ?? undefined,
+      ownerIds: row.ownerIds,
+      status: row.status,
+      statusReason: row.statusReason ?? undefined,
+      expectedResumeAt: iso(row.expectedResumeAt),
+      createdByPersonId: row.createdByPersonId,
+      statusHistory: this.orderStatusHistory(statusHistory).map((item) =>
+        this.toStatusHistory(item),
+      ),
+      scheduleHistory: scheduleHistory.map((item) =>
+        this.toScheduleHistory(item),
+      ),
+      ...this.timing(row),
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
   private toStatusHistory(row: StatusHistoryEntity): StatusHistory {
     return {
       id: row.id,
@@ -3073,6 +3526,7 @@ export class WorkService {
       manager.getRepository(RequirementEntity),
       manager.getRepository(StageEntity),
       manager.getRepository(BugEntity),
+      manager.getRepository(ActionItemEntity),
       manager.getRepository(StatusHistoryEntity),
       manager.getRepository(ScheduleHistoryEntity),
       manager.getRepository(VersionHistoryEntity),
@@ -3677,6 +4131,56 @@ export class WorkService {
     });
     if (!bug) throw new NotFoundException('未找到 Bug');
     return bug;
+  }
+
+  private async findActionItem(idOrKey: string): Promise<ActionItemEntity> {
+    const item = await this.actionItems.findOne({
+      where: isUUID(idOrKey)
+        ? [{ id: idOrKey }, { key: idOrKey.toUpperCase() }]
+        : { key: idOrKey.toUpperCase() },
+    });
+    if (!item) throw new NotFoundException('未找到待办');
+    return item;
+  }
+
+  private async resolveActionItemScope(
+    projectId?: string,
+    requirementId?: string,
+  ): Promise<{ projectId: string | null; requirementId: string | null }> {
+    if (requirementId) {
+      const requirement = await this.findRequirement(requirementId);
+      if (projectId && projectId !== requirement.projectId) {
+        throw new BadRequestException('待办关联的项目与需求不一致');
+      }
+      return {
+        projectId: requirement.projectId,
+        requirementId: requirement.id,
+      };
+    }
+    if (projectId) {
+      const project = await this.findProject(projectId);
+      return { projectId: project.id, requirementId: null };
+    }
+    return { projectId: null, requirementId: null };
+  }
+
+  private trackableRepository(
+    manager: EntityManager,
+    kind: TrackableKind,
+  ): Repository<TrackableEntity> {
+    if (kind === 'stage') {
+      return manager.getRepository(
+        StageEntity,
+      ) as unknown as Repository<TrackableEntity>;
+    }
+    if (kind === 'bug') {
+      return manager.getRepository(
+        BugEntity,
+      ) as unknown as Repository<TrackableEntity>;
+    }
+    return manager.getRepository(
+      ActionItemEntity,
+    ) as unknown as Repository<TrackableEntity>;
   }
 
   private async assertVersionInProject(

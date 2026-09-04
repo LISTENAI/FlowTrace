@@ -31,6 +31,7 @@ export const searchEntityTypes = [
   'requirement',
   'stage',
   'bug',
+  'action_item',
   'person',
 ] as const;
 export type SearchEntityType = (typeof searchEntityTypes)[number];
@@ -228,6 +229,54 @@ export interface Bug extends WorkTiming {
   scheduleHistory: ScheduleHistory[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ActionItem extends WorkTiming {
+  id: string;
+  key: string;
+  title: string;
+  description?: string;
+  projectId?: string;
+  requirementId?: string;
+  ownerIds: string[];
+  status: ExecutionStatus;
+  statusReason?: string;
+  expectedResumeAt?: string;
+  createdByPersonId: string;
+  statusHistory: StatusHistory[];
+  scheduleHistory: ScheduleHistory[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PersonWorkItemType = 'stage' | 'bug' | 'action_item';
+
+export interface PersonWorkItem extends WorkTiming {
+  type: PersonWorkItemType;
+  id: string;
+  key?: string;
+  name: string;
+  description?: string;
+  status: ExecutionStatus;
+  statusReason?: string;
+  expectedResumeAt?: string;
+  ownerIds: string[];
+  statusHistory: StatusHistory[];
+  scheduleHistory: ScheduleHistory[];
+  project?: Pick<Project, 'id' | 'key' | 'name'>;
+  requirement?: Pick<Requirement, 'id' | 'key' | 'title'>;
+}
+
+export interface CoordinatedRequirement extends RequirementSummary {
+  project: Pick<Project, 'id' | 'key' | 'name'>;
+  version?: Pick<Version, 'id' | 'name'>;
+}
+
+export interface PersonWorkOverview {
+  person: Person;
+  items: PersonWorkItem[];
+  coordinatedRequirements: CoordinatedRequirement[];
+  generatedAt: string;
 }
 
 export interface VersionHistory {

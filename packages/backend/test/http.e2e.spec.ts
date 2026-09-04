@@ -97,6 +97,11 @@ describe.sequential('HTTP API', () => {
     expect(response.body.paths).toHaveProperty(
       '/api/projects/{id}/agent-handoff/history',
     );
+    expect(response.body.paths).toHaveProperty('/api/people/{id}/work');
+    expect(response.body.paths).toHaveProperty('/api/action-items');
+    expect(response.body.paths).toHaveProperty(
+      '/api/action-items/{id}/status',
+    );
   });
 
   it('serves the stateless remote MCP endpoint outside the API prefix', async () => {
@@ -129,12 +134,14 @@ describe.sequential('HTTP API', () => {
       .set('accept', 'application/json, text/event-stream')
       .send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
       .expect(200);
-    expect(tools.body.result.tools).toHaveLength(27);
+    expect(tools.body.result.tools).toHaveLength(34);
     expect(tools.body.result.tools).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'search' }),
         expect.objectContaining({ name: 'update_stage' }),
         expect.objectContaining({ name: 'update_stage_status' }),
+        expect.objectContaining({ name: 'get_person_work' }),
+        expect.objectContaining({ name: 'create_action_item' }),
         expect.objectContaining({ name: 'preview_changes' }),
         expect.objectContaining({ name: 'apply_changes' }),
       ]),
