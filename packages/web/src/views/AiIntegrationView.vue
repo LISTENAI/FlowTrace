@@ -7,11 +7,13 @@ import {
   ExclamationTriangleIcon,
   LightBulbIcon,
   KeyIcon,
+  PencilSquareIcon,
   PuzzlePieceIcon,
   TrashIcon,
 } from '@heroicons/vue/24/outline';
 import { onMounted, ref } from 'vue';
 import { request } from '@/api/client';
+import AppModal from '@/components/AppModal.vue';
 import { toasts } from '@/state/toasts';
 
 interface PersonalApiKey {
@@ -30,7 +32,11 @@ const capabilities = ref<{
 const capabilityError = ref('');
 const apiKeys = ref<PersonalApiKey[]>([]);
 const createdKey = ref('');
+const createdKeyId = ref('');
 const keyLoading = ref(false);
+const keyDialogOpen = ref(false);
+const editingKey = ref<PersonalApiKey>();
+const keyName = ref('');
 
 function resolveMcpEndpoint() {
   const url = new URL('/mcp', window.location.origin);
@@ -64,17 +70,42 @@ async function loadKeys() {
   apiKeys.value = result.apiKeys;
 }
 
-async function createKey() {
+function openKeyDialog(key?: PersonalApiKey) {
+  editingKey.value = key;
+  keyName.value = key?.name ?? '';
+  keyDialogOpen.value = true;
+}
+
+async function saveKey() {
+  const name = keyName.value.trim();
+  if (keyLoading.value || !name || name.length > 32) return;
   keyLoading.value = true;
   try {
-    const result = await authRequest<PersonalApiKey & { key: string }>(
-      '/api-key/create',
-      { name: `AI 接入 ${new Date().toLocaleDateString('zh-CN')}` },
-    );
-    createdKey.value = result.key;
-    await loadKeys();
+    if (editingKey.value) {
+      const keyId = editingKey.value.id;
+      await authRequest('/api-key/update', { keyId, name });
+      apiKeys.value = apiKeys.value.map((key) =>
+        key.id === keyId ? { ...key, name } : key,
+      );
+      toasts.show('密钥用途已更新');
+    } else {
+      const result = await authRequest<PersonalApiKey & { key: string }>(
+        '/api-key/create',
+        { name },
+      );
+      createdKey.value = result.key;
+      createdKeyId.value = result.id;
+      const { key: _secret, ...summary } = result;
+      apiKeys.value = [summary, ...apiKeys.value];
+      toasts.show('密钥已创建');
+    }
+    keyDialogOpen.value = false;
   } catch (cause) {
-    toasts.show('密钥创建失败', (cause as Error).message, 'error');
+    toasts.show(
+      editingKey.value ? '无法修改密钥用途' : '密钥创建失败',
+      (cause as Error).message,
+      'error',
+    );
   } finally {
     keyLoading.value = false;
   }
@@ -83,7 +114,11 @@ async function createKey() {
 async function deleteKey(keyId: string) {
   try {
     await authRequest('/api-key/delete', { keyId });
-    await loadKeys();
+    apiKeys.value = apiKeys.value.filter((key) => key.id !== keyId);
+    if (createdKeyId.value === keyId) {
+      createdKey.value = '';
+      createdKeyId.value = '';
+    }
     toasts.show('密钥已撤销');
   } catch (cause) {
     toasts.show('无法撤销密钥', (cause as Error).message, 'error');
@@ -201,7 +236,7 @@ async function copyText(value: string, label: string) {
                 <button
                   class="section-action"
                   :disabled="keyLoading"
-                  @click="createKey"
+                  @click="openKeyDialog()"
                 >
                   <KeyIcon class="h-4 w-4" />
                   创建密钥
@@ -241,6 +276,7 @@ async function copyText(value: string, label: string) {
                   <KeyIcon class="h-4 w-4 shrink-0 text-slate-400" />
                   <div class="min-w-0 flex-1">
                     <p
+                      v-tooltip="key.name || '未命名密钥'"
                       class="truncate text-xs font-semibold text-slate-700 dark:text-slate-200"
                     >
                       {{ key.name || '未命名密钥' }}
@@ -249,6 +285,14 @@ async function copyText(value: string, label: string) {
                       {{ key.start || 'ft_…' }}
                     </p>
                   </div>
+                  <button
+                    v-tooltip="'修改用途'"
+                    class="focus-ring rounded-lg p-2 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 dark:hover:text-indigo-300"
+                    :aria-label="`修改「${key.name || '未命名密钥'}」的用途`"
+                    @click="openKeyDialog(key)"
+                  >
+                    <PencilSquareIcon class="h-4 w-4" />
+                  </button>
                   <button
                     v-tooltip="'撤销密钥'"
                     class="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30"
@@ -404,5 +448,56 @@ async function copyText(value: string, label: string) {
         </section>
       </aside>
     </div>
+    <AppModal
+      :open="keyDialogOpen"
+      :title="editingKey ? '修改密钥用途' : '创建个人访问密钥'"
+      width="sm"
+      @close="!keyLoading && (keyDialogOpen = false)"
+    >
+      <form @submit.prevent="saveKey">
+        <label
+          for="api-key-name"
+          class="block text-xs font-semibold text-slate-600 dark:text-slate-300"
+          >用途名称</label
+        >
+        <input
+          id="api-key-name"
+          v-model="keyName"
+          class="focus-ring mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+          placeholder="例如：Codex 工作电脑、OpenClaw 项目助手"
+          autocomplete="off"
+          autofocus
+          maxlength="32"
+          required
+          :disabled="keyLoading"
+          aria-describedby="api-key-name-help"
+        />
+        <p id="api-key-name-help" class="mt-2 text-xs leading-5 text-slate-500">
+          {{
+            editingKey
+              ? '修改用途不会改变密钥，也无需重新配置客户端。'
+              : '用名称区分不同客户端或使用场景，之后可以修改。'
+          }}
+          最多 32 个字符。
+        </p>
+        <div class="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            class="section-action"
+            :disabled="keyLoading"
+            @click="keyDialogOpen = false"
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            class="focus-ring rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50 dark:bg-indigo-500"
+            :disabled="keyLoading || !keyName.trim()"
+          >
+            {{ keyLoading ? '保存中…' : editingKey ? '保存' : '创建密钥' }}
+          </button>
+        </div>
+      </form>
+    </AppModal>
   </div>
 </template>
