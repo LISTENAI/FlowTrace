@@ -10,6 +10,9 @@ import {
 @Entity('schedule_history')
 @Index(['entityType', 'entityId', 'changedAt'])
 export class ScheduleHistoryEntity {
+  @Column('uuid', { nullable: true })
+  mutationId!: string | null;
+
   @PrimaryColumn('uuid')
   id!: string;
 

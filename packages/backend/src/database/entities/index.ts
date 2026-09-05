@@ -1,3 +1,5 @@
+export { MutationReceiptEntity } from '@/database/entities/mutation-receipt.entity';
+import { MutationReceiptEntity } from '@/database/entities/mutation-receipt.entity';
 export { ActionItemEntity } from '@/database/entities/action-item.entity';
 export { BugEntity } from '@/database/entities/bug.entity';
 export { AuthPersonBindingEntity } from '@/database/entities/auth-person-binding.entity';
@@ -31,6 +33,7 @@ import { VersionEntity } from '@/database/entities/version.entity';
 import { VersionHistoryEntity } from '@/database/entities/version-history.entity';
 
 export const entities = [
+  MutationReceiptEntity,
   ActionItemEntity,
   AuthPersonBindingEntity,
   ProjectEntity,

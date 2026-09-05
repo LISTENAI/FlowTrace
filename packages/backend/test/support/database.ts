@@ -1,3 +1,4 @@
+import { MutationHistorySubscriber } from '@/database/mutation-history.subscriber';
 import { DataType, newDb } from 'pg-mem';
 import { DataSource } from 'typeorm';
 import { randomUUID } from 'node:crypto';
@@ -37,6 +38,7 @@ export async function createTestDataSource(): Promise<DataSource> {
   const dataSource = database.adapters.createTypeormDataSource({
     type: 'postgres',
     entities,
+    subscribers: [MutationHistorySubscriber],
     migrations,
     migrationsRun: true,
     synchronize: false,
@@ -80,6 +82,7 @@ async function createPostgresTestDataSource(url: string): Promise<DataSource> {
     schema,
     extra: { options: `-c search_path=${schema},public` },
     entities,
+    subscribers: [MutationHistorySubscriber],
     migrations,
     migrationsRun: true,
     synchronize: false,

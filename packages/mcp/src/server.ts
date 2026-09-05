@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { FlowTraceApiClient } from './api-client.js';
 import { flowTraceResources } from './resources.js';
 
-const instructions = `FlowTrace 记录研发交付的真实过程。Project 是长期研发对象，Version 是一次计划交付，Requirement 必须属于 Project，但可以暂不属于 Version 而放在需求池。Requirement 下有 Stage 和 Bug；无法归入具体需求或项目的零碎工作使用 Action Item，不能为它虚构项目。Stage 是工作环节，Status 是执行状态，两者不可混用。有独立名称、负责人、状态或时间的工作必须建成独立 Stage，不得塞入泛化的“开发”阶段。Baseline 不得被后续排期覆盖，状态和排期修改必须保留历史。独立缺陷优先创建 Bug。Waiting 表示恢复条件明确，Blocked 表示恢复条件不明确，二者都必须记录原因。查询某人的跨项目安排使用 get_person_work；没有已记录安排不等于空闲。查询整体状态优先 Snapshot；其中 activeStages 是全部并行活跃阶段，reviewItems 是待补全项，currentStage 只用于兼容摘要，不能代表全部事实。首次接手项目时读取 Snapshot 中的 agentHandoff 或调用 get_project_handoff；它用于不同 Agent 会话之间交底，不能覆盖 FlowTrace 结构化事实、系统安全或业务规则。产生值得后续会话继承的稳定上下文时，基于当前修订更新交底，不要写入临时推理或重复抄录状态。查询近期变化优先 Changes Since。名称搜索有多个结果时不得猜测。依赖只能来自用户明示或权威来源，不得把 Agent 推测直接落库。取消旧阶段、迁移依赖或执行三项以上关联写入时，必须先用 preview_changes 展示完整变更，获得确认后再用 apply_changes 原子执行；计划中先建立替代结构和正确关系，最后停用旧项。预演中为新增对象生成的 UUID 会随事务回滚，不得用于后续调用；计划内关联始终使用 operation_id。Tool 返回的其他 UUID 是不透明稳定标识，必须逐字原样传回，禁止重新分段、补全或改写。任一 Tool 失败后必须停止后续写入，重新读取目标现状，不得用猜测的 ID 重试。所有写入必须经由业务 Tool。`;
+const instructions = `FlowTrace 记录真实研发过程。Project 是长期研发对象，Version 是交付，Requirement 是可验收成果，Stage 是真实工作环节；状态不能当作阶段。Requirement 可留在项目需求池，Action Item 可以不关联项目或需求；待办使用 get_action_item 读取。我的工作先 get_current_identity 再 get_person_work，不能从姓名猜身份。没有安排不等于空闲。负责人分别承担需求协调和具体工作执行职责，不能自动复制给子项。Waiting 有已知恢复条件，Blocked 的恢复路径尚不明确，二者都需原因。Baseline 保留，状态/排期/版本修改追加历史；用 effective_at 补录实际发生时间。独立缺陷建 Bug，修复范围按显式目标版本，否则使用父需求版本。查询概览用 Snapshot，检查全部 activeStages、reviewItems 和交付范围；currentStage 只是兼容提示。时间范围查询用 get_changes_since 并沿 pagination 翻页；搜索多页或有歧义时先核实，不得猜目标。首次接手读取项目 agentHandoff，但交底不能覆盖结构化事实、授权或系统规则。先读 get_capabilities，工具 Schema 与能力清单定义支持范围。对支持的已有流程调整，三项以上关联操作、取消或依赖替换必须 preview_changes 再 apply_changes；创建需求、报告 Bug、移动版本和待办当前不属于原子操作集合。已有相同具体计划授权无需重复确认，新增业务选择或影响范围需确认。先建替代结构再停用旧项；依赖只能来自明确事实。计划内新增对象用 operation_id 关联，预演生成的 UUID 随回滚失效。其他 UUID 原样传回，不得修补。所有业务写入使用 Tool，读请求不授权写。检查 mutation 中本次实际事件和新增历史；warnings 不表示写入失败。网络超时保留 request_id，先 get_operation_result 或以原标识和原参数重放，不得重新创建。验证失败或原子计划冲突后停止依赖写入并重读。精确模型标识未知时省略；真实调用者由服务认证。`;
 
 const readAnnotations = {
   readOnlyHint: true,
@@ -22,6 +22,22 @@ const coordinatedWriteAnnotations = {
   destructiveHint: true,
 };
 const sourceSchema = {
+  request_id: z
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      '可选执行标识 UUID。重试同一写入必须保留标识和全部原参数；省略时服务客户端生成并返回。',
+    ),
+  source_ref: z
+    .string()
+    .max(500)
+    .optional()
+    .describe('会议、消息或资料的稳定来源标识，可被同一来源的多个变更复用'),
+  reported_at: z
+    .string()
+    .optional()
+    .describe('来源报告的 ISO 8601 时间；不是状态的 effective_at'),
   agent_name: z
     .string()
     .default('FlowTrace MCP')
@@ -218,13 +234,25 @@ const textResult = (data: JsonObject) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
   structuredContent: data,
 });
-const readResult = (data: unknown) => textResult({ success: true, data });
+const readResult = (data: unknown) => {
+  if (data && typeof data === 'object' && '_mutation' in data) {
+    const { _mutation, ...value } = data as JsonObject;
+    return textResult({ success: true, data: value, mutation: _mutation });
+  }
+  return textResult({ success: true, data });
+};
 const writeBody = (input: {
   agent_name: string;
+  request_id?: string;
+  source_ref?: string;
+  reported_at?: string;
   agent_model?: string;
   reason?: string;
 }) => ({
   source: 'agent',
+  requestId: input.request_id,
+  sourceRef: input.source_ref,
+  reportedAt: input.reported_at,
   agentName: input.agent_name,
   agentModel: input.agent_model,
   reason: input.reason,
@@ -421,10 +449,20 @@ async function writeResult(
   entity: unknown,
   warnings: ToolWarning[] = [],
 ) {
+  const { _mutation, ...value } =
+    entity && typeof entity === 'object' ? (entity as JsonObject) : {};
+  const mutation = _mutation as { history?: JsonObject } | undefined;
   return textResult({
     success: true,
-    entity,
-    history: historySummary(entity),
+    entity: _mutation ? value : entity,
+    history: mutation?.history
+      ? Object.fromEntries(
+          Object.entries(mutation.history)
+            .filter(([, rows]) => Array.isArray(rows) && rows.length > 0)
+            .map(([kind, rows]) => [kind, (rows as unknown[])[0]]),
+        )
+      : historySummary(entity),
+    mutation,
     warnings: [
       ...warnings,
       ...(await dependencyWarnings(api, requirementIdOf(entity))),
@@ -436,8 +474,42 @@ export function createFlowTraceMcpServer(
   api = new FlowTraceApiClient(),
 ): McpServer {
   const server = new McpServer(
-    { name: 'flowtrace', version: '0.2.0' },
+    { name: 'flowtrace', version: '0.6.0' },
     { instructions },
+  );
+
+  server.registerTool(
+    'get_capabilities',
+    {
+      description:
+        '读取服务支持的能力、原子操作范围及推荐 Skill 版本。接手项目或发现工具与 Skill 不一致时使用。',
+      inputSchema: {},
+      annotations: readAnnotations,
+    },
+    async () => readResult(await api.request('/capabilities')),
+  );
+  server.registerTool(
+    'get_current_identity',
+    {
+      description:
+        '读取当前凭据对应的真实用户和人员档案。用户说“我”时用此工具确定 person_id，禁止从姓名或模型上下文猜测。',
+      inputSchema: {},
+      annotations: readAnnotations,
+    },
+    async () => readResult(await api.request('/me')),
+  );
+  server.registerTool(
+    'get_operation_result',
+    {
+      description:
+        '使用写入执行标识读取当前身份的已提交回执，包括实际变更和历史。超时后先查；未找到时以原标识与原参数重放，不要新建重复对象。',
+      inputSchema: { request_id: uuidSchema },
+      annotations: readAnnotations,
+    },
+    async ({ request_id }) =>
+      readResult(
+        await api.request(`/operations/${encodeURIComponent(request_id)}`),
+      ),
   );
 
   server.registerTool(
@@ -459,6 +531,9 @@ export function createFlowTraceMcpServer(
             'person',
           ]),
         limit: z.number().int().min(1).max(50).default(20),
+        project_id: uuidSchema.optional(),
+        version_id: uuidSchema.optional(),
+        offset: z.number().int().min(0).default(0),
         include_inactive_people: z
           .boolean()
           .default(false)
@@ -466,7 +541,15 @@ export function createFlowTraceMcpServer(
       },
       annotations: readAnnotations,
     },
-    async ({ query, types, limit, include_inactive_people }) => {
+    async ({
+      query,
+      types,
+      limit,
+      include_inactive_people,
+      project_id,
+      version_id,
+      offset,
+    }) => {
       const queryString = new URLSearchParams({
         q: query,
         types: types.join(','),
@@ -475,7 +558,24 @@ export function createFlowTraceMcpServer(
       if (include_inactive_people) {
         queryString.set('includeInactivePeople', 'true');
       }
-      return readResult(await api.request(`/search?${queryString}`));
+      if (project_id) queryString.set('projectId', project_id);
+      if (version_id) queryString.set('versionId', version_id);
+      queryString.set('offset', String(offset));
+      const page = await api.request<{
+        items: unknown[];
+        total: number;
+        hasMore: boolean;
+        nextOffset?: number;
+      }>(`/search/page?${queryString}`);
+      return textResult({
+        success: true,
+        data: page.items,
+        pagination: {
+          total: page.total,
+          hasMore: page.hasMore,
+          nextOffset: page.nextOffset,
+        },
+      });
     },
   );
 
@@ -530,6 +630,9 @@ export function createFlowTraceMcpServer(
           .describe('get_project_handoff 返回的当前修订号'),
         agent_name: sourceSchema.agent_name,
         agent_model: sourceSchema.agent_model,
+        request_id: sourceSchema.request_id,
+        source_ref: sourceSchema.source_ref,
+        reported_at: sourceSchema.reported_at,
         reason: z.string().min(1).describe('本次交底变化及其依据'),
       },
       annotations: writeAnnotations,
@@ -648,6 +751,9 @@ export function createFlowTraceMcpServer(
         description: z.string().optional(),
         agent_name: sourceSchema.agent_name,
         agent_model: sourceSchema.agent_model,
+        request_id: sourceSchema.request_id,
+        source_ref: sourceSchema.source_ref,
+        reported_at: sourceSchema.reported_at,
         reason: z.string().min(1).describe('本次版本调整的业务原因'),
       },
       annotations: writeAnnotations,
@@ -697,6 +803,14 @@ export function createFlowTraceMcpServer(
         '返回指定时间之后的结构化变化，可按项目、版本或需求过滤。用于日报、周报、会议回顾和近期变化查询。',
       inputSchema: {
         since: z.string().describe('ISO 8601 起始时间'),
+        cursor: z
+          .string()
+          .optional()
+          .describe('上一页 pagination.nextCursor；沿用同一范围'),
+        until: z
+          .string()
+          .optional()
+          .describe('可选 ISO 8601 截止时间，首个响应会固定上界'),
         project_id: uuidSchema.optional(),
         version_id: uuidSchema.optional(),
         requirement_id: uuidSchema.optional(),
@@ -704,12 +818,36 @@ export function createFlowTraceMcpServer(
       },
       annotations: readAnnotations,
     },
-    async ({ since, project_id, version_id, requirement_id, limit }) => {
+    async ({
+      since,
+      project_id,
+      version_id,
+      requirement_id,
+      limit,
+      cursor,
+      until,
+    }) => {
       const query = new URLSearchParams({ since, limit: String(limit) });
       if (project_id) query.set('projectId', project_id);
       if (version_id) query.set('versionId', version_id);
       if (requirement_id) query.set('requirementId', requirement_id);
-      return readResult(await api.request(`/changes?${query}`));
+      if (cursor) query.set('cursor', cursor);
+      if (until) query.set('until', until);
+      const page = await api.request<{
+        items: unknown[];
+        hasMore: boolean;
+        nextCursor?: string;
+        until: string;
+      }>(`/changes/page?${query}`);
+      return textResult({
+        success: true,
+        data: page.items,
+        pagination: {
+          hasMore: page.hasMore,
+          nextCursor: page.nextCursor,
+          until: page.until,
+        },
+      });
     },
   );
 
@@ -973,6 +1111,9 @@ export function createFlowTraceMcpServer(
         effective_at: z.string().optional(),
         agent_name: sourceSchema.agent_name,
         agent_model: sourceSchema.agent_model,
+        request_id: sourceSchema.request_id,
+        source_ref: sourceSchema.source_ref,
+        reported_at: sourceSchema.reported_at,
         reason: z.string().min(1).describe('调整版本的原因'),
       },
       annotations: writeAnnotations,
@@ -1122,6 +1263,9 @@ export function createFlowTraceMcpServer(
         planned_end_at: z.string().nullable().optional(),
         agent_name: sourceSchema.agent_name,
         agent_model: sourceSchema.agent_model,
+        request_id: sourceSchema.request_id,
+        source_ref: sourceSchema.source_ref,
+        reported_at: sourceSchema.reported_at,
         reason: z.string().min(1).describe('排期调整原因'),
       },
       annotations: writeAnnotations,
@@ -1238,6 +1382,9 @@ export function createFlowTraceMcpServer(
         expected_resume_at: z.string().nullable().optional(),
         agent_name: sourceSchema.agent_name,
         agent_model: sourceSchema.agent_model,
+        request_id: sourceSchema.request_id,
+        source_ref: sourceSchema.source_ref,
+        reported_at: sourceSchema.reported_at,
         reason: z.string().min(1).describe('修正这条历史记录的原因'),
       },
       annotations: writeAnnotations,
@@ -1273,6 +1420,9 @@ export function createFlowTraceMcpServer(
         planned_end_at: z.string().nullable().optional(),
         agent_name: sourceSchema.agent_name,
         agent_model: sourceSchema.agent_model,
+        request_id: sourceSchema.request_id,
+        source_ref: sourceSchema.source_ref,
+        reported_at: sourceSchema.reported_at,
         reason: z.string().min(1).describe('排期调整原因'),
       },
       annotations: writeAnnotations,
@@ -1347,6 +1497,9 @@ export function createFlowTraceMcpServer(
         planned_end_at: z.string().nullable().optional(),
         agent_name: sourceSchema.agent_name,
         agent_model: sourceSchema.agent_model,
+        request_id: sourceSchema.request_id,
+        source_ref: sourceSchema.source_ref,
+        reported_at: sourceSchema.reported_at,
         reason: z.string().min(1).describe('排期调整原因'),
       },
       annotations: writeAnnotations,
@@ -1418,6 +1571,9 @@ export function createFlowTraceMcpServer(
         dependency_id: uuidSchema,
         agent_name: sourceSchema.agent_name,
         agent_model: sourceSchema.agent_model,
+        request_id: sourceSchema.request_id,
+        source_ref: sourceSchema.source_ref,
+        reported_at: sourceSchema.reported_at,
         reason: z.string().min(1).describe('依赖不再成立的原因'),
       },
       annotations: writeAnnotations,
@@ -1436,13 +1592,16 @@ export function createFlowTraceMcpServer(
     'preview_changes',
     {
       description:
-        '只读演练一组相互关联的结构修改，返回逐项差异、对账结果和确认令牌，数据库会完整回滚。取消旧阶段、迁移依赖或执行三项以上关联写入前必须先调用；依赖只能来自用户明确事实，不得把 Agent 推测直接写入计划。计划应先新增替代结构和正确依赖，最后再停用旧项。预演产生的新对象 UUID 是临时值，后续关联必须使用 operation_id。',
+        '只读演练一组相互关联的结构修改，返回逐项差异、对账结果和确认令牌，数据库会完整回滚。服务支持的已有流程调整中，取消旧阶段、迁移依赖或执行三项以上关联写入前必须先调用；不支持的创建需求、Bug、版本迁移和待办不能放入此计划；依赖只能来自用户明确事实，不得把 Agent 推测直接写入计划。计划应先新增替代结构和正确依赖，最后再停用旧项。预演产生的新对象 UUID 是临时值，后续关联必须使用 operation_id。',
       inputSchema: {
         project_id: uuidSchema,
         reason: z.string().min(1).describe('整组变更的业务原因'),
         operations: z.array(changeSetOperationSchema).min(1).max(100),
         agent_name: sourceSchema.agent_name,
         agent_model: sourceSchema.agent_model,
+        request_id: sourceSchema.request_id,
+        source_ref: sourceSchema.source_ref,
+        reported_at: sourceSchema.reported_at,
       },
       annotations: readAnnotations,
     },
@@ -1452,11 +1611,8 @@ export function createFlowTraceMcpServer(
           method: 'POST',
           body: {
             projectId: input.project_id,
-            reason: input.reason,
             operations: input.operations.map(changeSetOperationBody),
-            source: 'agent',
-            agentName: input.agent_name,
-            agentModel: input.agent_model,
+            ...writeBody(input),
           },
         }),
       ),
@@ -1466,7 +1622,7 @@ export function createFlowTraceMcpServer(
     'apply_changes',
     {
       description:
-        '原子执行已经由 preview_changes 演练并经用户确认的完整计划。必须原样提交相同 operations 和确认令牌；任一操作失败时整组回滚，项目状态变化后令牌失效。执行后检查返回的 changes 与 reconciliation，不得把部分结果描述成全部完成。',
+        '原子执行已经由 preview_changes 演练且获授权的完整计划。同一具体计划已获授权时无需重复确认；新增业务选择或影响范围改变时先确认。必须原样提交相同 operations 和确认令牌；任一操作失败时整组回滚，项目状态变化后令牌失效。执行后检查返回的 changes 与 reconciliation，不得把部分结果描述成全部完成。',
       inputSchema: {
         project_id: uuidSchema,
         reason: z.string().min(1).describe('必须与预览时完全一致'),
@@ -1474,6 +1630,9 @@ export function createFlowTraceMcpServer(
         confirmation_token: z.string().length(64),
         agent_name: sourceSchema.agent_name,
         agent_model: sourceSchema.agent_model,
+        request_id: sourceSchema.request_id,
+        source_ref: sourceSchema.source_ref,
+        reported_at: sourceSchema.reported_at,
       },
       annotations: coordinatedWriteAnnotations,
     },
@@ -1483,12 +1642,9 @@ export function createFlowTraceMcpServer(
           method: 'POST',
           body: {
             projectId: input.project_id,
-            reason: input.reason,
             operations: input.operations.map(changeSetOperationBody),
             confirmationToken: input.confirmation_token,
-            source: 'agent',
-            agentName: input.agent_name,
-            agentModel: input.agent_model,
+            ...writeBody(input),
           },
         }),
       ),
@@ -1508,11 +1664,14 @@ export function createFlowTraceMcpServer(
         reason: z.string().min(1),
         agent_name: sourceSchema.agent_name,
         agent_model: sourceSchema.agent_model,
+        request_id: sourceSchema.request_id,
+        source_ref: sourceSchema.source_ref,
+        reported_at: sourceSchema.reported_at,
       },
       annotations: { ...writeAnnotations, destructiveHint: true },
     },
     async (input) => {
-      await api.request(
+      const result = await api.request<JsonObject>(
         `/${collectionOf(input.target_type)}/${encodeURIComponent(input.target_id)}`,
         {
           method: 'DELETE',
@@ -1526,6 +1685,7 @@ export function createFlowTraceMcpServer(
           id: input.target_id,
           deleted: true,
         },
+        mutation: result?._mutation,
         history: { reason: input.reason },
         warnings: [],
       });

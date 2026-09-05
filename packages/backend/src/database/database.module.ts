@@ -1,3 +1,4 @@
+import { MutationHistorySubscriber } from '@/database/mutation-history.subscriber';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { databaseSsl, typeOrmConnection } from '@/database/config';
@@ -11,6 +12,7 @@ import { migrations } from '@/database/migrations';
       ...typeOrmConnection(),
       ssl: databaseSsl(),
       entities,
+      subscribers: [MutationHistorySubscriber],
       migrations,
       migrationsRun: true,
       synchronize: false,

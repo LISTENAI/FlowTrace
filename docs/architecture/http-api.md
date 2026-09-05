@@ -69,3 +69,60 @@ HTTP 内部值保持机器稳定，界面统一显示中文：
 
 进入等待中或阻塞时必须提交 `statusReason`。`effectiveAt` 可以是过去时间，
 后端会按生效时间重排历史并重算实际开始、结束和各状态持续时间。
+
+## 能力、分页与可恢复写入（v0.6）
+
+`GET /capabilities` 返回协议版本、推荐 Skill 版本、功能标识及原子操作列表。
+`GET /me` 返回当前认证身份。客户端应按能力判断流程，不能按 Skill 文案假定
+服务支持整个导入计划。
+
+原有 `/changes` 和 `/search` 仍返回数组。完整查询使用：
+
+- `/changes/page?since=...&projectId=...&versionId=...&requirementId=...&limit=...`
+  返回 `{items, hasMore, nextCursor, until}`。按事件发生时间和 ID 倒序，最多
+  300 条；后续页保留原查询范围及 `until`，传回 `cursor=nextCursor`。
+  迁移事件同时可从迁出和迁入版本查询，名称取发生时上下文。
+- `/search/page?q=...&types=...&projectId=...&versionId=...&offset=0&limit=20`
+  返回 `{items, total, hasMore, nextOffset}`，最多 50 条。搜索结果会随业务修改
+  改变，不是数据库快照；写入前仍须重新读取目标。当前检索仍在内存排序。
+
+游标固定查询时间上界，不跨请求持有数据库快照。持续同步应重叠查询近期窗口并
+按事件 ID 去重，以覆盖查询时尚未提交的事务；不能把一次响应当作消息投递保证。
+
+领域写请求可设置 `X-FlowTrace-Request-Id: <UUID>`。相同认证用户使用同一标识
+和相同方法、路径、JSON 参数重放时返回原结果；参数改变返回 409。服务在同一
+数据库事务内保存业务修改和回执；失败时两者均回滚。不同用户的相同标识互不
+影响。不要修改重试时的 `effectiveAt`、原因或其他参数。
+
+默认响应保持兼容；加 `X-FlowTrace-Result: receipt` 返回：
+
+```json
+{
+  "data": {},
+  "mutation": {
+    "id": "服务端生成的内部变更 UUID",
+    "requestId": "调用方执行 UUID",
+    "status": "committed",
+    "actor": {
+      "userId": "认证用户",
+      "personId": "人员 UUID",
+      "name": "发生时姓名"
+    },
+    "changes": [],
+    "history": { "status": [], "schedule": [], "version": [] }
+  }
+}
+```
+
+`history` 仅包含本次新增记录，补录过去状态时也不以当前最后一条历史冒充。
+历史修正操作的前后差异在 `changes.details`。原 204 删除响应在回执模式下为
+200。`GET /operations/:requestId` 仅返回当前认证用户的已提交结果；404 可能
+表示事务仍在执行或已回滚，调用方应以原标识和参数重放，不应换标识重新创建。
+回执当前永久保留；清理策略必须保留幂等墓碑，不能使旧请求再次执行。
+
+预演 `/changes/preview` 不写入回执；旧 `/batch` 保持逐项成功/失败语义，
+不提供整批幂等或事务承诺。认证管理端点不属于领域回执协议。
+
+写入还可附带 `sourceRef`（最长 500 字符）和 `reportedAt`（ISO 时间）。
+来源标识可跨多个写请求复用，用于业务证据关联，不自动替代请求幂等键。
+`actor` 由认证上下文生成，客户端不能伪造；`agentModel` 仍是单独的自报字段。

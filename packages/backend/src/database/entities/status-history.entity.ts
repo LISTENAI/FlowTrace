@@ -10,6 +10,9 @@ import {
 @Entity('status_history')
 @Index(['entityType', 'entityId', 'effectiveAt'])
 export class StatusHistoryEntity {
+  @Column('uuid', { nullable: true })
+  mutationId!: string | null;
+
   @PrimaryColumn('uuid')
   id!: string;
 

@@ -7,6 +7,14 @@ import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 @Index(['versionId', 'occurredAt', 'id'])
 @Index(['relatedVersionId', 'occurredAt', 'id'])
 export class ChangeEventEntity {
+  @Column('jsonb', { nullable: true })
+  actor!: { userId: string; personId: string; name: string } | null;
+  @Column('text', { nullable: true }) sourceRef!: string | null;
+  @Column('timestamptz', { nullable: true }) reportedAt!: Date | null;
+
+  @Column('uuid', { nullable: true })
+  mutationId!: string | null;
+
   @PrimaryColumn('uuid')
   id!: string;
 

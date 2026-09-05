@@ -1,3 +1,4 @@
+import { MutationInterceptor } from '@/domain/mutation.interceptor';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { entities } from '@/database/entities';
@@ -31,7 +32,7 @@ import { WorkService } from '@/domain/work.service';
     InsightsController,
     HistoryController,
   ],
-  providers: [WorkService],
+  providers: [WorkService, MutationInterceptor],
   exports: [WorkService],
 })
 export class DomainModule {}

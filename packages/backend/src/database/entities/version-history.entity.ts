@@ -10,6 +10,9 @@ import {
 @Entity('version_history')
 @Index(['requirementId', 'changedAt'])
 export class VersionHistoryEntity {
+  @Column('uuid', { nullable: true })
+  mutationId!: string | null;
+
   @PrimaryColumn('uuid')
   id!: string;
 

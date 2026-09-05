@@ -37,6 +37,8 @@ export const searchEntityTypes = [
 export type SearchEntityType = (typeof searchEntityTypes)[number];
 
 export interface ChangeContext {
+  sourceRef?: string;
+  reportedAt?: string;
   source?: ChangeSource;
   agentName?: string;
   agentModel?: string;
@@ -346,6 +348,10 @@ export interface ChangeEventContext {
 }
 
 export interface ChangeEvent {
+  mutationId?: string;
+  actor?: { userId: string; personId: string; name: string };
+  sourceRef?: string;
+  reportedAt?: string;
   contextAccuracy?: ChangeEventContext['accuracy'];
   relatedVersion?: Pick<Version, 'id' | 'name'>;
   id: string;
@@ -506,4 +512,17 @@ export interface StatusDuration {
   waitingMs: number;
   blockedMs: number;
   totalSpanMs: number;
+}
+
+export interface ChangePage {
+  items: ChangeEvent[];
+  hasMore: boolean;
+  nextCursor?: string;
+  until: string;
+}
+export interface SearchPage {
+  items: SearchResult[];
+  total: number;
+  hasMore: boolean;
+  nextOffset?: number;
 }

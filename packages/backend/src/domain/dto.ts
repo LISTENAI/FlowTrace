@@ -21,6 +21,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
+  coordinatedOperationTypes,
   executionStatuses,
   stageWorkDomains,
   type ChangeSource,
@@ -31,6 +32,21 @@ import {
 } from '@flowtrace/shared';
 
 export class ChangeContextDto {
+  @ApiPropertyOptional({
+    description: '会议、消息或资料的稳定来源标识；不等同于请求幂等键',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  sourceRef?: string;
+
+  @ApiPropertyOptional({
+    description: '来源报告时间；业务状态发生时间仍使用 effectiveAt',
+  })
+  @IsOptional()
+  @IsISO8601()
+  reportedAt?: string;
+
   @ApiPropertyOptional({ enum: ['manual', 'api', 'agent'], default: 'manual' })
   @IsOptional()
   @IsIn(['manual', 'api', 'agent'])
@@ -771,17 +787,7 @@ export class BatchDto extends ChangeContextDto {
   operations!: BatchOperationDto[];
 }
 
-export const changeSetOperationTypes = [
-  'update_requirement',
-  'add_stage',
-  'update_stage',
-  'update_stage_status',
-  'reschedule_stage',
-  'supersede_stage',
-  'add_dependency',
-  'remove_dependency',
-  'update_project_handoff',
-] as const;
+export const changeSetOperationTypes = coordinatedOperationTypes;
 
 export type ChangeSetOperationType = (typeof changeSetOperationTypes)[number];
 

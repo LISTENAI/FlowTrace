@@ -7,15 +7,19 @@ import { createFlowTraceMcpServer } from '../src/server.js';
 describe('FlowTrace MCP Server', () => {
   it('provides a self-describing bounded catalog, resources and audited writes', async () => {
     const request = vi.fn(async (path: string) => {
-      if (path.startsWith('/search?')) {
-        return [
-          {
-            type: 'project',
-            id: '00000000-0000-4000-8000-000000000001',
-            key: 'DEMO',
-            name: '演示项目',
-          },
-        ];
+      if (path.startsWith('/search/page?')) {
+        return {
+          items: [
+            {
+              type: 'project',
+              id: '00000000-0000-4000-8000-000000000001',
+              key: 'DEMO',
+              name: '演示项目',
+            },
+          ],
+          total: 1,
+          hasMore: false,
+        };
       }
       if (path.startsWith('/dependencies?')) {
         return [
@@ -107,7 +111,7 @@ describe('FlowTrace MCP Server', () => {
     ]);
 
     const tools = await client.listTools();
-    expect(tools.tools).toHaveLength(34);
+    expect(tools.tools).toHaveLength(37);
     expect(tools.tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
         'search',
@@ -177,6 +181,7 @@ describe('FlowTrace MCP Server', () => {
     });
     expect(search.structuredContent).toEqual({
       success: true,
+      pagination: { total: 1, hasMore: false },
       data: [
         {
           type: 'project',
@@ -187,7 +192,9 @@ describe('FlowTrace MCP Server', () => {
       ],
     });
     expect(request).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/search\?q=&types=project&limit=20$/),
+      expect.stringMatching(
+        /^\/search\/page\?q=&types=project&limit=20&offset=0$/,
+      ),
     );
     await client.callTool({
       name: 'search',
@@ -199,7 +206,7 @@ describe('FlowTrace MCP Server', () => {
     });
     expect(request).toHaveBeenCalledWith(
       expect.stringMatching(
-        /^\/search\?q=%E5%8E%86%E5%8F%B2%E4%BA%BA%E5%91%98&types=person&limit=20&includeInactivePeople=true$/,
+        /^\/search\/page\?q=%E5%8E%86%E5%8F%B2%E4%BA%BA%E5%91%98&types=person&limit=20&includeInactivePeople=true&offset=0$/,
       ),
     );
 

@@ -1,5 +1,8 @@
+import { MutationInterceptor } from '@/domain/mutation.interceptor';
+import { mutationScope } from '@/domain/mutation-scope';
 import {
   BadRequestException,
+  UseInterceptors,
   Body,
   Controller,
   Delete,
@@ -18,6 +21,7 @@ import {
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import {
   searchEntityTypes,
+  flowTraceCapabilities,
   type ChangeContext,
   type SearchEntityType,
 } from '@flowtrace/shared';
@@ -67,9 +71,14 @@ const optionalUuidPipe = new ParseUUIDPipe({
 });
 
 @ApiTags('项目')
+@UseInterceptors(MutationInterceptor)
 @Controller('projects')
 export class ProjectsController {
-  constructor(@Inject(WorkService) private readonly work: WorkService) {}
+  constructor(@Inject(WorkService) private readonly baseWork: WorkService) {}
+
+  private get work(): WorkService {
+    return mutationScope.getStore()?.work ?? this.baseWork;
+  }
 
   @Get()
   @ApiOperation({ summary: '列出所有项目及健康指标' })
@@ -132,9 +141,14 @@ export class ProjectsController {
 }
 
 @ApiTags('项目节奏')
+@UseInterceptors(MutationInterceptor)
 @Controller('project-rhythms')
 export class ProjectRhythmsController {
-  constructor(@Inject(WorkService) private readonly work: WorkService) {}
+  constructor(@Inject(WorkService) private readonly baseWork: WorkService) {}
+
+  private get work(): WorkService {
+    return mutationScope.getStore()?.work ?? this.baseWork;
+  }
 
   @Get()
   @ApiOperation({ summary: '列出创建项目时可选的节奏' })
@@ -163,9 +177,14 @@ export class ProjectRhythmsController {
 }
 
 @ApiTags('版本')
+@UseInterceptors(MutationInterceptor)
 @Controller('versions')
 export class VersionsController {
-  constructor(@Inject(WorkService) private readonly work: WorkService) {}
+  constructor(@Inject(WorkService) private readonly baseWork: WorkService) {}
+
+  private get work(): WorkService {
+    return mutationScope.getStore()?.work ?? this.baseWork;
+  }
 
   @Patch(':id')
   update(@Param('id', uuidPipe) id: string, @Body() input: UpdateVersionDto) {
@@ -180,9 +199,14 @@ export class VersionsController {
 }
 
 @ApiTags('人员')
+@UseInterceptors(MutationInterceptor)
 @Controller('people')
 export class PeopleController {
-  constructor(@Inject(WorkService) private readonly work: WorkService) {}
+  constructor(@Inject(WorkService) private readonly baseWork: WorkService) {}
+
+  private get work(): WorkService {
+    return mutationScope.getStore()?.work ?? this.baseWork;
+  }
 
   @Get()
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
@@ -219,9 +243,14 @@ export class PeopleController {
 }
 
 @ApiTags('待办')
+@UseInterceptors(MutationInterceptor)
 @Controller('action-items')
 export class ActionItemsController {
-  constructor(@Inject(WorkService) private readonly work: WorkService) {}
+  constructor(@Inject(WorkService) private readonly baseWork: WorkService) {}
+
+  private get work(): WorkService {
+    return mutationScope.getStore()?.work ?? this.baseWork;
+  }
 
   @Get()
   @ApiQuery({ name: 'ownerId', required: false })
@@ -280,9 +309,14 @@ export class ActionItemsController {
 }
 
 @ApiTags('需求')
+@UseInterceptors(MutationInterceptor)
 @Controller('requirements')
 export class RequirementsController {
-  constructor(@Inject(WorkService) private readonly work: WorkService) {}
+  constructor(@Inject(WorkService) private readonly baseWork: WorkService) {}
+
+  private get work(): WorkService {
+    return mutationScope.getStore()?.work ?? this.baseWork;
+  }
 
   @Get()
   @ApiQuery({ name: 'projectId', required: false })
@@ -356,9 +390,14 @@ export class RequirementsController {
 }
 
 @ApiTags('阶段')
+@UseInterceptors(MutationInterceptor)
 @Controller('stages')
 export class StagesController {
-  constructor(@Inject(WorkService) private readonly work: WorkService) {}
+  constructor(@Inject(WorkService) private readonly baseWork: WorkService) {}
+
+  private get work(): WorkService {
+    return mutationScope.getStore()?.work ?? this.baseWork;
+  }
 
   @Patch(':id')
   update(@Param('id', uuidPipe) id: string, @Body() input: UpdateStageDto) {
@@ -395,9 +434,14 @@ export class StagesController {
 }
 
 @ApiTags('Bug')
+@UseInterceptors(MutationInterceptor)
 @Controller('bugs')
 export class BugsController {
-  constructor(@Inject(WorkService) private readonly work: WorkService) {}
+  constructor(@Inject(WorkService) private readonly baseWork: WorkService) {}
+
+  private get work(): WorkService {
+    return mutationScope.getStore()?.work ?? this.baseWork;
+  }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() input: UpdateBugDto) {
@@ -424,9 +468,14 @@ export class BugsController {
 }
 
 @ApiTags('依赖')
+@UseInterceptors(MutationInterceptor)
 @Controller('dependencies')
 export class DependenciesController {
-  constructor(@Inject(WorkService) private readonly work: WorkService) {}
+  constructor(@Inject(WorkService) private readonly baseWork: WorkService) {}
+
+  private get work(): WorkService {
+    return mutationScope.getStore()?.work ?? this.baseWork;
+  }
 
   @Get()
   list(@Query('requirementId', optionalUuidPipe) requirementId?: string) {
@@ -446,9 +495,14 @@ export class DependenciesController {
 }
 
 @ApiTags('快照与变化')
+@UseInterceptors(MutationInterceptor)
 @Controller()
 export class InsightsController {
-  constructor(@Inject(WorkService) private readonly work: WorkService) {}
+  constructor(@Inject(WorkService) private readonly baseWork: WorkService) {}
+
+  private get work(): WorkService {
+    return mutationScope.getStore()?.work ?? this.baseWork;
+  }
 
   @Get('health')
   @PublicAuth()
@@ -531,6 +585,89 @@ export class InsightsController {
     });
   }
 
+  @Get('capabilities')
+  @ApiOperation({ summary: '读取服务能力、原子操作范围和推荐 Skill 版本' })
+  capabilities() {
+    return {
+      ...flowTraceCapabilities,
+      revision: process.env.FLOWTRACE_BUILD_REVISION ?? null,
+    };
+  }
+
+  @Get('operations/:requestId')
+  @ApiOperation({
+    summary:
+      '读取当前身份的一次已提交写入结果；未找到不表示绝对未执行，可使用原标识重放核验',
+  })
+  operation(
+    @Param('requestId', uuidPipe) requestId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const actor = request.flowTraceIdentity?.user.id;
+    if (!actor) throw new BadRequestException('无法确认调用者身份');
+    return this.work.getMutationReceipt(requestId, actor);
+  }
+
+  @Get('changes/page')
+  @ApiOperation({ summary: '按稳定游标完整读取变化；后续页沿用首个 until' })
+  changesPage(
+    @Query('since') since: string,
+    @Query('projectId', optionalUuidPipe) projectId?: string,
+    @Query('versionId', optionalUuidPipe) versionId?: string,
+    @Query('requirementId', optionalUuidPipe) requirementId?: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+    @Query('until') until?: string,
+  ) {
+    const parsedLimit = limit === undefined ? undefined : Number(limit);
+    if (
+      parsedLimit !== undefined &&
+      (!Number.isInteger(parsedLimit) || parsedLimit < 1)
+    )
+      throw new BadRequestException('limit 必须是正整数');
+    return this.work.getChangesPage({
+      since,
+      projectId,
+      versionId,
+      requirementId,
+      limit: parsedLimit,
+      cursor,
+      until,
+    });
+  }
+
+  @Get('search/page')
+  @ApiOperation({ summary: '带范围和截断信息的业务对象搜索' })
+  searchPage(
+    @Query('q') query = '',
+    @Query('types') types?: string,
+    @Query('projectId', optionalUuidPipe) projectId?: string,
+    @Query('versionId', optionalUuidPipe) versionId?: string,
+    @Query('limit') limit = '20',
+    @Query('offset') offset = '0',
+    @Query('includeInactivePeople', new ParseBoolPipe({ optional: true }))
+    includeInactivePeople?: boolean,
+  ) {
+    const selected = types
+      ? types.split(',').filter(Boolean)
+      : [...searchEntityTypes];
+    if (
+      selected.some(
+        (type) => !searchEntityTypes.includes(type as SearchEntityType),
+      )
+    )
+      throw new BadRequestException('不支持的搜索类型');
+    if (!Number.isInteger(Number(limit)) || Number(limit) < 1)
+      throw new BadRequestException('limit 必须是正整数');
+    return this.work.searchPage(
+      query,
+      selected as SearchEntityType[],
+      Number(limit),
+      includeInactivePeople,
+      { projectId, versionId, offset: Number(offset) },
+    );
+  }
+
   @Post('changes/preview')
   @ApiOperation({
     summary: '在事务中演练一组关联修改，回滚后返回确认令牌和对账结果',
@@ -555,9 +692,14 @@ export class InsightsController {
 }
 
 @ApiTags('历史')
+@UseInterceptors(MutationInterceptor)
 @Controller('history')
 export class HistoryController {
-  constructor(@Inject(WorkService) private readonly work: WorkService) {}
+  constructor(@Inject(WorkService) private readonly baseWork: WorkService) {}
+
+  private get work(): WorkService {
+    return mutationScope.getStore()?.work ?? this.baseWork;
+  }
 
   @Patch('status/:id')
   @ApiOperation({ summary: '修正状态、原因或生效时间并重算实际时间' })

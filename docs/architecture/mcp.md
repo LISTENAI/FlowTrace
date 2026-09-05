@@ -28,7 +28,7 @@ Authorization: Bearer ft_...
 
 ## Tool 与返回值
 
-MCP 提供 34 个有明确业务语义的 Tool：
+MCP 提供有明确业务语义的 Tool（实时清单以 tools/list 为准）：
 
 - 查询：对象搜索，项目和版本快照，需求完整详情，按时间的
   增量变化、人员跨项目工作、零碎待办，以及当前 Agent 交底与交底修订历史。
@@ -39,8 +39,11 @@ MCP 提供 34 个有明确业务语义的 Tool：
 - 协调修改：`preview_changes` 在回滚事务中演练完整计划并返回确认令牌，
   `apply_changes` 原子执行同一计划并返回实际变化和对账结果。
 
-取消旧阶段、迁移依赖或执行三项以上关联写入时，Agent 必须使用协调修改，
-不能用一串单项 Tool 接受部分成功。计划内操作以 `operation_id` 命名，后续
+对于服务声明支持的已有工作流调整，取消旧阶段、迁移依赖或三项以上关联
+写入必须使用协调修改。创建需求、报告 Bug、移动版本和待办操作当前不在
+原子操作集合内；跨这些操作的导入按明确边界执行并报告已完成范围，不能
+声称整批原子成功。预演不要求重复确认已授权的相同具体计划；新业务选择或
+影响范围变化须先展示并确认。计划内操作以 `operation_id` 命名，后续
 操作可以引用先前新建的阶段。服务端要求先建立替代结构和正确关系，再停用
 旧项；项目在预览后发生变化时会拒绝旧令牌。依赖仍只能来自用户明示或权威
 来源，协调接口不会把 Agent 的流程猜测变成事实。
@@ -97,3 +100,18 @@ npm run dev -w @flowtrace/mcp
 默认 API 地址为 `http://127.0.0.1:3100/api`，可用 `FLOWTRACE_API_URL`
 覆盖，并通过 `FLOWTRACE_API_KEY` 提供个人访问密钥。stdio 是调试便利入口，
 正式集成应使用镜像内置的远程 Endpoint。
+
+## v0.6 接入约定
+
+- `get_capabilities` 查询能力与推荐 Skill 版本；`get_current_identity` 确定“我”。
+- `get_changes_since` 保持 `data` 数组，新增 `pagination`。沿 `nextCursor` 翻页，
+  保留原查询范围与 `until`，直到 `hasMore=false`。`search` 支持项目/版本范围与
+  `offset`，返回 `total`、`hasMore`、`nextOffset`，不能把第一页当作全部。
+- 写 Tool 可传 `request_id`、`source_ref`、`reported_at`。省略请求标识时 MCP
+  客户端生成一个；网络错误信息携带该标识。使用 `get_operation_result` 核验，
+  或保持全部原参数和标识重放。不要在结果未知时换标识重建。
+- 写结果新增 `mutation`，包含本次事件、真实调用者与新增历史数组。
+  原 `entity/history/warnings` 保持兼容；完整历史以 `mutation.history` 为准。
+- Multica 等宿主负责凭据传递、会话和授权状态。共享服务账号的 actor 只代表该
+  服务账号；不得把模型传入的姓名当作真实委托人身份。需要逐人审计时传递各人的
+  凭据，或另行实现经过认证的委托协议。

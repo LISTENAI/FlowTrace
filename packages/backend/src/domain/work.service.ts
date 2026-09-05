@@ -1,3 +1,4 @@
+import { mutationScope, receiptId } from '@/domain/mutation-scope';
 import {
   BadRequestException,
   ConflictException,
@@ -15,6 +16,8 @@ import type {
   ChangeContext,
   ChangeEvent,
   ChangeEventContext,
+  ChangePage,
+  SearchPage,
   Dependency,
   DependencyTargetSummary,
   DependencyTargetType,
@@ -58,6 +61,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import { plainToInstance } from 'class-transformer';
 import { isUUID, validate } from 'class-validator';
 import {
+  Equal,
+  And,
+  LessThan,
+  LessThanOrEqual,
   DataSource,
   EntityManager,
   type FindOptionsWhere,
@@ -67,6 +74,7 @@ import {
   Repository,
 } from 'typeorm';
 import {
+  MutationReceiptEntity,
   ActionItemEntity,
   AuthPersonBindingEntity,
   BugEntity,
@@ -125,6 +133,8 @@ type SchedulableEntity =
 type TrackableKind = 'stage' | 'bug' | 'action_item';
 type EntityKind = 'requirement' | TrackableKind;
 type ChangeFilters = {
+  cursor?: string;
+  until?: string;
   since: string;
   projectId?: string;
   versionId?: string;
@@ -168,6 +178,8 @@ const context = (
   agentName: value.agentName,
   agentModel: value.agentModel,
   reason: value.reason,
+  sourceRef: value.sourceRef,
+  reportedAt: value.reportedAt,
 });
 const normalizeSearchText = (value: string) =>
   value
@@ -444,6 +456,46 @@ export class WorkService {
     limit = 20,
     includeInactivePeople = false,
   ): Promise<SearchResult[]> {
+    return (await this.searchPage(query, types, limit, includeInactivePeople))
+      .items;
+  }
+
+  async searchPage(
+    query: string,
+    types: SearchEntityType[] = [...searchEntityTypes],
+    limit = 20,
+    includeInactivePeople = false,
+    options: { projectId?: string; versionId?: string; offset?: number } = {},
+  ): Promise<SearchPage> {
+    const all = (
+      await this.searchCandidates(query, types, includeInactivePeople)
+    ).filter(
+      (item) =>
+        (!options.projectId ||
+          (item.type === 'project' ? item.id : item.projectId) ===
+            options.projectId) &&
+        (!options.versionId ||
+          (item.type === 'version' ? item.id : item.versionId) ===
+            options.versionId),
+    );
+    const offset = options.offset ?? 0;
+    if (!Number.isInteger(offset) || offset < 0)
+      throw new BadRequestException('offset 必须是非负整数');
+    const items = all.slice(offset, offset + Math.min(Math.max(limit, 1), 50));
+    const hasMore = offset + items.length < all.length;
+    return {
+      items,
+      total: all.length,
+      hasMore,
+      nextOffset: hasMore ? offset + items.length : undefined,
+    };
+  }
+
+  private async searchCandidates(
+    query: string,
+    types: SearchEntityType[],
+    includeInactivePeople: boolean,
+  ): Promise<SearchResult[]> {
     const needle = query.trim().normalize('NFKC').toLocaleLowerCase();
     const compactNeedle = normalizeSearchText(query);
     const needleVersionParts = versionParts(query);
@@ -719,9 +771,9 @@ export class WorkService {
         (left, right) =>
           left.rank - right.rank ||
           left.result.type.localeCompare(right.result.type) ||
-          left.result.name.localeCompare(right.result.name, 'zh-CN'),
+          left.result.name.localeCompare(right.result.name, 'zh-CN') ||
+          left.result.id.localeCompare(right.result.id),
       )
-      .slice(0, Math.min(Math.max(limit, 1), 50))
       .map((item) => item.result);
   }
 
@@ -975,6 +1027,7 @@ export class WorkService {
     input: CreateActionItemDto,
     actorPersonId: string,
   ): Promise<ActionItem> {
+    this.validatePlan(date(input.plannedStartAt), date(input.plannedEndAt));
     const scope = await this.resolveActionItemScope(
       input.projectId,
       input.requirementId,
@@ -1300,6 +1353,7 @@ export class WorkService {
   }
 
   async createRequirement(input: CreateRequirementDto): Promise<Requirement> {
+    this.validatePlan(date(input.plannedStartAt), date(input.plannedEndAt));
     if (input.stages?.some((stage) => !stage.name.trim())) {
       throw new BadRequestException('真实阶段名称不能为空');
     }
@@ -1374,6 +1428,8 @@ export class WorkService {
         if (stage.templateStageId)
           templateIdMap.set(stage.templateStageId, randomUUID());
       }
+      for (const stage of sourceStages)
+        this.validatePlan(date(stage.plannedStartAt), date(stage.plannedEndAt));
       const stages = sourceStages.map((sourceStage) =>
         manager.getRepository(StageEntity).create({
           id:
@@ -1577,6 +1633,7 @@ export class WorkService {
   }
 
   async addStage(requirementId: string, input: CreateStageDto): Promise<Stage> {
+    this.validatePlan(date(input.plannedStartAt), date(input.plannedEndAt));
     const stageId = await this.dataSource.transaction(async (manager) => {
       const requirement = await manager
         .getRepository(RequirementEntity)
@@ -1840,6 +1897,7 @@ export class WorkService {
   }
 
   async reportBug(requirementId: string, input: CreateBugDto): Promise<Bug> {
+    this.validatePlan(date(input.plannedStartAt), date(input.plannedEndAt));
     const requirement = await this.findRequirement(requirementId);
     if (input.discoveredStageId) {
       const stage = await this.findStage(input.discoveredStageId);
@@ -2201,19 +2259,65 @@ export class WorkService {
     return this.toDependency(dependency);
   }
 
+  async getMutationReceipt(requestId: string, actorId: string) {
+    const receipt = await this.dataSource.manager
+      .getRepository(MutationReceiptEntity)
+      .findOneBy({ id: receiptId(actorId, requestId) });
+    if (!receipt)
+      throw new NotFoundException(
+        '未找到已提交回执；可用原执行标识和原参数重试，不能据此新建重复事项',
+      );
+    return receipt.response;
+  }
+
   async getChanges(filters: ChangeFilters): Promise<ChangeEvent[]> {
+    return (await this.getChangesPage(filters)).items;
+  }
+
+  async getChangesPage(filters: ChangeFilters): Promise<ChangePage> {
     const since = new Date(filters.since);
-    if (Number.isNaN(since.getTime())) {
+    if (Number.isNaN(since.getTime()))
       throw new BadRequestException('since 必须是有效的 ISO 8601 时间');
+    const scope = digest({
+      since: since.toISOString(),
+      projectId: filters.projectId,
+      versionId: filters.versionId,
+      requirementId: filters.requirementId,
+    });
+    let cursor:
+      { time: string; id: string; until: string; scope: string } | undefined;
+    if (filters.cursor) {
+      try {
+        cursor = JSON.parse(
+          Buffer.from(filters.cursor, 'base64url').toString('utf8'),
+        );
+        if (
+          !cursor ||
+          cursor.scope !== scope ||
+          !isUUID(cursor.id) ||
+          !Number.isFinite(Date.parse(cursor.time)) ||
+          !Number.isFinite(Date.parse(cursor.until))
+        )
+          throw new Error();
+        if (
+          filters.until &&
+          new Date(filters.until).toISOString() !== cursor.until
+        )
+          throw new Error();
+      } catch {
+        throw new BadRequestException('游标无效或查询范围已改变');
+      }
     }
+    const until = new Date(cursor?.until ?? filters.until ?? Date.now());
+    if (!Number.isFinite(until.getTime()) || until < since)
+      throw new BadRequestException('until 必须是晚于 since 的有效时间');
     const base: FindOptionsWhere<ChangeEventEntity> = {
-      occurredAt: MoreThanOrEqual(since),
       ...(filters.projectId ? { projectId: filters.projectId } : {}),
+      ...(filters.requirementId
+        ? { requirementId: filters.requirementId }
+        : {}),
     };
-    let where:
-      | FindOptionsWhere<ChangeEventEntity>
-      | FindOptionsWhere<ChangeEventEntity>[] = base;
-    if (filters.requirementId) base.requirementId = filters.requirementId;
+    let scopes: FindOptionsWhere<ChangeEventEntity>[] = [base];
     if (filters.versionId) {
       const version = await this.versions.findOne({
         where: { id: filters.versionId },
@@ -2222,17 +2326,52 @@ export class WorkService {
       if (!version) throw new NotFoundException('未找到版本');
       if (filters.projectId && filters.projectId !== version.projectId)
         throw new BadRequestException('版本不属于指定项目');
-      where = [
+      scopes = [
         { ...base, versionId: version.id },
         { ...base, relatedVersionId: version.id },
       ];
     }
+    const within = [MoreThanOrEqual(since), LessThanOrEqual(until)];
+    const where = scopes.flatMap((scope) =>
+      cursor
+        ? [
+            {
+              ...scope,
+              occurredAt: And(...within, LessThan(new Date(cursor.time))),
+            },
+            {
+              ...scope,
+              occurredAt: And(...within, Equal(new Date(cursor.time))),
+              id: LessThan(cursor.id),
+            },
+          ]
+        : [{ ...scope, occurredAt: And(...within) }],
+    );
+    const limit = Math.min(Math.max(filters.limit ?? 100, 1), 300);
     const rows = await this.changes.find({
       where,
-      order: { occurredAt: 'DESC' },
-      take: Math.min(Math.max(filters.limit ?? 100, 1), 300),
+      order: { occurredAt: 'DESC', id: 'DESC' },
+      take: limit + 1,
     });
-    return this.hydrateChanges(rows);
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit);
+    const last = page.at(-1);
+    return {
+      items: await this.hydrateChanges(page),
+      hasMore,
+      until: until.toISOString(),
+      nextCursor:
+        hasMore && last
+          ? Buffer.from(
+              JSON.stringify({
+                time: last.occurredAt.toISOString(),
+                id: last.id,
+                until: until.toISOString(),
+                scope,
+              }),
+            ).toString('base64url')
+          : undefined,
+    };
   }
 
   async getProjectSnapshot(projectId: string): Promise<ProjectSnapshot> {
@@ -2669,6 +2808,11 @@ export class WorkService {
     );
   }
 
+  private validatePlan(start: Date | null, end: Date | null): void {
+    if (start && end && end < start)
+      throw new BadRequestException('计划结束时间不能早于计划开始时间');
+  }
+
   private async reschedule(
     kind: EntityKind,
     entity: SchedulableEntity,
@@ -2692,6 +2836,7 @@ export class WorkService {
       input.plannedEndAt === undefined
         ? entity.plannedEndAt
         : date(input.plannedEndAt);
+    this.validatePlan(nextStart, nextEnd);
     await this.dataSource.transaction(async (manager) => {
       await manager.save(
         manager.getRepository(ScheduleHistoryEntity).create({
@@ -3466,9 +3611,7 @@ export class WorkService {
     };
   }
 
-  private async hydrateChanges(
-    rows: ChangeEventEntity[],
-  ): Promise<ChangeEvent[]> {
+  async hydrateChanges(rows: ChangeEventEntity[]): Promise<ChangeEvent[]> {
     return rows.map((row) => ({
       ...this.toChange(row),
       project: row.eventContext?.project,
@@ -3489,6 +3632,10 @@ export class WorkService {
       type: row.type,
       summary: row.summary,
       details: row.details ?? undefined,
+      mutationId: row.mutationId ?? undefined,
+      actor: row.actor ?? undefined,
+      sourceRef: row.sourceRef ?? undefined,
+      reportedAt: iso(row.reportedAt),
       reason: row.reason ?? undefined,
       source: row.source,
       agentName: row.agentName ?? undefined,
@@ -3580,7 +3727,7 @@ export class WorkService {
     };
   }
 
-  private scopedTo(manager: EntityManager): WorkService {
+  scopedTo(manager: EntityManager): WorkService {
     const scopedDataSource = {
       manager,
       transaction: async <T>(
@@ -4260,14 +4407,12 @@ export class WorkService {
     versionId: string,
     projectId: string,
   ): Promise<void> {
-    const version = await manager
-      .getRepository(VersionEntity)
-      .findOne({
-        where: { id: versionId },
-        ...(manager.queryRunner?.isTransactionActive
-          ? { lock: { mode: 'pessimistic_write' as const } }
-          : {}),
-      });
+    const version = await manager.getRepository(VersionEntity).findOne({
+      where: { id: versionId },
+      ...(manager.queryRunner?.isTransactionActive
+        ? { lock: { mode: 'pessimistic_write' as const } }
+        : {}),
+    });
     if (!version || version.projectId !== projectId) {
       throw new BadRequestException('目标版本不属于该项目');
     }
@@ -4309,6 +4454,8 @@ export class WorkService {
       source: 'manual' | 'api' | 'agent';
       agentName?: string;
       agentModel?: string;
+      sourceRef?: string;
+      reportedAt?: string;
     },
   ): Promise<void> {
     const requirement = input.requirementId
@@ -4373,6 +4520,13 @@ export class WorkService {
         versionId,
         relatedVersionId: relatedVersionId ?? null,
         eventContext,
+        mutationId: mutationScope.getStore()?.mutationId ?? null,
+        actor: mutationScope.getStore()?.actor ?? null,
+        sourceRef:
+          input.sourceRef ?? mutationScope.getStore()?.sourceRef ?? null,
+        reportedAt: date(
+          input.reportedAt ?? mutationScope.getStore()?.reportedAt,
+        ),
         type: input.type,
         summary: input.summary,
         details: input.details ?? null,

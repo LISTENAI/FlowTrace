@@ -5,7 +5,11 @@ import { DataSource } from 'typeorm';
 import { beforeAll, afterAll, describe, it, expect, vi } from 'vitest';
 import { DomainModule } from '@/domain/domain.module';
 import { WorkService } from '@/domain/work.service';
-import { VersionEntity, StatusHistoryEntity } from '@/database/entities';
+import {
+  ChangeEventEntity,
+  VersionEntity,
+  StatusHistoryEntity,
+} from '@/database/entities';
 import { createTestDataSource } from './support/database';
 
 describe('delivery scope and audit', () => {
@@ -26,6 +30,69 @@ describe('delivery scope and audit', () => {
   });
   afterAll(async () => {
     await ds.destroy();
+  });
+
+  it('pages through equal timestamps without omission and binds cursors to their scope', async () => {
+    const project = await work.createProject({
+      key: 'PAGES',
+      name: '完整历史',
+    });
+    for (let index = 0; index < 6; index++)
+      await work.createRequirement({
+        projectId: project.id,
+        title: `分页 ${index}`,
+        stages: [],
+      });
+    await ds
+      .getRepository(ChangeEventEntity)
+      .update(
+        { projectId: project.id },
+        { occurredAt: new Date('2026-08-01T00:00:00Z') },
+      );
+    const all: string[] = [];
+    let cursor: string | undefined;
+    let until: string | undefined;
+    do {
+      const page = await work.getChangesPage({
+        since: '2026-07-01',
+        projectId: project.id,
+        limit: 2,
+        cursor,
+        until,
+      });
+      all.push(...page.items.map((item) => item.id));
+      cursor = page.nextCursor;
+      until = page.until;
+      if (all.length === 2) {
+        await expect(
+          work.getChangesPage({
+            since: '2026-06-01',
+            projectId: project.id,
+            cursor,
+          }),
+        ).rejects.toThrow('查询范围');
+        await work.createRequirement({
+          projectId: project.id,
+          title: '翻页后新增',
+          stages: [],
+        });
+      }
+    } while (cursor);
+    expect(all).toHaveLength(7);
+    expect(new Set(all).size).toBe(7);
+    const first = await work.searchPage('分页', ['requirement'], 2, false, {
+      projectId: project.id,
+    });
+    expect(first).toMatchObject({ total: 6, hasMore: true, nextOffset: 2 });
+    const second = await work.searchPage('分页', ['requirement'], 2, false, {
+      projectId: project.id,
+      offset: first.nextOffset,
+    });
+    expect(
+      second.items.every(
+        (item) => !first.items.some((prior) => prior.id === item.id),
+      ),
+    ).toBe(true);
   });
 
   it('includes fixes from older requirements only in the committed target version', async () => {
@@ -176,12 +243,10 @@ describe('delivery scope and audit', () => {
           scopedTo(manager: typeof runner.manager): WorkService;
         }
       ).scopedTo(runner.manager);
-      await runner.manager
-        .getRepository(VersionEntity)
-        .findOne({
-          where: { id: version.id },
-          lock: { mode: 'pessimistic_write' },
-        });
+      await runner.manager.getRepository(VersionEntity).findOne({
+        where: { id: version.id },
+        lock: { mode: 'pessimistic_write' },
+      });
       const deletion = work.deleteVersion(version.id, {
         confirmation: version.name,
         reason: '清理',

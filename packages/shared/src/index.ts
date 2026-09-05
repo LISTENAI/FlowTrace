@@ -18,3 +18,5 @@ export function inferStageWorkDomain(name: string): StageWorkDomain {
     return 'implementation';
   return 'other';
 }
+
+export * from './capabilities.js';

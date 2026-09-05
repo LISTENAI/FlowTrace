@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { WorkService } from '@/domain/work.service';
+import { CurrentIdentityController } from '@/auth/auth.controller';
 import 'reflect-metadata';
 import type { INestApplication } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -44,9 +47,31 @@ describe.sequential('HTTP API', () => {
         }),
         DomainModule,
       ],
-      controllers: [McpController],
+      controllers: [McpController, CurrentIdentityController],
     }).compile();
     app = module.createNestApplication<NestExpressApplication>();
+    const person = await module
+      .get(WorkService)
+      .createPerson({ name: 'HTTP 测试人员' });
+    app.use((req: any, _res: unknown, next: () => void) => {
+      req.flowTraceIdentity = {
+        user: {
+          id: req.headers['x-test-actor'] ?? 'http-test',
+          name: person.name,
+          email: 'test@example.com',
+          emailVerified: true,
+        },
+        person,
+        provider: {
+          id: 'local',
+          name: '本地账号',
+          kind: 'local',
+          nameAuthority: 'flowtrace',
+          emailAuthority: 'account',
+        },
+      };
+      next();
+    });
     configureApp(app);
     configureStaticWeb(app as NestExpressApplication);
     await app.listen(0, '127.0.0.1');
@@ -123,7 +148,7 @@ describe.sequential('HTTP API', () => {
       jsonrpc: '2.0',
       id: 1,
       result: {
-        serverInfo: { name: 'flowtrace', version: '0.2.0' },
+        serverInfo: { name: 'flowtrace', version: '0.6.0' },
         instructions: expect.stringContaining('Project'),
       },
     });
@@ -133,7 +158,7 @@ describe.sequential('HTTP API', () => {
       .set('accept', 'application/json, text/event-stream')
       .send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
       .expect(200);
-    expect(tools.body.result.tools).toHaveLength(34);
+    expect(tools.body.result.tools).toHaveLength(37);
     expect(tools.body.result.tools).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'search' }),
@@ -534,6 +559,131 @@ describe.sequential('HTTP API', () => {
         expect.objectContaining({ id: bugId, status: 'in_progress' }),
       ]),
     );
+  });
+
+  it('replays committed writes, rejects changed input and isolates receipts by caller', async () => {
+    const requestId = randomUUID();
+    const body = {
+      key: 'RECEIPT',
+      name: '可恢复写入',
+      source: 'agent',
+      agentName: '回执测试',
+      sourceRef: 'meeting://delivery/42',
+      reportedAt: '2026-08-20T08:00:00Z',
+    };
+    const write = () =>
+      request(app.getHttpServer())
+        .post('/api/projects')
+        .set('X-FlowTrace-Request-Id', requestId)
+        .set('X-FlowTrace-Result', 'receipt')
+        .send(body);
+    const first = await write().expect(201);
+    const retry = await write().expect(201);
+    expect(retry.body).toEqual(first.body);
+    expect(first.body.mutation).toMatchObject({
+      requestId,
+      status: 'committed',
+      actor: { userId: 'http-test' },
+      changes: [
+        expect.objectContaining({
+          source: 'agent',
+          sourceRef: body.sourceRef,
+          reportedAt: '2026-08-20T08:00:00.000Z',
+          actor: {
+            userId: 'http-test',
+            personId: expect.any(String),
+            name: 'HTTP 测试人员',
+          },
+        }),
+      ],
+    });
+    await request(app.getHttpServer())
+      .post('/api/projects')
+      .set('X-FlowTrace-Request-Id', requestId)
+      .send({ ...body, name: '不同操作' })
+      .expect(409);
+    const lookup = await request(app.getHttpServer())
+      .get(`/api/operations/${requestId}`)
+      .expect(200);
+    expect(lookup.body).toEqual(first.body);
+    await request(app.getHttpServer())
+      .get(`/api/operations/${requestId}`)
+      .set('x-test-actor', 'other-user')
+      .expect(404);
+    const other = await request(app.getHttpServer())
+      .post('/api/projects')
+      .set('X-FlowTrace-Request-Id', requestId)
+      .set('X-FlowTrace-Result', 'receipt')
+      .set('x-test-actor', 'other-user')
+      .send({ key: 'OTHER', name: '另一调用者' })
+      .expect(201);
+    expect(other.body.mutation.changes).toHaveLength(1);
+    expect(other.body.mutation.changes[0].entityId).toBe(other.body.data.id);
+    expect(other.body.mutation.id).not.toBe(first.body.mutation.id);
+    await request(app.getHttpServer())
+      .post('/api/projects')
+      .set('X-FlowTrace-Request-Id', 'bad')
+      .send(body)
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/projects')
+      .send({ ...body, key: 'FORGED', actor: { userId: 'someone-else' } })
+      .expect(400);
+  });
+
+  it('returns the inserted backdated history and rolls back failed writes with their receipt', async () => {
+    const project = await request(app.getHttpServer())
+      .post('/api/projects')
+      .send({ key: 'BACKFILL', name: '补录回执' })
+      .expect(201);
+    const requirement = await request(app.getHttpServer())
+      .post('/api/requirements')
+      .send({
+        projectId: project.body.id,
+        title: '复原时间线',
+        stages: [{ name: '测试' }],
+      })
+      .expect(201);
+    const stageId = requirement.body.stages[0].id;
+    await request(app.getHttpServer())
+      .post(`/api/stages/${stageId}/status`)
+      .send({ status: 'done', effectiveAt: '2026-08-20T08:00:00Z' })
+      .expect(201);
+    const receipt = await request(app.getHttpServer())
+      .post(`/api/stages/${stageId}/status`)
+      .set('X-FlowTrace-Result', 'receipt')
+      .send({ status: 'in_progress', effectiveAt: '2026-08-19T08:00:00Z' })
+      .expect(201);
+    expect(receipt.body.data.status).toBe('done');
+    expect(receipt.body.mutation.history.status).toEqual([
+      expect.objectContaining({
+        toStatus: 'in_progress',
+        effectiveAt: '2026-08-19T08:00:00.000Z',
+      }),
+    ]);
+    const requestId = randomUUID();
+    await request(app.getHttpServer())
+      .post('/api/requirements')
+      .set('X-FlowTrace-Request-Id', requestId)
+      .send({
+        projectId: project.body.id,
+        title: '失败录入',
+        stages: [
+          {
+            name: '测试',
+            plannedStartAt: '2026-08-20T00:00:00Z',
+            plannedEndAt: '2026-08-19T00:00:00Z',
+          },
+        ],
+      })
+      .expect(400);
+    await request(app.getHttpServer())
+      .get(`/api/operations/${requestId}`)
+      .expect(404);
+    const snapshot = await request(app.getHttpServer())
+      .get(`/api/snapshots/projects/${project.body.id}`)
+      .expect(200);
+    expect(snapshot.body.requirements).toHaveLength(1);
   });
 
   it('renames a person without changing the stable identity', async () => {
