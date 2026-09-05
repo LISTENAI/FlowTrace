@@ -42,6 +42,7 @@ import RequirementBasicsDialog from '@/components/RequirementBasicsDialog.vue';
 import StatusHistoryCorrectionDialog from '@/components/StatusHistoryCorrectionDialog.vue';
 import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
 import StagePlanEditor from '@/components/StagePlanEditor.vue';
+import WorkItemCreateDialog from '@/components/WorkItemCreateDialog.vue';
 import {
   formatDate,
   formatDateRange,
@@ -104,15 +105,6 @@ const candidateRequirements = ref<
   Array<{ id: string; key: string; title: string; projectId: string }>
 >([]);
 const selectedPredecessor = ref<Requirement>();
-const bugForm = reactive({
-  title: '',
-  description: '',
-  ownerIds: [] as string[],
-  discoveredStageId: '',
-  targetVersionId: '',
-  plannedStartAt: '',
-  plannedEndAt: '',
-});
 const dependencyForm = reactive({
   predecessorRequirementId: '',
   predecessorStageId: '',
@@ -122,21 +114,6 @@ const dependencyForm = reactive({
 const project = computed(() =>
   workspace.projects.find((item) => item.id === requirement.value?.projectId),
 );
-const stageOptions = computed(() => requirement.value?.stages ?? []);
-const discoveredStageOptions = computed(() => [
-  { value: '', label: '未指定阶段' },
-  ...stageOptions.value.map((stage) => ({
-    value: stage.id,
-    label: stage.name,
-  })),
-]);
-const targetVersionOptions = computed(() => [
-  { value: '', label: '未排版本' },
-  ...versions.value.map((version) => ({
-    value: version.id,
-    label: version.name,
-  })),
-]);
 const predecessorRequirementOptions = computed(() => [
   { value: '', label: '选择另一个需求' },
   ...candidateRequirements.value.map((item) => ({
@@ -476,44 +453,7 @@ async function moveStage(stage: Stage, index: number, offset: number) {
   }
 }
 
-async function addBug() {
-  if (!requirement.value) return;
-  saving.value = true;
-  try {
-    const bug = await api.addBug(requirement.value.id, {
-      title: bugForm.title,
-      description: bugForm.description,
-      ownerIds: bugForm.ownerIds,
-      discoveredStageId: bugForm.discoveredStageId || undefined,
-      targetVersionId: bugForm.targetVersionId || undefined,
-      plannedStartAt: bugForm.plannedStartAt
-        ? dayjs(bugForm.plannedStartAt).startOf('day').toISOString()
-        : undefined,
-      plannedEndAt: bugForm.plannedEndAt
-        ? dayjs(bugForm.plannedEndAt).endOf('day').toISOString()
-        : undefined,
-    });
-    addBugOpen.value = false;
-    toasts.show('Bug 已进入追踪', bug.key);
-    bugForm.title = '';
-    bugForm.description = '';
-    bugForm.ownerIds = [];
-    await load();
-  } catch (error) {
-    toasts.show(
-      '新增失败',
-      error instanceof Error ? error.message : undefined,
-      'error',
-    );
-  } finally {
-    saving.value = false;
-  }
-}
-
 function openBugForm() {
-  bugForm.targetVersionId = requirement.value?.versionId ?? '';
-  bugForm.plannedStartAt = '';
-  bugForm.plannedEndAt = '';
   addBugOpen.value = true;
 }
 
@@ -1451,77 +1391,18 @@ watch(id, load);
       </form>
     </AppModal>
 
-    <AppModal
-      :open="addBugOpen"
-      title="报告一个独立 Bug"
-      description="它会保留自己的负责人、状态和时间轨迹。"
+    <WorkItemCreateDialog
+      v-if="addBugOpen && requirement"
+      kind="bug"
+      :requirement="requirement"
+      :versions="versions"
+      :people="workspace.people"
       @close="addBugOpen = false"
-      ><form class="space-y-4" @submit.prevent="addBug">
-        <label class="block"
-          ><span class="mb-1.5 block text-xs font-medium text-slate-600"
-            >问题标题</span
-          ><input
-            v-model="bugForm.title"
-            required
-            placeholder="例如：二次配网可能失败"
-            class="focus-ring w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm" /></label
-        ><label class="block"
-          ><span class="mb-1.5 block text-xs font-medium text-slate-600"
-            >问题描述</span
-          ><textarea
-            v-model="bugForm.description"
-            rows="2"
-            class="focus-ring w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm"
-          /></label
-        ><label class="block"
-          ><span class="mb-1.5 block text-xs font-medium text-slate-600"
-            >发现于</span
-          ><AppSelect
-            v-model="bugForm.discoveredStageId"
-            :options="discoveredStageOptions"
-        /></label>
-        <div class="grid grid-cols-2 gap-3">
-          <label
-            ><span class="mb-1.5 block text-xs font-medium text-slate-600"
-              >目标版本</span
-            ><AppSelect
-              v-model="bugForm.targetVersionId"
-              :options="targetVersionOptions" /></label
-          ><label
-            ><span class="mb-1.5 block text-xs font-medium text-slate-600"
-              >计划开始</span
-            ><AppDateTimeField v-model="bugForm.plannedStartAt"
-          /></label>
-        </div>
-        <label class="block"
-          ><span class="mb-1.5 block text-xs font-medium text-slate-600"
-            >计划结束</span
-          ><AppDateTimeField
-            v-model="bugForm.plannedEndAt"
-            :min="bugForm.plannedStartAt"
-        /></label>
-        <fieldset>
-          <legend class="mb-2 text-xs font-medium text-slate-600">
-            负责人
-          </legend>
-          <OwnerPicker v-model="bugForm.ownerIds" :people="workspace.people" />
-        </fieldset>
-        <div class="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            class="rounded-xl px-4 py-2 text-sm text-slate-500"
-            @click="addBugOpen = false"
-          >
-            取消</button
-          ><button
-            :disabled="saving"
-            class="rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white"
-          >
-            报告 Bug
-          </button>
-        </div>
-      </form></AppModal
-    >
+      @created="
+        addBugOpen = false;
+        load();
+      "
+    />
 
     <AppModal
       :open="addDependencyOpen"

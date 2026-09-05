@@ -2,6 +2,8 @@
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/vue';
 import {
   ArrowTopRightOnSquareIcon,
+  BugAntIcon,
+  PlusIcon,
   CalendarDaysIcon,
   EllipsisHorizontalIcon,
   PencilSquareIcon,
@@ -14,10 +16,12 @@ const props = withDefaults(
     label: string;
     allowEdit?: boolean;
     allowDetail?: boolean;
+    allowCreate?: boolean;
   }>(),
   {
     allowEdit: false,
     allowDetail: false,
+    allowCreate: false,
   },
 );
 
@@ -26,14 +30,20 @@ const emit = defineEmits<{
   owners: [];
   planning: [];
   detail: [];
+  addStage: [];
+  addBug: [];
 }>();
 
 const menuPosition = ref({ top: 0, left: 0 });
 const itemCount = computed(
-  () => 2 + Number(props.allowEdit) + Number(props.allowDetail),
+  () =>
+    2 +
+    Number(props.allowEdit) +
+    Number(props.allowDetail) +
+    2 * Number(props.allowCreate),
 );
 
-function positionMenu(event: MouseEvent) {
+function positionMenu(event: MouseEvent | KeyboardEvent) {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
   const width = 176;
   const height = itemCount.value * 37 + 12;
@@ -61,6 +71,10 @@ const itemClass =
       class="timeline-row-action focus-ring"
       :aria-label="`${label}的更多操作`"
       @click="positionMenu"
+      @keydown.enter="positionMenu"
+      @keydown.space="positionMenu"
+      @keydown.down="positionMenu"
+      @keydown.up="positionMenu"
     >
       <EllipsisHorizontalIcon class="h-4 w-4" />
     </MenuButton>
@@ -72,6 +86,24 @@ const itemClass =
           left: `${menuPosition.left}px`,
         }"
       >
+        <MenuItem v-if="allowCreate" v-slot="{ active }">
+          <button
+            type="button"
+            :class="[itemClass, active ? 'bg-slate-100 text-slate-950' : '']"
+            @click="emit('addStage')"
+          >
+            <PlusIcon class="h-4 w-4 shrink-0" />新增阶段
+          </button>
+        </MenuItem>
+        <MenuItem v-if="allowCreate" v-slot="{ active }">
+          <button
+            type="button"
+            :class="[itemClass, active ? 'bg-slate-100 text-slate-950' : '']"
+            @click="emit('addBug')"
+          >
+            <BugAntIcon class="h-4 w-4 shrink-0" />报告 Bug
+          </button>
+        </MenuItem>
         <MenuItem v-if="allowEdit" v-slot="{ active }">
           <button
             type="button"

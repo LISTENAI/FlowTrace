@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type {
+  Bug,
   ProjectSnapshot,
   Requirement,
   RequirementSummary,
   SnapshotWorkItem,
+  Stage,
   StageWorkDomain,
 } from '@flowtrace/shared';
 import { stageWorkDomains } from '@flowtrace/shared';
@@ -22,7 +24,15 @@ import {
   SquaresPlusIcon,
 } from '@heroicons/vue/24/outline';
 import dayjs from 'dayjs';
-import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue';
+import {
+  computed,
+  nextTick,
+  onActivated,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import { api } from '@/api';
 import AppDateTimeField from '@/components/AppDateTimeField.vue';
@@ -34,6 +44,7 @@ import RequirementCard from '@/components/RequirementCard.vue';
 import StatusUpdateDialog from '@/components/StatusUpdateDialog.vue';
 import StagePlanEditor from '@/components/StagePlanEditor.vue';
 import TimelineView from '@/components/TimelineView.vue';
+import WorkItemCreateDialog from '@/components/WorkItemCreateDialog.vue';
 import { formatDate, versionLabels } from '@/lib/presentation';
 import { stageWorkDomainLabels } from '@/lib/presentation';
 import { newStagePlanDraft, type StagePlanDraft } from '@/lib/stage-plan';
@@ -45,6 +56,11 @@ defineOptions({ name: 'ProjectView' });
 const route = useRoute();
 const projectId = ref(route.params.projectId as string);
 const snapshot = ref<ProjectSnapshot>();
+const timeline = ref<InstanceType<typeof TimelineView>>();
+const createItemTarget = ref<{
+  requirement: Requirement;
+  kind: 'stage' | 'bug';
+}>();
 const loading = ref(true);
 const error = ref('');
 const view = ref<'list' | 'timeline'>('list');
@@ -362,7 +378,12 @@ function openCreate() {
   form.title = '';
   form.description = '';
   form.versionId =
-    snapshot.value?.versions.find((item) => item.status === 'active')?.id ?? '';
+    filters.versionId === 'backlog'
+      ? ''
+      : (snapshot.value?.versions.find((item) => item.id === filters.versionId)
+          ?.id ??
+        snapshot.value?.versions.find((item) => item.status === 'active')?.id ??
+        '');
   form.ownerIds = [];
   form.withPlan = true;
   form.plannedStartAt = dayjs().format('YYYY-MM-DD');
@@ -394,6 +415,27 @@ function setCreatePlanning(enabled: boolean) {
     plannedStartAt: '',
     plannedEndAt: '',
   }));
+}
+
+async function revealCreatedRequirement(
+  requirement: Requirement,
+  itemId?: string,
+) {
+  filters.versionId = requirement.versionId ?? 'backlog';
+  filters.health = 'all';
+  filters.ownerId = 'all';
+  timelineFocusedDomains.value = [];
+  timelineFocusedStages.value = [];
+  timelineIncludeBugs.value = true;
+  await load();
+  await nextTick();
+  await timeline.value?.revealRequirement(requirement.id, itemId);
+}
+
+async function itemCreated(item: Stage | Bug) {
+  const requirement = createItemTarget.value?.requirement;
+  createItemTarget.value = undefined;
+  if (requirement) await revealCreatedRequirement(requirement, item.id);
 }
 
 async function createRequirement() {
@@ -429,7 +471,8 @@ async function createRequirement() {
     });
     createOpen.value = false;
     toasts.show('需求已创建', `${requirement.key} 已按本次真实流程创建`);
-    await load();
+    if (view.value === 'timeline') await revealCreatedRequirement(requirement);
+    else await load();
   } catch (caught) {
     toasts.show(
       '创建失败',
@@ -935,6 +978,18 @@ watch(timelineStageOptions, (options) => {
             v-if="view === 'timeline'"
             class="ml-auto flex max-w-full shrink-0 items-center justify-end gap-1 max-sm:w-full max-sm:flex-wrap max-sm:justify-between"
           >
+            <button
+              type="button"
+              v-tooltip="'新建需求'"
+              aria-label="新建需求"
+              class="focus-ring inline-flex h-9 items-center gap-1.5 rounded-xl bg-slate-900 px-3 text-white dark:bg-indigo-500"
+              @click="openCreate"
+            >
+              <PlusIcon class="h-4 w-4" />
+              <span class="hidden text-xs font-semibold sm:inline"
+                >新建需求</span
+              >
+            </button>
             <div class="relative">
               <button
                 type="button"
@@ -948,8 +1003,8 @@ watch(timelineStageOptions, (options) => {
                 "
               >
                 <FunnelIcon class="h-4 w-4" />
-                <span>聚焦</span>
-                <span class="max-w-24 truncate text-indigo-600">{{
+                <span class="text-xs">聚焦</span>
+                <span class="max-w-24 truncate text-xs text-indigo-600">{{
                   timelineFocusLabel
                 }}</span>
                 <span
@@ -1126,8 +1181,8 @@ watch(timelineStageOptions, (options) => {
                 "
               >
                 <RectangleStackIcon class="h-4 w-4" />
-                <span>展开</span>
-                <span class="text-indigo-600">{{
+                <span class="text-xs">展开</span>
+                <span class="text-xs text-indigo-600">{{
                   timelineExpansionLabel
                 }}</span>
                 <ChevronDownIcon
@@ -1209,6 +1264,10 @@ watch(timelineStageOptions, (options) => {
         </div>
         <div v-else>
           <TimelineView
+            ref="timeline"
+            @create-item="
+              (requirement, kind) => (createItemTarget = { requirement, kind })
+            "
             v-model:expansion-depth="timelineExpansionDepth"
             v-model:expansion-mode="timelineExpansionMode"
             :requirements="filteredTimelineRequirements"
@@ -1222,6 +1281,16 @@ watch(timelineStageOptions, (options) => {
           />
         </div>
       </section>
+
+      <WorkItemCreateDialog
+        v-if="createItemTarget"
+        :kind="createItemTarget.kind"
+        :requirement="createItemTarget.requirement"
+        :versions="snapshot.versions"
+        :people="workspace.people"
+        @close="createItemTarget = undefined"
+        @created="itemCreated"
+      />
 
       <AppModal
         :open="createOpen"

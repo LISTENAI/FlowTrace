@@ -86,7 +86,10 @@ const props = defineProps<{
   includeBugs?: boolean;
   restoreToken?: number;
 }>();
-const emit = defineEmits<{ scheduleSaved: [] }>();
+const emit = defineEmits<{
+  scheduleSaved: [];
+  createItem: [requirement: Requirement, kind: 'stage' | 'bug'];
+}>();
 const router = useRouter();
 const expansionMode = defineModel<ExpansionMode>('expansionMode', {
   default: 'smart',
@@ -1004,6 +1007,26 @@ onDeactivated(() => {
   deactivatePageScrollBridge();
 });
 
+async function revealRequirement(requirementId: string, itemId?: string) {
+  const group = groups.value.find((group) =>
+    group.requirements.some((item) => item.id === requirementId),
+  );
+  if (!group) return;
+  expansionMode.value = 'custom';
+  expandedVersions.add(group.id);
+  expandedRequirements.add(requirementId);
+  expandedBugGroups.add(requirementId);
+  await nextTick();
+  const row = timelineSurface.value?.querySelector<HTMLElement>(
+    itemId
+      ? `[data-work-item-id="${itemId}"]`
+      : `[data-requirement-id="${requirementId}"]`,
+  );
+  row?.scrollIntoView({ block: 'center', inline: 'nearest' });
+}
+
+defineExpose({ revealRequirement });
+
 function restoreScrollPosition() {
   const saved = savedScrollPosition.value;
   if (!saved) return;
@@ -1222,6 +1245,7 @@ watch(
               class="timeline-requirement-group"
             >
               <div
+                :data-requirement-id="requirement.id"
                 class="timeline-requirement-heading timeline-grid group grid w-full border-b border-slate-100 bg-white text-left hover:bg-slate-50/95"
               >
                 <div
@@ -1263,6 +1287,9 @@ watch(
                     :label="requirement.title"
                     allow-edit
                     allow-detail
+                    allow-create
+                    @add-stage="emit('createItem', requirement, 'stage')"
+                    @add-bug="emit('createItem', requirement, 'bug')"
                     @edit="editBasicsTarget = requirement"
                     @owners="openOwners(requirement)"
                     @planning="openPlanning(requirement)"
@@ -1379,6 +1406,7 @@ watch(
 
                   <div
                     v-else
+                    :data-work-item-id="row.stage.id"
                     class="timeline-grid group grid border-b border-slate-100/80 bg-white"
                   >
                     <div
@@ -1538,6 +1566,7 @@ watch(
                   <div
                     v-for="bug in sortBugs(visibleBugs(requirement))"
                     :key="bug.id"
+                    :data-work-item-id="bug.id"
                     class="timeline-grid group grid border-b border-slate-100/80 bg-white"
                   >
                     <div
