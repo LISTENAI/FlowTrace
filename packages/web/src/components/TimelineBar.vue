@@ -75,7 +75,7 @@ function startBarDrag(event: PointerEvent, mode: ScheduleDragMode) {
     <div
       v-if="baselineStyle"
       v-tooltip="baselineTitle ?? '初始计划的起止位置；仅作为基准参照'"
-      class="pointer-events-none absolute top-[7px] z-[1] h-6 border-x border-slate-400/80"
+      class="pointer-events-none absolute top-[calc(50%-13px)] z-[1] h-6 border-x border-slate-400/80"
       :style="baselineStyle"
     />
     <template v-if="segments?.length">
@@ -83,7 +83,7 @@ function startBarDrag(event: PointerEvent, mode: ScheduleDragMode) {
         v-for="segment in segments"
         :key="segment.id"
         v-tooltip="segment.title"
-        class="absolute top-[14px] h-3 rounded-sm"
+        class="absolute top-[calc(50%-6px)] h-3 rounded-sm"
         :class="[
           segment.status ? statusDot[segment.status] : '',
           segment.class,
@@ -126,7 +126,7 @@ function startBarDrag(event: PointerEvent, mode: ScheduleDragMode) {
         v-for="segment in actualSegments"
         :key="`actual-${segment.id}`"
         v-tooltip="segment.title"
-        class="absolute top-[18px] z-10 h-1.5 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,.55)]"
+        class="absolute top-[calc(50%-2px)] z-10 h-1.5 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,.55)]"
         :class="[
           actualInteractive ? 'cursor-pointer' : 'cursor-help',
           segment.status ? statusDot[segment.status] : '',
@@ -139,7 +139,7 @@ function startBarDrag(event: PointerEvent, mode: ScheduleDragMode) {
     <div
       v-else-if="actualStyle"
       v-tooltip="actualTitle ?? '实际进展；请通过左侧状态圆点记录变化'"
-      class="absolute top-[18px] z-10 h-1.5 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,.55)]"
+      class="absolute top-[calc(50%-2px)] z-10 h-1.5 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,.55)]"
       :class="[
         actualInteractive ? 'cursor-pointer' : 'cursor-help',
         actualClass,

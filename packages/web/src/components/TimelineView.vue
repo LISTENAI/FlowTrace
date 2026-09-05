@@ -120,7 +120,7 @@ const dragPreview = ref<{
   mode: ScheduleDragMode;
 }>();
 const collator = new Intl.Collator('zh-CN', { numeric: true });
-const labelWidth = 320;
+const labelWidth = 448;
 const dayWidth = 32;
 const now = () => new Date().toISOString();
 let activePan:
@@ -1050,7 +1050,7 @@ watch(
       @wheel="handleTimelineWheel"
     >
       <div
-        class="w-full [--timeline-label-width:min(20rem,62vw)]"
+        class="w-full [--timeline-label-width:min(28rem,70vw)]"
         :style="{
           minWidth: `calc(var(--timeline-label-width) + ${timelineDateWidth}px)`,
         }"
@@ -1060,7 +1060,7 @@ watch(
         >
           <div
             ref="labelColumn"
-            class="sticky left-0 z-30 flex items-center justify-between border-r border-slate-100 bg-slate-50/95 px-5 py-3 text-[11px] font-semibold tracking-[.08em] text-slate-400 backdrop-blur"
+            class="timeline-label timeline-label-muted sticky left-0 z-30 flex items-center justify-between border-r border-slate-100 bg-slate-50/95 px-5 py-3 text-[11px] font-semibold tracking-[.08em] text-slate-400 backdrop-blur"
           >
             <span>版本、需求与过程</span>
             <div class="flex items-center gap-1.5 tracking-normal">
@@ -1171,7 +1171,7 @@ watch(
             @click="toggle(expandedVersions, group.id)"
           >
             <div
-              class="sticky left-0 z-20 flex h-12 items-center gap-2 border-r border-slate-100 bg-slate-50/95 px-4 backdrop-blur group-hover:bg-slate-100/95"
+              class="timeline-label timeline-label-muted sticky left-0 z-20 flex h-12 items-center gap-2 border-r border-slate-100 bg-slate-50/95 px-4 backdrop-blur group-hover:bg-slate-100/95"
             >
               <ChevronDownIcon
                 class="h-4 w-4 text-slate-500 transition"
@@ -1186,7 +1186,7 @@ watch(
             <TimelineBar
               :days="range.days"
               :bar-style="styleFor(versionDateRange(group, 'current'))"
-              bar-class="top-[14px] h-3 bg-indigo-200/90"
+              bar-class="top-[calc(50%-6px)] h-3 bg-indigo-200/90"
               :bar-title="
                 rangeTooltip(
                   '当前计划',
@@ -1225,7 +1225,7 @@ watch(
                 class="timeline-requirement-heading timeline-grid group grid w-full border-b border-slate-100 bg-white text-left hover:bg-slate-50/95"
               >
                 <div
-                  class="sticky left-0 z-20 flex h-12 items-center gap-2 border-r border-slate-100 bg-white pl-8 pr-4 group-hover:bg-slate-50"
+                  class="timeline-label sticky left-0 z-20 flex min-h-12 min-w-0 items-center gap-2 border-r border-slate-100 bg-white py-2 pl-4 pr-3 group-hover:bg-slate-50 sm:pl-8 sm:pr-4"
                 >
                   <button
                     type="button"
@@ -1243,11 +1243,11 @@ watch(
                       "
                     />
                     <span
-                      class="font-mono text-[10px] font-semibold text-indigo-500"
+                      class="shrink-0 font-mono text-[10px] font-semibold text-indigo-500"
                       >{{ requirement.key }}</span
                     >
                     <span
-                      class="min-w-0 flex-1 truncate text-xs font-semibold text-slate-800"
+                      class="min-w-0 flex-1 break-words text-xs leading-5 font-semibold text-slate-800"
                       >{{ requirement.title }}</span
                     >
                   </button>
@@ -1274,7 +1274,7 @@ watch(
                   :bar-style="
                     styleFor(requirementDateRange(requirement, 'current'))
                   "
-                  bar-class="top-[14px] h-3 bg-indigo-200/90"
+                  bar-class="top-[calc(50%-6px)] h-3 bg-indigo-200/90"
                   :bar-title="
                     rangeTooltip(
                       '当前计划',
@@ -1320,7 +1320,7 @@ watch(
                     @click="toggle(expandedStageGroups, row.id)"
                   >
                     <div
-                      class="sticky left-0 z-20 flex h-10 items-center gap-2 border-r border-indigo-100 bg-indigo-50/60 pl-12 pr-4 backdrop-blur group-hover:bg-indigo-50"
+                      class="timeline-label timeline-label-stage-group sticky left-0 z-20 flex h-10 items-center gap-2 border-r border-indigo-100 bg-indigo-50/60 pl-12 pr-4 backdrop-blur group-hover:bg-indigo-50"
                     >
                       <ChevronDownIcon
                         class="h-3.5 w-3.5 text-indigo-400 transition"
@@ -1344,7 +1344,7 @@ watch(
                     <TimelineBar
                       :days="range.days"
                       :bar-style="styleFor(stageGroupDateRange(row, 'current'))"
-                      bar-class="top-[14px] h-3 bg-indigo-300/90"
+                      bar-class="top-[calc(50%-6px)] h-3 bg-indigo-300/90"
                       :bar-title="
                         rangeTooltip(
                           '当前计划',
@@ -1382,7 +1382,7 @@ watch(
                     class="timeline-grid group grid border-b border-slate-100/80 bg-white"
                   >
                     <div
-                      class="sticky left-0 z-20 flex h-10 items-center gap-1 border-r border-slate-100 bg-white pl-12 pr-3 transition hover:bg-slate-50"
+                      class="timeline-label sticky left-0 z-20 flex h-10 items-center gap-1 border-r border-slate-100 bg-white pl-12 pr-3 transition hover:bg-slate-50"
                     >
                       <button
                         type="button"
@@ -1431,7 +1431,7 @@ watch(
                     <TimelineBar
                       :days="range.days"
                       :bar-style="styleFor(displayedItemRange(row.stage))"
-                      bar-class="top-[14px] h-3 bg-indigo-200/90"
+                      bar-class="top-[calc(50%-6px)] h-3 bg-indigo-200/90"
                       :bar-title="
                         rangeTooltip(
                           '当前计划',
@@ -1478,7 +1478,7 @@ watch(
                   @click="toggle(expandedBugGroups, requirement.id)"
                 >
                   <div
-                    class="sticky left-0 z-20 flex h-10 items-center gap-2 border-r border-rose-100/70 bg-rose-50/50 pl-12 pr-4 backdrop-blur group-hover:bg-rose-50/80"
+                    class="timeline-label timeline-label-bug-group sticky left-0 z-20 flex h-10 items-center gap-2 border-r border-rose-100/70 bg-rose-50/50 pl-12 pr-4 backdrop-blur group-hover:bg-rose-50/80"
                   >
                     <ChevronDownIcon
                       class="h-3.5 w-3.5 text-slate-400 transition"
@@ -1501,7 +1501,7 @@ watch(
                     :bar-style="
                       styleFor(bugGroupDateRange(requirement, 'current'))
                     "
-                    bar-class="top-[14px] h-3 bg-rose-200/90"
+                    bar-class="top-[calc(50%-6px)] h-3 bg-rose-200/90"
                     :bar-title="
                       rangeTooltip(
                         '当前计划',
@@ -1541,60 +1541,69 @@ watch(
                     class="timeline-grid group grid border-b border-slate-100/80 bg-white"
                   >
                     <div
-                      class="sticky left-0 z-20 flex h-10 items-center gap-1 border-r border-slate-100 bg-white pl-16 pr-3 transition hover:bg-slate-50"
+                      class="timeline-label sticky left-0 z-20 flex min-h-20 min-w-0 flex-col justify-center gap-1 border-r border-slate-100 bg-white py-2 pl-6 pr-3 transition hover:bg-slate-50 sm:pl-12"
                     >
-                      <button
-                        type="button"
-                        v-tooltip="`记录「${bug.title}」的进展`"
-                        class="focus-ring grid h-6 w-6 shrink-0 place-items-center rounded-lg hover:bg-slate-100"
-                        :aria-label="`记录「${bug.title}」的进展`"
-                        @click="statusTarget = bug"
-                      >
-                        <span
-                          class="h-2 w-2 rounded-full"
-                          :class="statusDot[bug.status]"
-                        />
-                      </button>
                       <button
                         type="button"
                         v-tooltip="
                           itemDateRange(bug)
-                            ? `${bug.key} · ${bug.title}；点击定位到开始日期`
-                            : `${bug.key} · ${bug.title}；暂无时间记录`
+                            ? '点击定位到开始日期'
+                            : '暂无时间记录'
                         "
-                        class="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
+                        class="focus-ring w-full min-w-0 rounded text-left text-slate-800"
                         :class="
                           itemDateRange(bug)
                             ? 'cursor-pointer'
                             : 'cursor-default'
                         "
+                        :aria-label="`${bug.key} · ${bug.title}`"
                         @click="scrollToItem(bug)"
                       >
                         <span
-                          class="w-20 shrink-0 font-mono text-[9px] font-semibold text-rose-500"
-                          >{{ bug.key }}</span
+                          class="block text-sm leading-5 font-medium break-words"
                         >
-                        <span
-                          class="min-w-0 flex-1 truncate text-[11px] text-slate-600"
-                          >{{ bug.title }}</span
-                        >
+                          {{ bug.title }}
+                        </span>
                       </button>
-                      <AvatarStack
-                        :owner-ids="bug.ownerIds"
-                        :max="1"
-                        compact
-                        class="shrink-0"
-                      />
-                      <TimelineItemActionsMenu
-                        :label="bug.title"
-                        @owners="openOwners(bug)"
-                        @planning="openPlanning(bug)"
-                      />
+                      <div
+                        class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+                      >
+                        <span class="font-mono text-[11px] text-slate-500">
+                          {{ bug.key }}
+                        </span>
+                        <button
+                          type="button"
+                          v-tooltip="`记录「${bug.title}」的进展`"
+                          class="focus-ring inline-flex min-h-6 shrink-0 items-center gap-1.5 rounded px-1 text-slate-600 hover:bg-slate-100"
+                          :aria-label="`记录「${bug.title}」的进展`"
+                          @click="statusTarget = bug"
+                        >
+                          <span
+                            class="h-2 w-2 shrink-0 rounded-full"
+                            :class="statusDot[bug.status]"
+                          />
+                          <span class="text-[11px]">{{
+                            statusLabels[bug.status]
+                          }}</span>
+                        </button>
+                        <div class="ml-auto flex shrink-0 items-center gap-1">
+                          <AvatarStack
+                            :owner-ids="bug.ownerIds"
+                            :max="1"
+                            compact
+                          />
+                          <TimelineItemActionsMenu
+                            :label="bug.title"
+                            @owners="openOwners(bug)"
+                            @planning="openPlanning(bug)"
+                          />
+                        </div>
+                      </div>
                     </div>
                     <TimelineBar
                       :days="range.days"
                       :bar-style="styleFor(displayedItemRange(bug))"
-                      bar-class="top-[14px] h-3 bg-rose-200/90"
+                      bar-class="top-[calc(50%-6px)] h-3 bg-rose-200/90"
                       :bar-title="
                         rangeTooltip(
                           '当前计划',

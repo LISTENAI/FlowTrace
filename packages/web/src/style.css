@@ -777,3 +777,36 @@ a[class~="inline-flex"] {
   opacity: 0;
   transform: translateY(5px);
 }
+
+/* 固定事项列必须遮住横向滚动到其下方的时间条，包括深色主题。 */
+.timeline-surface .timeline-grid > .timeline-label {
+  background-color: #fff;
+}
+
+.timeline-surface .timeline-grid > .timeline-label-muted {
+  background-color: #f8fafc;
+}
+
+.timeline-surface .timeline-grid > .timeline-label-stage-group {
+  background-color: #eef2ff;
+}
+
+.timeline-surface .timeline-grid > .timeline-label-bug-group {
+  background-color: #fff1f2;
+}
+
+.dark .timeline-surface .timeline-grid > .timeline-label {
+  background-color: #0f172a;
+}
+
+.dark .timeline-surface .timeline-grid > .timeline-label-muted {
+  background-color: #111b2d;
+}
+
+.dark .timeline-surface .timeline-grid > .timeline-label-stage-group {
+  background-color: #1e2445;
+}
+
+.dark .timeline-surface .timeline-grid > .timeline-label-bug-group {
+  background-color: #351d30;
+}
