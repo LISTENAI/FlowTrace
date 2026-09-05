@@ -24,6 +24,8 @@ FROM workspace AS production-dependencies
 RUN npm ci --omit=dev -w @flowtrace/backend -w @flowtrace/mcp
 
 FROM node:24-bookworm-slim AS app-runtime
+ARG FLOWTRACE_BUILD_REVISION
+ENV FLOWTRACE_BUILD_REVISION=${FLOWTRACE_BUILD_REVISION}
 WORKDIR /app
 ENV NODE_ENV=production FLOWTRACE_HOST=0.0.0.0 FLOWTRACE_PORT=3100 FLOWTRACE_SEED_DEMO=false FLOWTRACE_WEB_ROOT=/app/packages/web/dist
 COPY package.json package-lock.json ./
@@ -36,6 +38,7 @@ COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/mcp/dist ./packages/mcp/dist
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
 COPY --from=builder /app/packages/web/dist ./packages/web/dist
+COPY --from=builder /app/packages/backend/skill-metadata.json ./packages/backend/skill-metadata.json
 EXPOSE 3100
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:3100/api/health').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"]
 CMD ["node", "packages/backend/dist/main.js"]

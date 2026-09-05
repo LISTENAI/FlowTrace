@@ -51,3 +51,12 @@ TLS，可将 `FLOWTRACE_DATABASE_SSL` 设为 `require` 或 `verify-full`。
 当前版本尚无 RBAC，登录后的组织成员可以读取和维护整个实例的数据。升级前应
 使用 `pg_dump` 创建一致性备份并验证可恢复；不得仅复制正在运行的 PostgreSQL
 数据目录作为逻辑备份。
+
+## 服务与 Skill 对账
+
+构建正式镜像时传入 `--build-arg FLOWTRACE_BUILD_REVISION=<部署的完整提交 SHA>`。
+构建时从该提交的 `skills/flowtrace` 生成版本和内容摘要元数据；运行镜像仅携带
+元数据，不需要 Skill 指令文件。能力接口提供服务修订、推荐 Skill 版本与内容
+摘要，AI 接入页显示这些信息。未提供提交时明确返回空值，
+不根据分支名猜测版本。更新服务后仍需在 Agent 宿主更新 Skill，并核对能力；
+宿主已有 Skill 不会随服务部署自动同步。

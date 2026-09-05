@@ -275,6 +275,7 @@ export interface CoordinatedRequirement extends RequirementSummary {
 }
 
 export interface PersonWorkOverview {
+  attention: AttentionItem[];
   person: Person;
   items: PersonWorkItem[];
   coordinatedRequirements: CoordinatedRequirement[];
@@ -329,6 +330,7 @@ export interface Dependency {
 }
 
 export interface DependencyTargetSummary {
+  versionId?: string;
   id: string;
   key?: string;
   name: string;
@@ -448,6 +450,7 @@ export interface RequirementStageSummary extends WorkTiming {
 }
 
 export interface SnapshotReviewItem extends RequirementReviewIssue {
+  versionId?: string;
   requirementId: string;
   requirementKey: string;
   requirementTitle: string;
@@ -525,4 +528,52 @@ export interface SearchPage {
   total: number;
   hasMore: boolean;
   nextOffset?: number;
+}
+
+export interface AttentionItem {
+  id: string;
+  role: 'execution' | 'coordination';
+  targetType: PersonWorkItemType | 'requirement';
+  targetId: string;
+  requirementId?: string;
+  projectId?: string;
+  label: string;
+  context?: string;
+  dueAt?: string;
+  reasons: Array<{
+    code:
+      | 'resume_overdue'
+      | 'blocked'
+      | 'plan_overdue'
+      | 'missing_plan'
+      | 'missing_information';
+    message: string;
+  }>;
+}
+
+export type DeliveryCheckCategory =
+  | 'requirements'
+  | 'bugs'
+  | 'waiting'
+  | 'blocked'
+  | 'dependencies'
+  | 'information';
+export interface DeliveryCheckItem {
+  id: string;
+  category: DeliveryCheckCategory;
+  targetId: string;
+  requirementId: string;
+  relatedRequirementId?: string;
+  label: string;
+  message: string;
+  ownerIds: string[];
+  expectedResumeAt?: string;
+}
+export interface DeliveryCheck {
+  project: Project;
+  version: Version;
+  items: DeliveryCheckItem[];
+  counts: Record<DeliveryCheckCategory, number>;
+  recentChanges: ChangeEvent[];
+  generatedAt: string;
 }

@@ -1,3 +1,4 @@
+import { serviceCapabilities } from '@/domain/capabilities';
 import { MutationInterceptor } from '@/domain/mutation.interceptor';
 import { mutationScope } from '@/domain/mutation-scope';
 import {
@@ -21,7 +22,6 @@ import {
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import {
   searchEntityTypes,
-  flowTraceCapabilities,
   type ChangeContext,
   type SearchEntityType,
 } from '@flowtrace/shared';
@@ -585,13 +585,19 @@ export class InsightsController {
     });
   }
 
+  @Get('versions/:id/delivery-check')
+  @ApiOperation({
+    summary:
+      '核对版本待交付需求、修复、恢复条件、依赖与缺失信息；不自动判定可发布',
+  })
+  deliveryCheck(@Param('id', uuidPipe) id: string) {
+    return this.work.getVersionDeliveryCheck(id);
+  }
+
   @Get('capabilities')
   @ApiOperation({ summary: '读取服务能力、原子操作范围和推荐 Skill 版本' })
   capabilities() {
-    return {
-      ...flowTraceCapabilities,
-      revision: process.env.FLOWTRACE_BUILD_REVISION ?? null,
-    };
+    return serviceCapabilities();
   }
 
   @Get('operations/:requestId')
@@ -612,6 +618,7 @@ export class InsightsController {
   @ApiOperation({ summary: '按稳定游标完整读取变化；后续页沿用首个 until' })
   changesPage(
     @Query('since') since: string,
+    @Query('sourceRef') sourceRef?: string,
     @Query('projectId', optionalUuidPipe) projectId?: string,
     @Query('versionId', optionalUuidPipe) versionId?: string,
     @Query('requirementId', optionalUuidPipe) requirementId?: string,
@@ -627,6 +634,7 @@ export class InsightsController {
       throw new BadRequestException('limit 必须是正整数');
     return this.work.getChangesPage({
       since,
+      sourceRef,
       projectId,
       versionId,
       requirementId,

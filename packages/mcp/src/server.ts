@@ -479,6 +479,22 @@ export function createFlowTraceMcpServer(
   );
 
   server.registerTool(
+    'get_version_delivery_check',
+    {
+      description:
+        '读取一个版本尚欠的交付：未完成需求、包括旧需求在内的目标修复、等待阻塞、未满足外部依赖和缺失信息。各项返回原需求引用；零告警不等于业务验收通过，发布决策仍需交付证据。',
+      inputSchema: { version_id: uuidSchema },
+      annotations: readAnnotations,
+    },
+    async ({ version_id }) =>
+      readResult(
+        await api.request(
+          `/versions/${encodeURIComponent(version_id)}/delivery-check`,
+        ),
+      ),
+  );
+
+  server.registerTool(
     'get_capabilities',
     {
       description:
@@ -802,6 +818,7 @@ export function createFlowTraceMcpServer(
       description:
         '返回指定时间之后的结构化变化，可按项目、版本或需求过滤。用于日报、周报、会议回顾和近期变化查询。',
       inputSchema: {
+        source_ref: sourceSchema.source_ref,
         since: z.string().describe('ISO 8601 起始时间'),
         cursor: z
           .string()
@@ -820,6 +837,7 @@ export function createFlowTraceMcpServer(
     },
     async ({
       since,
+      source_ref,
       project_id,
       version_id,
       requirement_id,
@@ -828,6 +846,7 @@ export function createFlowTraceMcpServer(
       until,
     }) => {
       const query = new URLSearchParams({ since, limit: String(limit) });
+      if (source_ref) query.set('sourceRef', source_ref);
       if (project_id) query.set('projectId', project_id);
       if (version_id) query.set('versionId', version_id);
       if (requirement_id) query.set('requirementId', requirement_id);

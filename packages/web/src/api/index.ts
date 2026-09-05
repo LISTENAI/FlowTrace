@@ -1,4 +1,5 @@
 import type {
+  DeliveryCheck,
   ActionItem,
   Bug,
   ChangeEvent,
@@ -21,6 +22,8 @@ import type {
 import { request } from '@/api/client';
 
 export const api = {
+  deliveryCheck: (id: string) =>
+    request<DeliveryCheck>(`/versions/${id}/delivery-check`),
   projectRhythms: () => request<ProjectRhythm[]>('/project-rhythms'),
   createProjectRhythm: (input: {
     name: string;

@@ -33,6 +33,7 @@ services:
     volumes:
       - ./packages:/app/packages
       - ./tsconfig.base.json:/app/tsconfig.base.json:ro
+      - ./skills/flowtrace:/app/skills/flowtrace:ro
     depends_on:
       postgres:
         condition: service_healthy

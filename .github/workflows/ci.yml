@@ -53,4 +53,4 @@ jobs:
         run: npm run build
 
       - name: Build application image
-        run: docker build --target app-runtime --tag flowtrace:ci .
+        run: docker build --target app-runtime --build-arg FLOWTRACE_BUILD_REVISION=${{ github.sha }} --tag flowtrace:ci .

@@ -1,3 +1,4 @@
+import { personalAttention, versionDeliveryCheck } from '@/domain/attention';
 import { mutationScope, receiptId } from '@/domain/mutation-scope';
 import {
   BadRequestException,
@@ -61,6 +62,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { plainToInstance } from 'class-transformer';
 import { isUUID, validate } from 'class-validator';
 import {
+  JsonContains,
   Equal,
   And,
   LessThan,
@@ -133,6 +135,7 @@ type SchedulableEntity =
 type TrackableKind = 'stage' | 'bug' | 'action_item';
 type EntityKind = 'requirement' | TrackableKind;
 type ChangeFilters = {
+  sourceRef?: string;
   cursor?: string;
   until?: string;
   since: string;
@@ -847,19 +850,44 @@ export class WorkService {
     const person = await this.people.findOneBy({ id });
     if (!person) throw new NotFoundException('未找到人员');
     const binding = await this.personBindings.findOneBy({ personId: id });
-    const [stageRows, bugRows, actionRows, requirementRows, projectRows] =
+    const ownedWhere = { ownerIds: JsonContains([id]) };
+    const [ownedStages, ownedBugs, ownedActions, ownedRequirements] =
       await Promise.all([
-        this.stages.find({ order: { updatedAt: 'DESC' } }),
-        this.bugs.find({ order: { updatedAt: 'DESC' } }),
-        this.actionItems.find({ order: { updatedAt: 'DESC' } }),
-        this.requirements.find({ order: { updatedAt: 'DESC' } }),
-        this.projects.find({ order: { name: 'ASC' } }),
+        this.stages.find({ where: ownedWhere, order: { updatedAt: 'DESC' } }),
+        this.bugs.find({ where: ownedWhere, order: { updatedAt: 'DESC' } }),
+        this.actionItems.find({
+          where: ownedWhere,
+          order: { updatedAt: 'DESC' },
+        }),
+        this.requirements.find({
+          where: ownedWhere,
+          order: { updatedAt: 'DESC' },
+        }),
       ]);
-    const ownedStages = stageRows.filter((item) => item.ownerIds.includes(id));
-    const ownedBugs = bugRows.filter((item) => item.ownerIds.includes(id));
-    const ownedActions = actionRows.filter((item) =>
-      item.ownerIds.includes(id),
-    );
+    const requirementIds = [
+      ...new Set([
+        ...ownedRequirements.map((item) => item.id),
+        ...ownedStages.map((item) => item.requirementId),
+        ...ownedBugs.map((item) => item.requirementId),
+        ...ownedActions
+          .map((item) => item.requirementId)
+          .filter((value): value is string => Boolean(value)),
+      ]),
+    ];
+    const requirementRows = requirementIds.length
+      ? await this.requirements.findBy({ id: In(requirementIds) })
+      : [];
+    const projectIds = [
+      ...new Set([
+        ...requirementRows.map((item) => item.projectId),
+        ...ownedActions
+          .map((item) => item.projectId)
+          .filter((value): value is string => Boolean(value)),
+      ]),
+    ];
+    const projectRows = projectIds.length
+      ? await this.projects.findBy({ id: In(projectIds) })
+      : [];
     const itemIds = [
       ...ownedStages.map((item) => item.id),
       ...ownedBugs.map((item) => item.id),
@@ -973,26 +1001,25 @@ export class WorkService {
         left.name.localeCompare(right.name, 'zh-CN')
       );
     });
-    const coordinatedRequirements = await Promise.all(
-      requirementRows
-        .filter((item) => item.ownerIds.includes(id))
-        .map(async (row) => ({
-          ...(await this.getRequirementSummary(row)),
-          project: (() => {
-            const project = projectMap.get(row.projectId)!;
-            return { id: project.id, key: project.key, name: project.name };
-          })(),
-          version: row.versionId
-            ? (() => {
-                const version = versionMap.get(row.versionId!);
-                return version
-                  ? { id: version.id, name: version.name }
-                  : undefined;
-              })()
-            : undefined,
-        })),
+    const coordinatedRows = requirementRows.filter((item) =>
+      item.ownerIds.includes(id),
     );
+    const coordinatedFull = await this.hydrateRequirements(coordinatedRows);
+    const coordinatedRequirements = coordinatedRows.map((row, index) => ({
+      ...this.summarizeRequirement(row, coordinatedFull[index]!),
+      project: (() => {
+        const project = projectMap.get(row.projectId)!;
+        return { id: project.id, key: project.key, name: project.name };
+      })(),
+      version: row.versionId
+        ? (() => {
+            const version = versionMap.get(row.versionId!);
+            return version ? { id: version.id, name: version.name } : undefined;
+          })()
+        : undefined,
+    }));
     return {
+      attention: personalAttention(items, coordinatedRequirements, new Date()),
       person: this.toPerson(person, binding ?? undefined),
       items,
       coordinatedRequirements,
@@ -2279,6 +2306,7 @@ export class WorkService {
     if (Number.isNaN(since.getTime()))
       throw new BadRequestException('since 必须是有效的 ISO 8601 时间');
     const scope = digest({
+      sourceRef: filters.sourceRef,
       since: since.toISOString(),
       projectId: filters.projectId,
       versionId: filters.versionId,
@@ -2312,6 +2340,7 @@ export class WorkService {
     if (!Number.isFinite(until.getTime()) || until < since)
       throw new BadRequestException('until 必须是晚于 since 的有效时间');
     const base: FindOptionsWhere<ChangeEventEntity> = {
+      ...(filters.sourceRef ? { sourceRef: filters.sourceRef } : {}),
       ...(filters.projectId ? { projectId: filters.projectId } : {}),
       ...(filters.requirementId
         ? { requirementId: filters.requirementId }
@@ -2390,6 +2419,10 @@ export class WorkService {
       versionId,
     );
     return { ...base, version: this.toVersion(versionEntity) };
+  }
+
+  async getVersionDeliveryCheck(versionId: string) {
+    return versionDeliveryCheck(await this.getVersionSnapshot(versionId));
   }
 
   async previewChanges(input: PreviewChangesDto): Promise<ChangeSetPreview> {
@@ -3257,14 +3290,21 @@ export class WorkService {
         openBugs: openBugs.length,
       },
       requirements,
-      reviewItems: requirements.flatMap((requirement) =>
-        requirement.reviewIssues.map((issue) => ({
-          ...issue,
-          requirementId: requirement.id,
-          requirementKey: requirement.key,
-          requirementTitle: requirement.title,
-        })),
-      ),
+      reviewItems: projectFull
+        .flatMap((requirement) =>
+          reviewRequirement(requirement).map((issue) => ({
+            ...issue,
+            versionId:
+              issue.targetType === 'bug'
+                ? (requirement.bugs.find((bug) => bug.id === issue.targetId)
+                    ?.targetVersionId ?? requirement.versionId)
+                : requirement.versionId,
+            requirementId: requirement.id,
+            requirementKey: requirement.key,
+            requirementTitle: requirement.title,
+          })),
+        )
+        .filter((issue) => !versionId || issue.versionId === versionId),
       waitingItems: allWork
         .filter(({ item }) => item.status === 'waiting')
         .map(({ item, requirement }) =>
@@ -3698,6 +3738,7 @@ export class WorkService {
       const requirement = await this.findRequirement(id);
       const project = await this.findProject(requirement.projectId);
       return {
+        versionId: requirement.versionId ?? undefined,
         id: requirement.id,
         key: requirement.key,
         name: requirement.title,
@@ -3713,6 +3754,10 @@ export class WorkService {
     const requirement = await this.findRequirement(entity.requirementId);
     const project = await this.findProject(requirement.projectId);
     return {
+      versionId:
+        (type === 'bug'
+          ? ((entity as BugEntity).targetVersionId ?? requirement.versionId)
+          : requirement.versionId) ?? undefined,
       id: entity.id,
       key: type === 'bug' ? (entity as BugEntity).key : undefined,
       name:
@@ -3764,6 +3809,8 @@ export class WorkService {
       source: input.source ?? 'manual',
       agentName: input.agentName,
       agentModel: input.agentModel,
+      sourceRef: input.sourceRef,
+      reportedAt: input.reportedAt,
       operations: input.operations,
       stateFingerprint,
     });
@@ -3942,6 +3989,8 @@ export class WorkService {
   ): Promise<T> {
     const payload = plainToInstance(dto, {
       ...operation.payload,
+      sourceRef: input.sourceRef,
+      reportedAt: input.reportedAt,
       source: input.source ?? 'manual',
       agentName: input.agentName,
       agentModel: input.agentModel,

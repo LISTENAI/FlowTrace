@@ -126,3 +126,10 @@ HTTP 内部值保持机器稳定，界面统一显示中文：
 写入还可附带 `sourceRef`（最长 500 字符）和 `reportedAt`（ISO 时间）。
 来源标识可跨多个写请求复用，用于业务证据关联，不自动替代请求幂等键。
 `actor` 由认证上下文生成，客户端不能伪造；`agentModel` 仍是单独的自报字段。
+
+## 交付检查和个人关注
+
+`GET /versions/:id/delivery-check` 返回六类检查项、分类计数、版本说明和最近变化。
+条目保留 `requirementId`，外部依赖另有 `relatedRequirementId`，方便跳转原事实。
+`GET /people/:id/work` 新增 `attention`；每项包含执行/协调职责、多个事实原因和
+对应对象。规则在后端统一计算，Web 和 MCP 直接呈现，不另做评分或状态推断。

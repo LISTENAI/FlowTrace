@@ -173,6 +173,10 @@ docs/
 - [AI 接入需求 v0.2](docs/product/ai-integration-v0.2.md)
 - [身份接入需求 v0.3](docs/product/authentication-v0.3.md)
 - [Agent 交底与来源审计增量](docs/product/agent-handoff-v0.4.md)
+- [人员工作台与零碎待办](docs/product/personal-work-v0.5.md)
+- [可信记录与交付协作](docs/product/reliable-delivery-v0.6.md)
+- [v0.6 实施与接入交底](docs/architecture/reliable-delivery-handoff.md)
+- [Agent 行为评测](evals/flowtrace/README.md)
 
 面向 Coding Agent 的工程约束位于 [`AGENTS.md`](AGENTS.md)，不属于用户使用
 文档。

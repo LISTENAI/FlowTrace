@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type {
+  AttentionItem,
   ActionItem,
   Person,
   PersonWorkItem,
@@ -31,6 +32,7 @@ import { loadWorkspace, workspace } from '@/state/workspace';
 const route = useRoute();
 const router = useRouter();
 const loading = ref(true);
+const attentionExpanded = ref(false);
 const selectedPersonId = ref('');
 const ownPersonId = ref('');
 const selectablePeople = ref<Person[]>([]);
@@ -209,6 +211,19 @@ function openDetail(item: PersonWorkItem) {
   });
 }
 
+async function openAttention(item: AttentionItem) {
+  if (item.targetType === 'action_item') {
+    actionTarget.value = await api.actionItem(item.targetId);
+    actionDialogOpen.value = true;
+  } else if (item.requirementId) {
+    await router.push({
+      name: 'requirement',
+      params: { requirementId: item.requirementId },
+      state: { flowtraceReturnPath: route.fullPath },
+    });
+  }
+}
+
 function newAction() {
   actionTarget.value = undefined;
   actionDialogOpen.value = true;
@@ -277,6 +292,69 @@ onMounted(async () => {
         </div>
       </header>
 
+      <section
+        v-if="overview && !loading"
+        class="surface mt-6 p-4 sm:p-5"
+        aria-label="需要关注"
+      >
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            需要关注 · {{ overview.attention.length }}
+          </h2>
+          <button
+            v-if="overview.attention.length > 5"
+            class="section-action"
+            @click="attentionExpanded = !attentionExpanded"
+          >
+            {{ attentionExpanded ? '收起' : '查看全部' }}
+          </button>
+        </div>
+        <p class="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+          按预计恢复已过、阻塞、计划逾期与待确认事实排序。更新原事项后自动重新核对。
+        </p>
+        <p
+          v-if="!overview.attention.length"
+          class="mt-3 text-sm text-slate-500 dark:text-slate-400"
+        >
+          当前没有需要提醒的记录；未排期不表示人员空闲。
+        </p>
+        <ul v-else class="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+          <li
+            v-for="item in attentionExpanded
+              ? overview.attention
+              : overview.attention.slice(0, 5)"
+            :key="item.id"
+            class="flex items-start justify-between gap-3 py-3"
+          >
+            <div class="min-w-0">
+              <p class="text-xs text-slate-500 dark:text-slate-400">
+                {{ item.role === 'execution' ? '执行事项' : '协调职责' }} ·
+                {{ item.context ?? '零碎待办' }}
+              </p>
+              <button
+                class="mt-1 text-left text-sm font-medium text-indigo-600 dark:text-indigo-300"
+                @click="openAttention(item)"
+              >
+                {{ item.label }}
+              </button>
+              <p
+                v-for="reason in item.reasons"
+                :key="reason.code"
+                class="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300"
+              >
+                {{ reason.message }}
+              </p>
+            </div>
+            <button
+              class="section-action shrink-0"
+              @click="openAttention(item)"
+            >
+              处理
+            </button>
+          </li>
+        </ul>
+      </section>
+
       <section class="surface mt-7 overflow-hidden">
         <div
           class="flex flex-col justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:flex-row sm:items-center sm:px-5"
@@ -336,7 +414,7 @@ onMounted(async () => {
         <div v-else class="overflow-x-auto">
           <div class="min-w-[70rem]">
             <div
-              class="grid grid-cols-[22rem_minmax(0,1fr)] border-b border-slate-100 dark:border-slate-800"
+              class="grid grid-cols-[15rem_minmax(0,1fr)] sm:grid-cols-[22rem_minmax(0,1fr)] border-b border-slate-100 dark:border-slate-800"
             >
               <div
                 class="sticky left-0 z-20 flex h-12 items-center border-r border-slate-100 bg-slate-50/95 px-4 text-[11px] font-semibold text-slate-400 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95"
@@ -366,7 +444,7 @@ onMounted(async () => {
             <div
               v-for="item in visibleItems"
               :key="`${item.type}-${item.id}`"
-              class="grid grid-cols-[22rem_minmax(0,1fr)] border-b border-slate-100 last:border-b-0 dark:border-slate-800"
+              class="grid grid-cols-[15rem_minmax(0,1fr)] sm:grid-cols-[22rem_minmax(0,1fr)] border-b border-slate-100 last:border-b-0 dark:border-slate-800"
             >
               <div
                 class="sticky left-0 z-10 flex h-16 min-w-0 items-center gap-2 border-r border-slate-100 bg-white px-3.5 dark:border-slate-800 dark:bg-slate-950"
@@ -592,7 +670,7 @@ onMounted(async () => {
   );
 }
 
-:global(.dark) .person-work-grid {
+:global(.dark .person-work-grid) {
   background-image: linear-gradient(
     to right,
     rgb(30 41 59) 1px,

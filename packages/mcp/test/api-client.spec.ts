@@ -5,17 +5,15 @@ const id = '11111111-1111-4111-8111-111111111111';
 afterEach(() => vi.unstubAllGlobals());
 describe('write transport recovery', () => {
   it('keeps the explicit request ID in headers and unwraps the exact receipt', async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            data: { id: 'entity' },
-            mutation: { requestId: id, history: { status: [] } },
-          }),
-          { status: 201 },
-        ),
-      );
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: { id: 'entity' },
+          mutation: { requestId: id, history: { status: [] } },
+        }),
+        { status: 201 },
+      ),
+    );
     vi.stubGlobal('fetch', fetch);
     const api = new FlowTraceApiClient('http://flowtrace.test/api', {
       authorization: 'Bearer test',

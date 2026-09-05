@@ -21,6 +21,8 @@ export const flowTraceCapabilities = {
     'current_identity',
     'mutation_receipts',
     'source_references',
+    'delivery_check',
+    'personal_attention',
   ],
   coordinatedOperations: coordinatedOperationTypes,
   limits: { changes: 300, search: 50, coordinatedOperations: 100 },

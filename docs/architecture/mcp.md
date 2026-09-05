@@ -115,3 +115,10 @@ npm run dev -w @flowtrace/mcp
 - Multica 等宿主负责凭据传递、会话和授权状态。共享服务账号的 actor 只代表该
   服务账号；不得把模型传入的姓名当作真实委托人身份。需要逐人审计时传递各人的
   凭据，或另行实现经过认证的委托协议。
+
+`get_version_delivery_check` 提供六类可下钻的交付检查；`get_person_work.data.attention`
+提供后端统一生成的个人关注项。`get_changes_since.source_ref` 可检索同一来源的
+既有事件，用于导入前核对；来源相同不自动认定业务操作相同。
+
+仓库在 `evals/flowtrace` 提供 18 个脱敏行为场景和双模式验收协议。通过协议
+测试不能代替实际宿主和模型的行为评测；发布记录应分别列出二者结果。

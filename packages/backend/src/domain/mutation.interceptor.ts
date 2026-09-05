@@ -41,20 +41,38 @@ export class MutationInterceptor implements NestInterceptor {
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler) {
-    const request = context
-      .switchToHttp()
-      .getRequest<
-        AuthenticatedRequest & {
-          method: string;
-          originalUrl: string;
-          body?: Record<string, unknown>;
-        }
-      >();
+    const request = context.switchToHttp().getRequest<
+      AuthenticatedRequest & {
+        method: string;
+        originalUrl: string;
+        body?: Record<string, unknown>;
+      }
+    >();
     if (
       !['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) ||
-      /\/(?:changes\/preview|batch)$/.test(request.originalUrl)
+      /\/changes\/preview(?:\?|$)/.test(request.originalUrl)
     )
       return next.handle();
+    if (/\/batch(?:\?|$)/.test(request.originalUrl)) {
+      const identity = request.flowTraceIdentity;
+      return defer(() =>
+        mutationScope.run(
+          {
+            work: this.work,
+            requestId: randomUUID(),
+            mutationId: randomUUID(),
+            actor: identity
+              ? {
+                  userId: identity.user.id,
+                  personId: identity.person.id,
+                  name: identity.person.name,
+                }
+              : undefined,
+          },
+          () => lastValueFrom(next.handle()),
+        ),
+      );
+    }
     return defer(() =>
       this.source.transaction(async (manager) => {
         const header = request.headers['x-flowtrace-request-id'];
@@ -93,12 +111,10 @@ export class MutationInterceptor implements NestInterceptor {
         ]);
         const receipts = manager.getRepository(MutationReceiptEntity);
         const prior = await receipts.findOneBy({ id });
-        const response = context
-          .switchToHttp()
-          .getResponse<{
-            statusCode: number;
-            setHeader(name: string, value: string): void;
-          }>();
+        const response = context.switchToHttp().getResponse<{
+          statusCode: number;
+          setHeader(name: string, value: string): void;
+        }>();
         response.setHeader('X-FlowTrace-Request-Id', requestId);
         const envelope = request.headers['x-flowtrace-result'] === 'receipt';
         if (prior) {
@@ -129,12 +145,10 @@ export class MutationInterceptor implements NestInterceptor {
           },
           () => lastValueFrom(next.handle()),
         );
-        const changes = await manager
-          .getRepository(ChangeEventEntity)
-          .find({
-            where: { mutationId },
-            order: { occurredAt: 'ASC', id: 'ASC' },
-          });
+        const changes = await manager.getRepository(ChangeEventEntity).find({
+          where: { mutationId },
+          order: { occurredAt: 'ASC', id: 'ASC' },
+        });
         const history = {
           status: await manager
             .getRepository(StatusHistoryEntity)

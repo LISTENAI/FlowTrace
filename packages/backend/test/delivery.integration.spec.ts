@@ -95,6 +95,57 @@ describe('delivery scope and audit', () => {
     ).toBe(true);
   });
 
+  it('clears personal attention after facts change and keeps coordination separate', async () => {
+    const person = await work.createPerson({ name: '关注事项负责人' });
+    const other = await work.createPerson({ name: '其他负责人' });
+    const action = await work.createActionItem(
+      { title: '确认样件', ownerIds: [person.id] },
+      person.id,
+    );
+    await work.updateActionItemStatus(action.id, {
+      status: 'waiting',
+      statusReason: '等待样件',
+      expectedResumeAt: '2020-01-01T00:00:00Z',
+    });
+    const project = await work.createProject({
+      key: 'ATTENTION',
+      name: '协调职责',
+    });
+    const requirement = await work.createRequirement({
+      projectId: project.id,
+      title: '联调验收',
+      ownerIds: [person.id],
+      stages: [{ name: '联调', ownerIds: [other.id] }],
+    });
+    await work.updateStageStatus(requirement.stages[0]!.id, {
+      status: 'blocked',
+      statusReason: '方案未知',
+    });
+    const overview = await work.getPersonWork(person.id);
+    expect(overview.attention[0]).toMatchObject({
+      targetId: action.id,
+      role: 'execution',
+      reasons: [expect.objectContaining({ code: 'resume_overdue' })],
+    });
+    expect(overview.attention).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          targetId: requirement.id,
+          role: 'coordination',
+        }),
+      ]),
+    );
+    expect(
+      overview.items.some((item) => item.id === requirement.stages[0]!.id),
+    ).toBe(false);
+    await work.updateActionItemStatus(action.id, { status: 'done' });
+    expect(
+      (await work.getPersonWork(person.id)).attention.some(
+        (item) => item.targetId === action.id,
+      ),
+    ).toBe(false);
+  });
+
   it('includes fixes from older requirements only in the committed target version', async () => {
     const project = await work.createProject({
       key: 'FIXES',
@@ -116,6 +167,23 @@ describe('delivery scope and audit', () => {
       (await work.getVersionSnapshot(next.id)).openBugs.map((item) => item.id),
     ).toEqual([bug.id]);
     expect((await work.getVersionSnapshot(old.id)).openBugs).toEqual([]);
+    const check = await work.getVersionDeliveryCheck(next.id);
+    expect(check.counts).toMatchObject({ requirements: 0, bugs: 1 });
+    expect(check.items.find((item) => item.category === 'bugs')).toMatchObject({
+      targetId: bug.id,
+      requirementId: requirement.id,
+    });
+    await work.updateBugStatus(bug.id, { status: 'in_progress' });
+    expect((await work.getVersionSnapshot(next.id)).reviewItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ targetId: bug.id, versionId: next.id }),
+      ]),
+    );
+    expect(
+      (await work.getVersionSnapshot(old.id)).reviewItems.some(
+        (item) => item.targetId === bug.id,
+      ),
+    ).toBe(false);
     await expect(
       work.deleteVersion(next.id, { confirmation: next.name, reason: '清理' }),
     ).rejects.toThrow('目标修复 Bug');

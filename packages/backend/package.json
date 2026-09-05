@@ -5,6 +5,9 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
+    "prebuild": "node scripts/build-skill-metadata.mjs",
+    "predev": "node scripts/build-skill-metadata.mjs",
+    "pretest": "node scripts/build-skill-metadata.mjs",
     "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json --resolve-full-paths --resolve-full-extension .js",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",

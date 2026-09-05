@@ -11,6 +11,7 @@ import {
   TrashIcon,
 } from '@heroicons/vue/24/outline';
 import { onMounted, ref } from 'vue';
+import { request } from '@/api/client';
 import { toasts } from '@/state/toasts';
 
 interface PersonalApiKey {
@@ -21,6 +22,12 @@ interface PersonalApiKey {
   lastRequest?: string | null;
 }
 
+const capabilities = ref<{
+  apiVersion: string;
+  revision: string | null;
+  skill: { version: string; sha256: string | null };
+}>();
+const capabilityError = ref('');
 const apiKeys = ref<PersonalApiKey[]>([]);
 const createdKey = ref('');
 const keyLoading = ref(false);
@@ -84,6 +91,13 @@ async function deleteKey(keyId: string) {
 }
 
 onMounted(() => {
+  void request<NonNullable<typeof capabilities.value>>('/capabilities')
+    .then((value) => {
+      capabilities.value = value;
+    })
+    .catch(() => {
+      capabilityError.value = '当前实例未提供能力信息，请以实际工具清单为准。';
+    });
   void loadKeys().catch((cause) =>
     toasts.show('无法读取个人密钥', (cause as Error).message, 'error'),
   );
@@ -261,11 +275,31 @@ async function copyText(value: string, label: string) {
               <h2 class="font-semibold text-slate-900">安装官方 Skill</h2>
               <p class="mt-1 text-sm leading-6 text-slate-500">
                 在运行 Agent 的环境执行安装命令。Skill 不保存项目数据，也不替代
-                MCP 连接。
+                MCP 连接。服务更新后，也需要在 Agent 宿主更新 Skill。
               </p>
             </div>
           </div>
           <div class="px-5 py-5 sm:px-6">
+            <p
+              v-if="capabilities"
+              class="mb-3 text-xs leading-5 text-slate-500 dark:text-slate-400"
+            >
+              当前服务 API {{ capabilities.apiVersion }} · 推荐 Skill
+              {{ capabilities.skill.version }}
+              <span v-if="capabilities.revision" class="block"
+                >服务修订 {{ capabilities.revision.slice(0, 12) }}</span
+              >
+              <span v-if="capabilities.skill.sha256" class="block break-all"
+                >Skill 内容摘要
+                {{ capabilities.skill.sha256.slice(0, 16) }}</span
+              >
+            </p>
+            <p
+              v-else-if="capabilityError"
+              class="mb-3 text-xs text-amber-700 dark:text-amber-300"
+            >
+              {{ capabilityError }}
+            </p>
             <div
               class="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 sm:flex-row sm:items-center"
             >
@@ -293,15 +327,16 @@ async function copyText(value: string, label: string) {
             <div class="min-w-0 flex-1">
               <h2 class="font-semibold text-slate-900">确认接入有效</h2>
               <p class="mt-1 text-sm leading-6 text-slate-500">
-                连接成功后，让 Agent 询问“有哪些项目？”。它应通过 MCP 返回当前
-                实例中的项目，而不是根据对话上下文猜测。
+                连接后，让 Agent 读取服务能力和当前身份，再查询一个已知项目。
+                对照本页推荐版本检查已安装
+                Skill；下面是核对项目，不表示已自动验证。
               </p>
               <div class="mt-4 grid gap-2">
                 <div
                   v-for="item in [
-                    '能发现 FlowTrace 工具',
+                    '能读取能力清单与当前身份',
                     '能读取当前项目',
-                    '写入会保留历史',
+                    '测试写入返回历史与执行回执',
                   ]"
                   :key="item"
                   class="flex items-center gap-2 rounded-xl bg-emerald-50/40 px-3 py-2.5 text-xs font-medium text-emerald-700"

@@ -158,7 +158,7 @@ describe.sequential('HTTP API', () => {
       .set('accept', 'application/json, text/event-stream')
       .send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
       .expect(200);
-    expect(tools.body.result.tools).toHaveLength(37);
+    expect(tools.body.result.tools).toHaveLength(38);
     expect(tools.body.result.tools).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'search' }),
@@ -403,6 +403,18 @@ describe.sequential('HTTP API', () => {
         .expect(201),
     ]);
 
+    const identity = await callTool('get_current_identity', {});
+    expect(identity.data).toMatchObject({
+      user: { id: 'http-test' },
+      person: { name: 'HTTP 测试人员' },
+    });
+    const check = await callTool('get_version_delivery_check', {
+      version_id: nextVersion.body.id,
+    });
+    expect(check.data).toMatchObject({
+      version: { id: nextVersion.body.id },
+      counts: { requirements: 0, bugs: 0 },
+    });
     const backlogRequirement = await callTool('create_requirement', {
       project_id: mcpProjectId,
       version_id: '',
@@ -602,6 +614,13 @@ describe.sequential('HTTP API', () => {
       .set('X-FlowTrace-Request-Id', requestId)
       .send({ ...body, name: '不同操作' })
       .expect(409);
+    const evidence = await request(app.getHttpServer())
+      .get('/api/changes/page')
+      .query({ since: '2020-01-01', sourceRef: body.sourceRef })
+      .expect(200);
+    expect(evidence.body.items.map((item: { id: string }) => item.id)).toEqual(
+      first.body.mutation.changes.map((item: { id: string }) => item.id),
+    );
     const lookup = await request(app.getHttpServer())
       .get(`/api/operations/${requestId}`)
       .expect(200);
@@ -630,6 +649,23 @@ describe.sequential('HTTP API', () => {
       .send({ ...body, key: 'FORGED', actor: { userId: 'someone-else' } })
       .expect(400);
   });
+
+  it.runIf(Boolean(process.env.FLOWTRACE_TEST_DATABASE_URL))(
+    'serializes concurrent replays of the same authenticated request',
+    async () => {
+      const id = randomUUID();
+      const write = () =>
+        request(app.getHttpServer())
+          .post('/api/projects')
+          .set('X-FlowTrace-Request-Id', id)
+          .set('X-FlowTrace-Result', 'receipt')
+          .send({ key: 'CONCUR', name: '并发重放' })
+          .expect(201);
+      const [first, second] = await Promise.all([write(), write()]);
+      expect(first.body).toEqual(second.body);
+      expect(first.body.mutation.changes).toHaveLength(1);
+    },
+  );
 
   it('returns the inserted backdated history and rolls back failed writes with their receipt', async () => {
     const project = await request(app.getHttpServer())

@@ -171,7 +171,9 @@ const scopedMetrics = computed(() => {
 });
 const reviewIssueMap = computed(() => {
   const issues = new Map<string, string[]>();
-  for (const item of snapshot.value?.reviewItems ?? []) {
+  for (const item of (snapshot.value?.reviewItems ?? []).filter(
+    inVersionScope,
+  )) {
     issues.set(item.requirementId, [
       ...(issues.get(item.requirementId) ?? []),
       item.message,
@@ -180,9 +182,7 @@ const reviewIssueMap = computed(() => {
   return issues;
 });
 const scopedReviewItems = computed(() =>
-  (snapshot.value?.reviewItems ?? []).filter((item) =>
-    scopedRequirementIds.value.has(item.requirementId),
-  ),
+  (snapshot.value?.reviewItems ?? []).filter(inVersionScope),
 );
 const scopedBlockedItems = computed(() =>
   (snapshot.value?.blockedItems ?? []).filter(inVersionScope),
@@ -195,9 +195,7 @@ const scopedDelayedRows = computed(() =>
 );
 const scopedExternalDependencies = computed(() =>
   (snapshot.value?.externalDependencies ?? []).filter((item) =>
-    item.successor
-      ? scopedRequirementIds.value.has(item.successor.requirementId)
-      : false,
+    item.successor ? inVersionScope(item.successor) : false,
   ),
 );
 const timelineVersions = computed(() => {
@@ -511,7 +509,15 @@ watch(timelineStageOptions, (options) => {
             {{ snapshot.project.description }}
           </p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
+          <RouterLink
+            v-if="
+              snapshot.versions.some((item) => item.id === filters.versionId)
+            "
+            :to="`/versions/${filters.versionId}/delivery`"
+            class="section-action"
+            >交付检查</RouterLink
+          >
           <RouterLink
             :to="`/projects/${projectId}/settings`"
             class="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 shadow-sm hover:border-slate-300"

@@ -1,14 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import PeopleView from '@/views/PeopleView.vue';
-import AiIntegrationView from '@/views/AiIntegrationView.vue';
-import ProjectListView from '@/views/ProjectListView.vue';
-import ProjectSettingsView from '@/views/ProjectSettingsView.vue';
-import ProjectRhythmsView from '@/views/ProjectRhythmsView.vue';
-import ProjectView from '@/views/ProjectView.vue';
-import RequirementView from '@/views/RequirementView.vue';
-import LoginView from '@/views/LoginView.vue';
-import IdentityIssueView from '@/views/IdentityIssueView.vue';
-import WorkView from '@/views/WorkView.vue';
+const PeopleView = () => import('@/views/PeopleView.vue');
+const AiIntegrationView = () => import('@/views/AiIntegrationView.vue');
+const ProjectListView = () => import('@/views/ProjectListView.vue');
+const ProjectSettingsView = () => import('@/views/ProjectSettingsView.vue');
+const ProjectRhythmsView = () => import('@/views/ProjectRhythmsView.vue');
+const ProjectView = () => import('@/views/ProjectView.vue');
+const RequirementView = () => import('@/views/RequirementView.vue');
+const LoginView = () => import('@/views/LoginView.vue');
+const IdentityIssueView = () => import('@/views/IdentityIssueView.vue');
+const WorkView = () => import('@/views/WorkView.vue');
 import { authClient, currentIdentity, IdentityProvisioningError } from '@/auth';
 
 export const router = createRouter({
@@ -21,6 +21,11 @@ export const router = createRouter({
       component: IdentityIssueView,
     },
     { path: '/', name: 'projects', component: ProjectListView },
+    {
+      path: '/versions/:versionId/delivery',
+      name: 'delivery',
+      component: () => import('@/views/DeliveryView.vue'),
+    },
     { path: '/work', name: 'work', component: WorkView },
     { path: '/projects/:projectId', name: 'project', component: ProjectView },
     {
