@@ -101,11 +101,7 @@ const requirements = computed(() => {
     if (filters.health === 'in_progress' && item.lifecycle !== 'in_progress')
       return false;
     if (filters.health === 'overdue' && !item.overdue) return false;
-    if (
-      filters.health === 'open_bugs' &&
-      item.bugCount === item.completedBugCount
-    )
-      return false;
+    if (filters.health === 'open_bugs' && item.openBugCount === 0) return false;
     if (filters.health === 'review' && !reviewIssueMap.value.has(item.id))
       return false;
     if (filters.ownerId !== 'all' && !item.ownerIds.includes(filters.ownerId))
@@ -154,6 +150,14 @@ const createVersionOptions = computed(() => [
 const scopedRequirementIds = computed(
   () => new Set(versionScopedRequirements.value.map((item) => item.id)),
 );
+const inVersionScope = (item: { versionId?: string }) =>
+  filters.versionId === 'all' ||
+  (filters.versionId === 'backlog'
+    ? !item.versionId
+    : item.versionId === filters.versionId);
+const scopedOpenBugs = computed(() =>
+  (snapshot.value?.openBugs ?? []).filter(inVersionScope),
+);
 const scopedMetrics = computed(() => {
   const rows = versionScopedRequirements.value;
   return {
@@ -162,10 +166,7 @@ const scopedMetrics = computed(() => {
     inProgress: rows.filter((item) => item.lifecycle === 'in_progress').length,
     waiting: rows.filter((item) => item.health === 'waiting').length,
     blocked: rows.filter((item) => item.health === 'blocked').length,
-    openBugs: rows.reduce(
-      (sum, item) => sum + item.bugCount - item.completedBugCount,
-      0,
-    ),
+    openBugs: scopedOpenBugs.value.length,
   };
 });
 const reviewIssueMap = computed(() => {
@@ -184,14 +185,10 @@ const scopedReviewItems = computed(() =>
   ),
 );
 const scopedBlockedItems = computed(() =>
-  (snapshot.value?.blockedItems ?? []).filter((item) =>
-    scopedRequirementIds.value.has(item.requirementId),
-  ),
+  (snapshot.value?.blockedItems ?? []).filter(inVersionScope),
 );
 const scopedWaitingItems = computed(() =>
-  (snapshot.value?.waitingItems ?? []).filter((item) =>
-    scopedRequirementIds.value.has(item.requirementId),
-  ),
+  (snapshot.value?.waitingItems ?? []).filter(inVersionScope),
 );
 const scopedDelayedRows = computed(() =>
   versionScopedRequirements.value.filter((item) => item.overdue),
@@ -527,6 +524,30 @@ watch(timelineStageOptions, (options) => {
           >
             <PlusIcon class="h-4 w-4" />新建需求
           </button>
+        </div>
+      </section>
+
+      <section v-if="scopedOpenBugs.length" class="surface mt-6 p-4">
+        <h2 class="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          待交付修复 · {{ scopedOpenBugs.length }}
+        </h2>
+        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          按 Bug 的目标修复版本归集，包含此前交付需求的后续修复。
+        </p>
+        <div class="mt-3 grid gap-2 sm:grid-cols-2">
+          <RouterLink
+            v-for="bug in scopedOpenBugs"
+            :key="bug.id"
+            :to="`/requirements/${bug.requirementId}`"
+            class="focus-ring rounded-lg border border-slate-100 p-3 hover:border-rose-200 dark:border-slate-800 dark:hover:border-rose-800"
+          >
+            <p class="text-sm font-medium text-slate-800 dark:text-slate-200">
+              {{ bug.key }} · {{ bug.name }}
+            </p>
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {{ bug.requirementKey }} · {{ bug.requirementTitle }}
+            </p>
+          </RouterLink>
         </div>
       </section>
 

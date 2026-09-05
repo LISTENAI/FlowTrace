@@ -1,9 +1,15 @@
 import { DataType, newDb } from 'pg-mem';
-import type { DataSource } from 'typeorm';
+import { DataSource } from 'typeorm';
+import { randomUUID } from 'node:crypto';
+import { Pool } from 'pg';
 import { entities } from '@/database/entities';
 import { migrations } from '@/database/migrations';
 
 export async function createTestDataSource(): Promise<DataSource> {
+  if (process.env.FLOWTRACE_TEST_DATABASE_URL)
+    return createPostgresTestDataSource(
+      process.env.FLOWTRACE_TEST_DATABASE_URL,
+    );
   const database = newDb({ autoCreateForeignKeyIndices: true });
   database.public.registerFunction({
     name: 'current_database',
@@ -59,4 +65,40 @@ export async function createTestDataSource(): Promise<DataSource> {
     return queryRunner;
   };
   return dataSource;
+}
+
+async function createPostgresTestDataSource(url: string): Promise<DataSource> {
+  const target = new URL(url);
+  if (!target.pathname.startsWith('/flowtrace_test'))
+    throw new Error('测试数据库名称必须以 flowtrace_test 开头');
+  const schema = `test_${randomUUID().replaceAll('-', '')}`;
+  const pool = new Pool({ connectionString: url });
+  await pool.query(`CREATE SCHEMA "${schema}"`);
+  const source = new DataSource({
+    type: 'postgres',
+    url,
+    schema,
+    extra: { options: `-c search_path=${schema},public` },
+    entities,
+    migrations,
+    migrationsRun: true,
+    synchronize: false,
+  });
+  try {
+    await source.initialize();
+  } catch (error) {
+    await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
+    await pool.end();
+    throw error;
+  }
+  const destroy = source.destroy.bind(source);
+  source.destroy = async () => {
+    try {
+      await destroy();
+    } finally {
+      await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
+      await pool.end();
+    }
+  };
+  return source;
 }

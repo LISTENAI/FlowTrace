@@ -600,6 +600,10 @@ export function createFlowTraceMcpServer(
           .default('planning'),
         planned_start_at: z.string().optional(),
         planned_release_at: z.string().optional(),
+        actual_release_at: z
+          .string()
+          .optional()
+          .describe('创建已发布版本时必须填写实际发布日期'),
         description: z.string().optional(),
         ...sourceSchema,
       },
@@ -617,6 +621,7 @@ export function createFlowTraceMcpServer(
               status: input.status,
               plannedStartAt: input.planned_start_at,
               plannedReleaseAt: input.planned_release_at,
+              actualReleaseAt: input.actual_release_at,
               description: input.description,
               ...writeBody(input),
             },

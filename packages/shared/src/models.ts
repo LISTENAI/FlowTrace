@@ -337,7 +337,17 @@ export interface DependencyTargetSummary {
   status: ExecutionStatus | RequirementLifecycle;
 }
 
+export interface ChangeEventContext {
+  project?: Pick<Project, 'id' | 'key' | 'name'>;
+  version?: Pick<Version, 'id' | 'name'>;
+  relatedVersion?: Pick<Version, 'id' | 'name'>;
+  requirement?: Pick<Requirement, 'id' | 'key' | 'title'>;
+  accuracy: 'recorded' | 'reconstructed';
+}
+
 export interface ChangeEvent {
+  contextAccuracy?: ChangeEventContext['accuracy'];
+  relatedVersion?: Pick<Version, 'id' | 'name'>;
   id: string;
   entityType: string;
   entityId: string;
@@ -406,6 +416,7 @@ export interface RequirementSummary extends Omit<
   stageCount: number;
   bugCount: number;
   completedBugCount: number;
+  openBugCount: number;
   currentStage?: string;
   currentStageId?: string;
   currentStageStatus?: ExecutionStatus;
@@ -467,6 +478,7 @@ export interface VersionSnapshot extends ProjectSnapshot {
 }
 
 export interface SnapshotWorkItem extends WorkTiming {
+  versionId?: string;
   type: 'stage' | 'bug';
   id: string;
   key?: string;

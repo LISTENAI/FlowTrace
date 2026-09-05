@@ -423,20 +423,15 @@ export class SeedService implements OnApplicationBootstrap {
       versionCache.set(project.id, versions);
       const existing = versions.find((item) => item.name === name);
       if (existing) return existing;
-      let created = await this.work.createVersion(project.id, {
+      const created = await this.work.createVersion(project.id, {
         name,
         status: input.status,
         plannedStartAt: input.plannedStartAt,
         plannedReleaseAt: input.plannedReleaseAt,
+        actualReleaseAt: input.actualReleaseAt,
         description: input.description,
         ...source,
       });
-      if (input.actualReleaseAt) {
-        created = await this.work.updateVersion(created.id, {
-          actualReleaseAt: input.actualReleaseAt,
-          ...source,
-        });
-      }
       versions.push(created);
       return created;
     };

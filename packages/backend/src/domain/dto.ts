@@ -244,6 +244,11 @@ export class CreateVersionDto extends ChangeContextDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsISO8601()
+  actualReleaseAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   description?: string;
 }

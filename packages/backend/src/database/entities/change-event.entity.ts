@@ -1,9 +1,11 @@
-import type { ChangeSource } from '@flowtrace/shared';
+import type { ChangeSource, ChangeEventContext } from '@flowtrace/shared';
 import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 
 @Entity('change_events')
 @Index(['occurredAt'])
 @Index(['projectId', 'occurredAt'])
+@Index(['versionId', 'occurredAt', 'id'])
+@Index(['relatedVersionId', 'occurredAt', 'id'])
 export class ChangeEventEntity {
   @PrimaryColumn('uuid')
   id!: string;
@@ -19,6 +21,15 @@ export class ChangeEventEntity {
 
   @Column('uuid', { nullable: true })
   requirementId!: string | null;
+
+  @Column('uuid', { nullable: true })
+  versionId!: string | null;
+
+  @Column('uuid', { nullable: true })
+  relatedVersionId!: string | null;
+
+  @Column('jsonb', { nullable: true })
+  eventContext!: ChangeEventContext | null;
 
   @Column('text')
   type!: string;

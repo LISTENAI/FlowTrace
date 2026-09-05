@@ -16,7 +16,8 @@ describe('initial database migration', () => {
     const rows = (await dataSource.query(
       `SELECT table_name AS "name"
        FROM information_schema.tables
-       WHERE table_schema = 'public'`,
+       WHERE table_schema = $1`,
+      [(dataSource.options as { schema?: string }).schema ?? 'public'],
     )) as Array<{ name: string }>;
     const tables = rows.map((row) => row.name);
 
@@ -42,15 +43,18 @@ describe('initial database migration', () => {
 
     const versionHistoryColumns = (await dataSource.query(
       `SELECT column_name AS "name" FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'version_history'`,
+       WHERE table_schema = $1 AND table_name = 'version_history'`,
+      [(dataSource.options as { schema?: string }).schema ?? 'public'],
     )) as Array<{ name: string }>;
     const changeColumns = (await dataSource.query(
       `SELECT column_name AS "name" FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'change_events'`,
+       WHERE table_schema = $1 AND table_name = 'change_events'`,
+      [(dataSource.options as { schema?: string }).schema ?? 'public'],
     )) as Array<{ name: string }>;
     const stageColumns = (await dataSource.query(
       `SELECT column_name AS "name" FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'stages'`,
+       WHERE table_schema = $1 AND table_name = 'stages'`,
+      [(dataSource.options as { schema?: string }).schema ?? 'public'],
     )) as Array<{ name: string }>;
     expect(versionHistoryColumns.map((column) => column.name)).toContain(
       'effectiveAt',
@@ -59,13 +63,15 @@ describe('initial database migration', () => {
     expect(stageColumns.map((column) => column.name)).toContain('workDomain');
     const personColumns = (await dataSource.query(
       `SELECT column_name AS "name" FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'people'`,
+       WHERE table_schema = $1 AND table_name = 'people'`,
+      [(dataSource.options as { schema?: string }).schema ?? 'public'],
     )) as Array<{ name: string }>;
     expect(personColumns.map((column) => column.name)).toContain('email');
 
     const authUserColumns = (await dataSource.query(
       `SELECT column_name AS "name" FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'auth_user'`,
+       WHERE table_schema = $1 AND table_name = 'auth_user'`,
+      [(dataSource.options as { schema?: string }).schema ?? 'public'],
     )) as Array<{ name: string }>;
     expect(authUserColumns.map((column) => column.name)).toContain(
       'localOwner',
@@ -73,7 +79,8 @@ describe('initial database migration', () => {
 
     const bindingColumns = (await dataSource.query(
       `SELECT column_name AS "name" FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'auth_person_bindings'`,
+       WHERE table_schema = $1 AND table_name = 'auth_person_bindings'`,
+      [(dataSource.options as { schema?: string }).schema ?? 'public'],
     )) as Array<{ name: string }>;
     expect(bindingColumns.map((column) => column.name)).toEqual(
       expect.arrayContaining([
