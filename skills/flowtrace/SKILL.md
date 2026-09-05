@@ -69,6 +69,8 @@ checking the Project purpose and neighboring Versions before writing.
   existing work. Stable readable keys survive renaming and Version moves.
 
 For detailed classification, read [methodology](references/methodology.md).
+For test-mail and issue-tracker backfills, also read
+[test reconciliation](references/test-reconciliation.md).
 
 ## Complete, bounded reads
 
