@@ -52,6 +52,7 @@ const versionDeleteSaving = ref(false);
 const editingVersion = ref<Version>();
 const versionOrderSaving = ref(false);
 const handoffOpen = ref(false);
+const handoffExpanded = ref(false);
 const handoffSaving = ref(false);
 const handoffContent = ref('');
 const handoffReason = ref('');
@@ -101,10 +102,13 @@ async function load() {
   projectForm.description = projectResult.description ?? '';
 }
 
-const handoffPreview = computed(() => {
-  const content = agentHandoff.value?.content.trim() ?? '';
-  return content.length > 700 ? `${content.slice(0, 700)}…` : content;
-});
+const handoffText = computed(() => agentHandoff.value?.content.trim() ?? '');
+const handoffNeedsExpansion = computed(() => handoffText.value.length > 700);
+const handoffPreview = computed(() =>
+  handoffNeedsExpansion.value && !handoffExpanded.value
+    ? `${handoffText.value.slice(0, 700)}…`
+    : handoffText.value,
+);
 
 function openHandoffEditor() {
   handoffContent.value = agentHandoff.value?.content ?? '';
@@ -405,10 +409,30 @@ onMounted(async () => {
             class="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3.5 dark:border-slate-700 dark:bg-slate-800/60"
           >
             <p
-              class="whitespace-pre-wrap text-sm leading-6 text-slate-600 dark:text-slate-300"
+              id="agent-handoff-content"
+              class="text-sm leading-6 break-words whitespace-pre-wrap text-slate-700 dark:text-slate-300"
             >
               {{ handoffPreview }}
             </p>
+            <button
+              v-if="handoffNeedsExpansion"
+              type="button"
+              class="focus-ring mt-3 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-indigo-600 hover:bg-indigo-50 dark:text-indigo-300"
+              :aria-expanded="handoffExpanded"
+              aria-controls="agent-handoff-content"
+              @click="handoffExpanded = !handoffExpanded"
+            >
+              <component
+                :is="handoffExpanded ? ChevronUpIcon : ChevronDownIcon"
+                class="h-3.5 w-3.5"
+              />
+              <span class="text-xs font-medium">
+                {{ handoffExpanded ? '收起全文' : '展开全文' }}
+              </span>
+              <span v-if="!handoffExpanded" class="text-[11px] text-slate-500">
+                共 {{ handoffText.length }} 字
+              </span>
+            </button>
           </div>
           <p v-else class="py-1 text-xs text-slate-400">暂无交底</p>
           <div
