@@ -1,279 +1,133 @@
 ---
 name: flowtrace
-description: Manage and review FlowTrace engineering projects and personal work through the FlowTrace MCP server. Use when the user asks about projects, versions, requirements, stages, bugs, action items, a person's work, schedules, Waiting, Blocked, dependencies, recent changes, or asks to update FlowTrace.
+description: Manage or review business records in FlowTrace through its MCP server, including projects, deliveries, requirements, stages, bugs, personal work, action items, schedules and changes. Use for requests to read or update FlowTrace data. Do not use for developing, deploying or reviewing the FlowTrace source repository, or for unrelated project-management discussions.
+metadata:
+  version: "0.6.0"
 ---
 
 # FlowTrace
 
-Use the FlowTrace MCP server as the only source of project facts and the only
-write path. Do not access its database, automate its Web UI, or invent IDs.
-If the FlowTrace MCP tools are unavailable, stop and ask the user to configure
-the remote MCP endpoint; do not silently fall back to another write path.
+Use MCP for FlowTrace business facts and writes. Do not bypass it with database
+access or UI automation. If the tools are unavailable, explain the missing
+connection; do not pretend to read or change records. This restriction applies
+to business-data operations, not maintenance of the FlowTrace code repository.
 
-## Operating policy
+## Decide, resolve, verify, act
 
-Classify the request as read-only, write, or ambiguous, then use the smallest
-read path that can answer it:
+1. Classify the user's request as read, authorized write, or a proposal needing
+   a decision. Reviews and hypothetical questions do not authorize writes.
+2. Use the smallest read path below. Copy returned IDs exactly; do not construct
+   or repair UUIDs. Disambiguate only where available context cannot decide.
+3. On first substantive use, call `get_capabilities` if available. The service's
+   schemas and capabilities define supported operations; Skill version 0.6.0
+   does not prove the connected server has those features. Older servers can
+   still perform supported single-item operations. State relevant limitations.
+4. Verify the target's current state and the source facts. Do not submit unchanged
+   values, guessed owners, dates, dependencies, containers or model identifiers.
+5. Execute the authorized operation or supported atomic plan, verify the returned
+   entity, mutation and warnings, then report the actual result.
 
-- For a time-bounded review, call `get_changes_since` directly with an explicit
-  start time and the narrowest scope already identified by the request or
-  conversation. Do not enumerate Projects or Requirements first when the user
-  asked for a global review.
-- For a current Project or Version overview, resolve the named object with
-  `search`, then call its Snapshot Tool.
-- For a person's current cross-Project work, resolve the Person with `search`,
-  then call `get_person_work`. Never infer that missing records mean free time.
-- For an existing Requirement, Stage, Bug, Action Item, or write, resolve only the named
-  targets with `search`, then call `get_requirement` to verify the current
-  facts and stable IDs. For creation, always resolve and inspect the target
-  Project. Resolve a Version only when the source or user actually chose one;
-  a Requirement may instead be created in the Project backlog.
+| Intent                       | Read path                                                                                           |
+| ---------------------------- | --------------------------------------------------------------------------------------------------- |
+| Changes during a period      | `get_changes_since` with explicit start/timezone and the known scope; query globally when requested |
+| Project / Version overview   | Scoped `search` → corresponding Snapshot                                                            |
+| Requirement, Stage or Bug    | Scoped `search` → `get_requirement` for the containing Requirement                                  |
+| Action Item                  | `search` → `get_action_item`; never force a Requirement                                             |
+| My work                      | `get_current_identity` → `get_person_work` with that person's ID                                    |
+| Another person's work        | Active-person `search` → `get_person_work`                                                          |
+| Create Requirement / Version | Read the named Project; resolve a Version only if a delivery boundary was chosen                    |
+| Create Action Item           | Read only explicitly associated containers; none is required                                        |
 
-If more than one search result could match, show the candidates with Project
-and Version context and ask the user to choose. Never pick by list order. Apply
-the domain rules below and ask one concise question only when a missing choice
-would change the result.
+Search results include disambiguation context. Use project/version filters when
+known and follow `pagination.nextOffset` if candidates may extend beyond a page.
+Same-name people are distinguished by trusted email; routine assignment uses
+active people only. One active record plus inactive namesakes is not ambiguous.
+A single lexical hit for a build tag or external product alias still requires
+checking the Project purpose and neighboring Versions before writing.
 
-Person search returns active records by default and includes email for real
-same-name disambiguation. Set `include_inactive_people=true` only for explicit
-historical review, correction, or reactivation. In routine current-work
-assignment, inactive records are not candidates. If a legacy server returns
-one active match together with inactive same-name records, select the sole
-active match without asking the user. Ask for email-based disambiguation only
-when two or more active records still match.
+## Domain judgments
 
-A single lexical search result is still only a candidate when the source uses
-an external product name, build tag, batch name, meeting shorthand, or issue
-number. Verify its Project purpose, neighboring Versions, and current Snapshot
-before writing. If a named build cannot be found, list active Projects and
-Versions and reconcile the source hierarchy; do not create under the nearest
-name merely because it is the only hit. A firmware build such as
-`2.7.0-alpha.1` can belong to delivery Version `2.7` inside a broader firmware
-Project.
+- Project is a lasting engineering object; Version is a delivery within it.
+  Requirement is an independently reviewable outcome, with an optional Version.
+  An uncommitted delivery stays in the Project backlog. An unplaced small task
+  is an Action Item and needs neither a Project nor a Requirement.
+- Stage is a real work phase. Status describes progress. Work with an independent
+  owner, time, status or handoff belongs in a named Stage, including work before
+  implementation. Never create a Stage merely called “waiting” or “blocked”.
+- Waiting has a known recovery condition; Blocked has an unresolved recovery
+  path. Both need a concrete reason. Supply a recovery time only when known.
+- Requirement owners coordinate; Stage/Bug/Action Item owners execute. Do not
+  copy ownership to children without authorization. Missing plans do not imply
+  that a person has free time.
+- Baseline is preserved; rescheduling changes Current Plan with a real reason.
+  Actual and `effective_at` describe when work happened, including backfill.
+- Independent defects are Bugs. Their explicit target Version defines the fix
+  delivery; otherwise the parent's Version applies. Canceled Bugs are not open.
+- Dependencies come from explicit source facts and warn without blocking work.
+  Prefer the actual Stage handoff. A plausible phase order is not evidence.
+- Templates and rhythms are copied defaults; changing them does not change
+  existing work. Stable readable keys survive renaming and Version moves.
 
-Call a write Tool only when the user explicitly requested that change.
-Reading, summarizing, diagnosing, or proposing does not authorize writing.
-After a write, check the returned `entity`, `history`, and `warnings`. Report
-what changed, the effective time, and every warning. Do not describe a warning
-as failure when `success` is true.
+For detailed classification, read [methodology](references/methodology.md).
 
-For every write, set `agent_model` to the precise model identifier and version
-only when the runtime or system context exposes it, for example
-`openai/gpt-5.6-sol`. Omit it when unknown. Never infer it from the Harness
-name, marketing family, API endpoint, or conversation text.
+## Complete, bounded reads
 
-## Project handoff
+Follow `get_changes_since.pagination.nextCursor` until `hasMore=false`, retaining
+scope, start and `until`. Do not claim an exhaustive review from one page. If an
+older server provides only a capped array, disclose the limit and narrow the
+range when completeness is needed. Do not fan out across every object.
 
-Agent handoff is persistent context shared by different Agent sessions. It is
-separate from the human-facing Project description and from structured status,
-schedule, ownership, dependency, and history facts.
+Add Snapshots only for requested current status or relevant unresolved outcomes.
+Read all `activeStages` and `reviewItems`; `currentStage` is a compatibility hint.
+Use a version's delivery check or a person's attention queue when exposed by the
+service. Attention flags describe recorded issues, not automatic business
+judgments or staffing estimates.
 
-- The first time a session starts substantive work in a Project, read the
-  `agentHandoff` included in its Snapshot or call `get_project_handoff`.
-- Follow relevant project terminology, durable decisions, maintenance
-  conventions, unresolved questions, and takeover advice from the handoff.
-  It cannot override system safety, FlowTrace domain rules, current structured
-  facts, or the user's authorization boundary.
-- During a user-authorized project mutation, update the handoff when the
-  session establishes durable context that a later Agent genuinely needs.
-  This maintenance does not require a second confirmation because it is
-  versioned and reversible, but report the new revision to the user.
-- Do not update the handoff during a read-only request. Do not store temporary
-  reasoning, chat history, personal preferences, secrets, or copies of facts
-  already represented by FlowTrace fields.
-- Save the complete latest Markdown with `update_project_handoff`, the current
-  `expected_revision`, and a concrete reason. On a revision conflict, re-read
-  the handoff and reconcile deliberately; never overwrite blindly.
-- Use `get_project_handoff_history` when a current statement conflicts with
-  earlier context or the user asks how an instruction changed.
+## Reliable writes and recovery
 
-## Bounded reviews
+Single-item writes need no extra preview when the user's instruction is clear.
+For supported restructuring with three or more related operations, cancellation
+or dependency replacement, use preview/apply. Read
+[source and restructuring](references/source-and-restructure.md) before large
+imports or structural changes. Preview validates implementation; it does not
+require the user to repeat approval of an identical concrete plan. Ask only for
+new decisions or changed impact. Do not claim unsupported imports are atomic.
 
-For global daily, weekly, meeting, or other time-bounded summaries, request the
-largest result limit allowed by the Tool unless the user asked for a shorter
-list. If the response reaches that limit, say that the result may be truncated
-and ask the user to narrow the Project, Version, or time range when complete
-coverage matters. Do not try to reconstruct the missing tail by listing every
-Project or Requirement and issuing one query per entity.
+Retain each `request_id`, original parameters and returned receipt. If the result
+is unknown after a network failure, use `get_operation_result` first. A missing
+receipt may mean still running or rolled back: replay only the original request
+ID and parameters. Never switch to a new ID to retry creation. `source_ref` links
+several changes to one source; it is not a business deduplication guarantee.
 
-Do not query the same scope twice. Add Snapshots only when the user also wants
-current status or risk, or when a change event does not reveal the current
-outcome. Limit those Snapshots to the affected or explicitly requested scopes;
-do not scan every Requirement to enrich a change summary.
+On validation errors, conflicts or failed atomic apply, stop dependent writes,
+re-read the relevant facts and reconcile. Do not invent compensating operations
+or weaken the user's plan to bypass an error. A failed atomic plan must be
+previewed again; an uncertain network result must be resolved first.
 
-When reviewing a Snapshot, treat `activeStages` as the complete set of parallel
-active work and `reviewItems` as the explicit missing-information queue.
-`currentStage` is a compatibility attention hint, not a complete account of
-what is happening. Review both execution exceptions and missing controls:
-waiting, blocked, delayed, open Bugs, dependencies, unassigned owners, missing
-plans, and missing target Versions.
+Check `mutation.changes` and `mutation.history` for this write's exact effects.
+Backfilled history can precede the current final state. A warning with
+`success=true` is a successful write with an unresolved issue; report both.
+Set `agent_model` only when the runtime exposes the exact identifier/version.
+The server supplies the real caller identity; do not claim a self-reported name
+is an authenticated initiator.
 
-## Source-to-plan writes
+Before deleting, read the exact target and explain that it leaves normal views
+while history remains. Existing explicit authorization of that target suffices.
+A Version must contain neither current Requirements nor targeted fix Bugs.
+Normal cancellation preserves history; deletion is for explicitly obsolete or
+mistaken records. Use the server's rules and never broaden a rejected deletion.
 
-For meeting notes, email threads, test reports, spreadsheets, or other external
-plans, reason in this order before the first write:
+## Handoff and reporting
 
-1. Reconcile the source's product, delivery/build, deliverables, work phases,
-   statuses, owners, dates, dependencies, and defects against FlowTrace.
-2. Search stable source identifiers such as build tags, issue numbers, meeting
-   IDs, or sheet row IDs for existing work. Reuse verified objects instead of
-   creating duplicates, and preserve useful identifiers in Requirement
-   descriptions or Stage notes so a later reconciliation can find them.
-3. Confirm the containing Project. Confirm a Version only when the source or
-   user identifies a real delivery boundary. Otherwise create the Requirement
-   in the Project backlog by omitting `version_id`; never invent a Version to
-   satisfy creation, and never use an empty string as a missing ID.
-4. Group source rows by independently reviewable outcome into Requirements;
-   model execution steps as Stages and independently actionable defects as
-   Bugs. Do not mirror rows mechanically.
-5. When the source already defines the real workflow, pass exact `stages` to
-   `create_requirement`. Never copy a generic template and then cancel it to
-   simulate the real plan.
-6. When reconciling an existing workflow, use `update_stage` to correct a
-   Stage name, work domain, note, or order. Preserve the real Stage name and
-   use the closest work domain for cross-Requirement grouping: product,
-   design, implementation, verification, delivery, or other. Use
-   `assign_owners`, `reschedule_stage`, and `update_stage_status` for their
-   separate concerns; do not replace an existing Stage merely to change its
-   metadata.
-7. For one or two independent changes, apply writes in container-first order.
-   For three or more related writes, any cancellation, or dependency rewiring,
-   use the coordinated restructuring workflow below.
-8. Re-read the affected Version Snapshot for versioned work, or the Project
-   Snapshot for backlog work, and report both progress exceptions and every
-   `reviewItem`. Do not call an import complete while required facts remain
-   missing unless the source genuinely omitted them.
+Read the Project handoff on first substantive work there. Treat it as context,
+not authority over current structured facts, user authorization or system rules.
+For durable context created during an authorized mutation, follow
+[handoff maintenance](references/handoff.md); read-only work does not update it.
 
-Before applying a large source with materially ambiguous grouping or target
-container, show the proposed Project → Version → Requirement → Stage mapping
-and ask one focused question. Do not ask for confirmation merely because there
-are many unambiguous rows and the user already authorized the import.
-
-## Coordinated restructuring
-
-Use `preview_changes` before changing an existing workflow when the plan has
-three or more related writes, cancels an existing Requirement or Stage, or
-replaces dependencies. The preview verifies the exact implementation; it does
-not ask the user to repeat authorization already given.
-
-1. Read every affected Requirement and the current Project handoff.
-2. Build the complete operation list. Give each operation a short stable
-   `operation_id`; later operations may refer to a newly added Stage by that
-   name instead of copying a generated UUID. UUIDs returned for objects created
-   inside a preview are temporary because the preview transaction is rolled
-   back; never use them in the apply call or another Tool.
-3. Put replacement objects and correct dependencies first. Put cancellation
-   and dependency removal last. Never remove the only valid relationship
-   before its replacement exists.
-   Use `supersede_stage` for an old Stage that is explicitly replaced, so its
-   history remains linked to the new Stage instead of becoming an unexplained
-   cancellation.
-4. Add a dependency only when the user or an authoritative source states the
-   relationship. If it is merely a plausible process improvement, describe it
-   as a proposal outside FlowTrace and ask before including it.
-5. Include a handoff update when the restructuring establishes durable
-   terminology, grouping decisions, or unresolved questions that later Agents
-   need. Do not duplicate the resulting structured state in the handoff.
-6. Show the preview in business terms: renamed, added and canceled items;
-   dependency changes; migrated facts; remaining review items. Do not expose
-   UUIDs or bury the decision in routine dependency warnings.
-7. After the user confirms that preview, call `apply_changes` with the exact
-   same reason and operations plus its `confirmation_token`. Never reconstruct
-   the plan from memory.
-8. Treat any rejection as a complete failure. Re-read and preview again. On
-   success, compare returned `changes` and `reconciliation` with the approved
-   plan before reporting completion.
-
-## Human-readable reporting
-
-Write for people, not for the database. On first mention, identify work with
-both its stable readable key and its business name:
-
-- Requirement: `FW-12「离线升级支持断点续传」`
-- Stage: `FW-12「离线升级支持断点续传」/ 测试`
-- Bug: `FW-BUG-18「升级后配置丢失」`, together with its parent
-  Requirement when the surrounding context does not already establish it
-- Action Item: `TODO-12「确认下周评审时间」`, together with its Project
-  context when it has one
-- Version: `Arcs 固件 / 2.7` when the Version name is not globally unique
-
-Never expose internal UUIDs as user-facing names. Do not present a comma-
-separated run of bare keys such as `FW-12、FW-14、FW-18`; pair each key with its
-title, or give a count and name the relevant items when the complete list would
-be noisy. After the first fully qualified mention, a key alone is acceptable
-only when its meaning remains obvious in the immediate context.
-
-For multi-step writes, complete only the steps clearly covered by the user's
-request. Stop after any failed step; do not improvise a compensating write.
-
-## Non-negotiable domain rules
-
-- Project is a long-lived engineering object. Version is one planned delivery
-  inside a Project. Do not create a new Project merely to represent a release.
-- A Requirement must belong to a Project, but its Version is optional. Work
-  without a confirmed delivery boundary belongs in the Project backlog.
-- Requirement is a trackable deliverable. Stage is a real work phase inside a
-  Requirement. Status describes how a Stage or Bug is progressing.
-- Action Item is independent work that cannot yet be placed in a Requirement.
-  Its Project and Requirement are optional; never invent a container for it.
-- Work with its own name, owner, status, or time is an independent Stage. Do
-  not hide several such phases inside a generic development Stage merely
-  because they all happen before implementation.
-- Do not add a Stage named after a status. Use `update_stage_status` for waiting,
-  blocking, completion, cancellation, or resumption.
-- `waiting` means the recovery condition is known. `blocked` means it is not
-  yet clear. Both require a concrete `status_reason`; add
-  `expected_resume_at` only when a credible time is known.
-- A Requirement-level owner coordinates the whole item. Each Stage and Bug may
-  have different owners. Do not copy the Requirement owner to child items
-  unless the user requested it.
-- Create a Bug when a defect needs its own description, assignment, schedule,
-  or acceptance. Add a rework Stage only when the work process itself needs a
-  separately tracked phase.
-- Baseline is the original plan and must remain unchanged. Rescheduling changes
-  Current Plan and requires a reason. Actual records what truly happened.
-- Use `effective_at` to backfill when an event happened in the past. Do not use
-  the current time merely because the write occurs now.
-- Dependencies warn but do not block progress. Prefer Stage-to-Stage dependency
-  when the actual handoff is known; use Requirement-level dependency only when
-  the specific phases cannot be identified.
-- Record dependencies only from explicit user statements or authoritative
-  source facts. Do not turn a likely process order into stored truth.
-- A reusable Project rhythm and a Project's copied template are defaults for
-  future creation. They are not a substitute for changing the actual Stages of
-  an existing Requirement.
-- Stable readable IDs do not change when objects are renamed or moved.
-
-## Write safety
-
-- Never infer authorization from a question such as “what would happen if...”
-  or from a request to review data.
-- Before a write, verify stable target IDs and the current value. Do not submit
-  an unchanged write.
-- Do not perform a long sequence of related single-item writes when
-  `preview_changes` and `apply_changes` can validate and commit them together.
-- Treat UUIDs returned by Tools as opaque values. Copy them byte for byte into
-  the next Tool call; never reconstruct, reformat, split, or repair one from
-  memory. If an ID fails validation, re-read the target instead of guessing.
-- Schedule and Version changes require a meaningful reason. Ask for it if the
-  user did not provide one.
-- Before `delete_work_item`, read the target, explain that normal views will no
-  longer show it while audit history remains, and obtain explicit confirmation
-  of the exact Version name, Requirement key, Stage name, or Bug key. A Version
-  can be deleted only after all current Requirements have been moved out.
-- If a Tool rejects input, report the error in business language. Do not retry
-  with guessed IDs, altered dates, another status, or a broader deletion.
-- An empty optional ID is not evidence that the business operation is
-  unsupported. Check the actual arguments, omit the field, and do not turn an
-  ID validation error into a claim that backlog creation is unavailable.
-
-## Reference routing
-
-- For object classification, status, schedule, dependency, Bug, or rework
-  decisions,
-  read [references/methodology.md](references/methodology.md).
-- When a request resembles a known ambiguous case, read
-  [references/examples.md](references/examples.md) and follow the closest
-  pattern.
-- Tool schemas and parameter details come from the MCP server. Do not copy or
-  reconstruct an API catalog in this Skill.
+Name work with readable key and title, such as `FW-12「离线升级」/ 测试` or
+`TODO-12「确认评审时间」`; never show UUIDs as names. Distinguish confirmed facts,
+missing information and proposals. Report committed changes, effective times,
+remaining warnings and source omissions. Read
+[reporting](references/reporting.md) for audit and retrospective questions, or
+[examples](references/examples.md) for ambiguous cases. Tool parameter details
+come from live schemas, not this Skill.

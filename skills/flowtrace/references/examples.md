@@ -32,8 +32,11 @@ Use the closest example as a pattern. Names and IDs below are fictional.
    authorizes recording the plan, create it first. Then call
    `create_requirement` with `stages`; do not create generic template Stages and
    cancel them afterward.
-6. Apply known owners, plans, and statuses with their actual effective times,
-   then dependencies. Do not infer missing facts.
+6. Check supported operations. Creation and Bug reporting are not currently
+   part of the coordinated operation set. Execute those authorized units with
+   retained receipts, and preview/apply supported restructuring separately.
+   Stop on failure, resolve uncertain writes and report the committed subset.
+   Do not describe the whole import as atomic or infer missing facts.
 7. Re-read the Version Snapshot. Report all parallel `activeStages`, execution
    exceptions, and `reviewItems`. State source omissions as missing Review
    facts rather than hiding them.
@@ -43,11 +46,10 @@ Use the closest example as a pattern. Names and IDs below are fictional.
 1. Convert “昨天” to an explicit ISO 8601 start in the user's timezone.
 2. If the conversation identifies a Project, resolve it and pass `project_id`;
    otherwise query globally.
-3. Call `get_changes_since` once, using the largest limit the Tool permits.
-4. If the result reaches the requested limit, disclose that coverage may be
-   incomplete and ask for a narrower Project, Version, or time range if the
-   user needs an exhaustive report. Do not fan out across every Project or
-   Requirement to reconstruct the missing tail.
+3. Call `get_changes_since` with an explicit time range and largest allowed limit.
+4. Follow `pagination.nextCursor` with the same scope and `until` until
+   `hasMore=false`. Only on older servers without pagination, disclose capped
+   results and narrow the range. Do not fan out across all Projects.
 5. Group the returned events by Project or Requirement without dropping event
    time, reason, source, or warnings. Read Snapshots only when the user also
    asked for current status or risk, and only for the relevant scopes.
@@ -127,12 +129,12 @@ user separately asked to change future defaults.
    Stage.
 3. Preserve the stated sequence with a Stage dependency when the technical
    solution genuinely uses the validation result.
-4. Record the review completion, validation start and plan with their stated
-   effective dates. Leave implementation unchanged until work on actual
-   implementation begins.
-5. Stop immediately if any Tool fails. Re-read the Requirement and report the
-   partial result; do not continue the remaining writes or retry a hand-edited
-   UUID.
+4. Preview one supported plan containing the named Stages, review completion,
+   validation start and dates. Use operation references for new Stages. Keep
+   implementation unchanged until it actually begins.
+5. Apply the saved plan if already authorized; ask only for newly introduced
+   choices. On rejection re-read and preview again; never continue partial
+   structural writes or repair a UUID. On network uncertainty resolve the receipt.
 
 ## Workflow restructure: “把拆散的开发前任务重新整理一下”
 
@@ -147,8 +149,9 @@ user separately asked to change future defaults.
    copy a UUID that does not exist yet.
 4. Call `preview_changes`. Explain the returned changes in work-item names and
    state which old items will be canceled. Include remaining `reviewItems`.
-5. After the user confirms the preview, pass the exact same reason and
-   operations plus the returned token to `apply_changes`.
+5. If the preview matches the already authorized concrete plan, continue. If
+   it introduces new choices or impact, confirm those differences first. Pass
+   the exact saved reason, operations and token to `apply_changes`.
 6. Compare the returned operation list, change events, dependency count, and
    review items with the approved preview before claiming completion.
 
@@ -185,3 +188,24 @@ one generic “Bug 修复” Stage.
    already supplied it after seeing this context.
 4. Call `delete_work_item` with that confirmation and a reason.
 5. If the Tool rejects the confirmation, stop. Do not try nearby names.
+
+## Personal work: “我今天要关注什么？”
+
+Read `get_current_identity`, then `get_person_work` for its person ID. Prioritize
+returned attention reasons, distinguishing execution from coordination. Do not
+search your conversational memory for the user's name or treat unplanned time
+as capacity. Do not write just because the queue contains missing facts.
+
+## Unplaced task: “帮我记一下，周五确认评审时间”
+
+Use `create_action_item` after checking for an existing matching task. A project
+is optional; do not create one or call `get_requirement` without an association.
+On a later edit, resolve the task and read it with `get_action_item`.
+
+## Timeout: “刚才创建需求超时了，再试一下”
+
+Retain the original request ID and parameters. Call `get_operation_result`;
+return the original committed item if found. If missing, replay the same write
+with the same ID and parameters. Never generate a new request ID for this retry.
+If the original ID is unavailable, reconcile current records and explain the
+uncertainty before recreating anything.

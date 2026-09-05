@@ -1,0 +1,9 @@
+{
+  "mode": "mcp-and-skill",
+  "model": null,
+  "harness": null,
+  "serviceRevision": null,
+  "skillVersion": "0.6.0",
+  "skillSha256": null,
+  "runs": []
+}
